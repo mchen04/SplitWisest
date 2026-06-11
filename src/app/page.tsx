@@ -1,65 +1,203 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowRight, Plus, Users, ScrollText } from "lucide-react";
+import { api, fmtTime, useMe, useSync } from "@/lib/client";
+import { AppShell, PageTitle } from "@/components/shell";
+import { Card, CardHeader, Money, EmptyState, Button } from "@/components/ui";
+
+interface Group {
+  id: number;
+  name: string;
+  currency: string;
+  memberCount: number;
+  expenseCount: number;
+  myNetCents: number;
+}
+
+interface Friend {
+  id: number;
+  displayName: string;
+  netByCurrency: Record<string, number>;
+}
+
+interface Activity {
+  id: number;
+  groupId: number | null;
+  groupName: string | null;
+  summary: string;
+  createdAt: string;
+}
+
+export default function Dashboard() {
+  const me = useMe();
+  const [groups, setGroups] = useState<Group[] | null>(null);
+  const [friends, setFriends] = useState<Friend[] | null>(null);
+  const [activity, setActivity] = useState<Activity[] | null>(null);
+
+  const load = useCallback(() => {
+    api<{ groups: Group[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
+    api<{ friends: Friend[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
+    api<{ activity: Activity[] }>("/api/activity").then((r) => setActivity(r.activity)).catch(() => {});
+  }, []);
+
+  useEffect(load, [load]);
+  useSync(load);
+
+  // Totals per currency across all friends
+  const owedToMe: Record<string, number> = {};
+  const iOwe: Record<string, number> = {};
+  for (const f of friends ?? []) {
+    for (const [cur, amt] of Object.entries(f.netByCurrency)) {
+      if (amt > 0) owedToMe[cur] = (owedToMe[cur] ?? 0) + amt;
+      else if (amt < 0) iOwe[cur] = (iOwe[cur] ?? 0) - amt;
+    }
+  }
+  const netByCur: Record<string, number> = {};
+  for (const [c, v] of Object.entries(owedToMe)) netByCur[c] = (netByCur[c] ?? 0) + v;
+  for (const [c, v] of Object.entries(iOwe)) netByCur[c] = (netByCur[c] ?? 0) - v;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <AppShell>
+      <PageTitle
+        title={me ? `Hey, ${me.displayName.split(" ")[0]}` : "Home"}
+        subtitle="Here's where things stand with your friends."
+        action={
+          <Link href="/groups">
+            <Button>
+              <Plus className="h-4 w-4" /> Quick add
+            </Button>
+          </Link>
+        }
+      />
+
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <SummaryCard label="You are owed" entries={owedToMe} tone="owed" loading={friends === null} />
+        <SummaryCard label="You owe" entries={iOwe} tone="owe" loading={friends === null} />
+        <SummaryCard label="Net balance" entries={netByCur} tone="net" loading={friends === null} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Card>
+          <CardHeader
+            title="Your groups"
+            action={
+              <Link href="/groups" className="flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+                Manage <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            }
+          />
+          {groups === null ? (
+            <SkeletonRows n={3} />
+          ) : groups.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No groups yet"
+              hint="Create a group for a trip, an apartment, or a dinner crew."
+              action={
+                <Link href="/groups">
+                  <Button variant="secondary">Create a group</Button>
+                </Link>
+              }
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+          ) : (
+            <ul className="divide-y divide-line">
+              {groups.map((g) => (
+                <li key={g.id}>
+                  <Link href={`/groups/${g.id}`} className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-paper">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                      <Users className="h-4.5 w-4.5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{g.name}</span>
+                      <span className="block text-xs text-ink-faint">
+                        {g.memberCount} {g.memberCount === 1 ? "member" : "members"} · {g.expenseCount}{" "}
+                        {g.expenseCount === 1 ? "expense" : "expenses"}
+                      </span>
+                    </span>
+                    <span className="text-sm font-medium">
+                      {g.myNetCents === 0 ? (
+                        <span className="text-ink-faint">settled</span>
+                      ) : (
+                        <Money cents={g.myNetCents} currency={g.currency} signed />
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader title="Recent activity" />
+          {activity === null ? (
+            <SkeletonRows n={4} />
+          ) : activity.length === 0 ? (
+            <EmptyState
+              icon={<ScrollText className="h-8 w-8" />}
+              title="Nothing yet"
+              hint="Expenses, settlements, and group changes will show up here."
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {activity.slice(0, 8).map((a) => (
+                <li key={a.id} className="px-4 py-2.5">
+                  <p className="text-sm leading-snug">{a.summary}</p>
+                  <p className="mt-0.5 text-xs text-ink-faint">
+                    {a.groupName ? `${a.groupName} · ` : ""}
+                    {fmtTime(a.createdAt)}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
+
+function SummaryCard({
+  label,
+  entries,
+  tone,
+  loading,
+}: {
+  label: string;
+  entries: Record<string, number>;
+  tone: "owed" | "owe" | "net";
+  loading: boolean;
+}) {
+  const list = Object.entries(entries).filter(([, v]) => v !== 0);
+  const color = tone === "owed" ? "text-owed" : tone === "owe" ? "text-owe" : "";
+  return (
+    <Card className="px-4 py-3.5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
+      <div className="mt-1 min-h-8">
+        {loading ? (
+          <div className="skeleton h-7 w-24" />
+        ) : list.length === 0 ? (
+          <p className="font-display text-2xl font-semibold text-ink-faint">$0.00</p>
+        ) : (
+          list.map(([cur, amt]) => (
+            <p key={cur} className={`font-display text-2xl font-semibold ${tone === "net" ? (amt > 0 ? "text-owed" : amt < 0 ? "text-owe" : "") : color}`}>
+              <Money cents={tone === "net" ? amt : Math.abs(amt)} currency={cur} signed={tone === "net"} />
+            </p>
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function SkeletonRows({ n }: { n: number }) {
+  return (
+    <div className="space-y-3 px-4 py-4">
+      {[...Array(n)].map((_, i) => (
+        <div key={i} className="skeleton h-10 w-full" />
+      ))}
     </div>
   );
 }

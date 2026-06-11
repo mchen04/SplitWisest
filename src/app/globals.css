@@ -1,26 +1,83 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-paper: #faf9f5;
+  --color-card: #ffffff;
+  --color-ink: #21302a;
+  --color-ink-soft: #5c6b63;
+  --color-ink-faint: #93a09a;
+  --color-line: #e6e3da;
+  --color-accent: #16735a;
+  --color-accent-soft: #e3efe9;
+  --color-accent-dark: #0e5443;
+  --color-owe: #b4540a;
+  --color-owe-soft: #f9ede1;
+  --color-owed: #16735a;
+  --color-owed-soft: #e3efe9;
+  --color-danger: #b3362b;
+  --color-danger-soft: #f9e8e6;
+  --font-display: var(--font-fraunces), Georgia, serif;
+  --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
+  --shadow-card: 0 1px 2px rgba(33, 48, 42, 0.05), 0 4px 16px rgba(33, 48, 42, 0.05);
+  --shadow-pop: 0 4px 12px rgba(33, 48, 42, 0.12), 0 16px 48px rgba(33, 48, 42, 0.14);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
 }
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subtle dotted grain so the ledger feel has some warmth */
+.paper-grain {
+  background-image: radial-gradient(rgba(33, 48, 42, 0.025) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+::selection {
+  background: var(--color-accent-soft);
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in { animation: fade-in 0.2s ease-out both; }
+
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, #efede6 25%, #f7f5ef 50%, #efede6 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 6px;
+  color: transparent;
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise-in, .fade-in, .skeleton { animation: none; }
+}
+
+input[type="date"] { min-height: 2.5rem; }
