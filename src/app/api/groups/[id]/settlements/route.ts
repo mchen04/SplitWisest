@@ -5,18 +5,15 @@ import { handler, notFound, forbidden, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
 import { logActivity } from "@/lib/activity";
-import { formatMoney } from "@/lib/money";
-import { convert, CURRENCIES } from "@/lib/fx";
+import { settlementFields, settlementSummary } from "@/lib/settlements";
+import { convert } from "@/lib/fx";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 const Body = z.object({
   payerId: z.number().int().positive(),
   recipientId: z.number().int().positive(),
-  amountCents: z.number().int().positive("Amount must be positive").max(100_000_000_000),
-  currency: z.string().refine((c) => CURRENCIES.includes(c), "Unsupported currency"),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
-  note: z.string().max(500).default(""),
+  ...settlementFields,
 });
 
 export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
@@ -63,10 +60,8 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
     VALUES (${groupId}, ${body.payerId}, ${body.recipientId}, ${body.amountCents}, ${body.currency},
       ${convertedCents}, ${body.date}, ${body.note}, ${user.id})
     RETURNING id`;
-  const names = await sql`SELECT id, display_name FROM users WHERE id IN (${body.payerId}, ${body.recipientId})`;
-  const nameOf = (id: number) => names.find((n) => Number(n.id) === id)?.display_name ?? "Someone";
   await logActivity(groupId, user.id, "settlement.recorded",
-    `${nameOf(body.payerId)} paid ${nameOf(body.recipientId)} ${formatMoney(body.amountCents, body.currency)} (recorded offline)`,
+    await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency),
     { settlementId: Number(rows[0].id) });
   return NextResponse.json({ id: Number(rows[0].id) });
 });

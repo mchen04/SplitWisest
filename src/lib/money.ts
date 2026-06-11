@@ -157,7 +157,7 @@ export function simplifyDebts(netBalances: Map<number, number>): Transfer[] {
   return transfers;
 }
 
-export function formatMoney(cents: number, currency: string): string {
+export function fmtMoney(cents: number, currency: string): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
 

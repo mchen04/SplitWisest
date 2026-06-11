@@ -28,9 +28,9 @@ export async function api<T = unknown>(
   return json as T;
 }
 
-export function fmtMoney(cents: number, currency: string): string {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
-}
+// Money formatting lives in the framework-agnostic money lib so server routes
+// and client components share one implementation.
+export { fmtMoney } from "./money";
 
 export function fmtDate(d: string | Date): string {
   return new Date(typeof d === "string" && d.length === 10 ? d + "T00:00:00" : d).toLocaleDateString(
@@ -124,6 +124,16 @@ export function useFormState() {
     }
   }, []);
   return { error, setError, busy, run };
+}
+
+// String-valued filter bar state: per-key onChange setters, a reset, and an
+// `active` flag (any field non-empty). Used by the expense list filter UIs.
+export function useFilters<T extends Record<string, string>>(initial: T) {
+  const [filters, setFilters] = useState(initial);
+  const setFilter = (k: keyof T) => (e: { target: { value: string } }) =>
+    setFilters((f) => ({ ...f, [k]: e.target.value }));
+  const reset = () => setFilters(initial);
+  return { filters, setFilter, reset, active: Object.values(filters).some(Boolean) };
 }
 
 export function useMe() {

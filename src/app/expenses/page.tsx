@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
-import { api, fmtMoney, fmtDate, useApiData } from "@/lib/client";
+import { api, fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Input, Select } from "@/components/ui";
 
@@ -26,9 +26,7 @@ export default function ExpensesPage() {
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [friends, setFriends] = useState<{ id: number; displayName: string }[]>([]);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
-  const setFilter = (k: keyof typeof EMPTY_FILTERS) => (e: { target: { value: string } }) =>
-    setFilters((f) => ({ ...f, [k]: e.target.value }));
+  const { filters, setFilter, reset, active: filtersActive } = useFilters(EMPTY_FILTERS);
 
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());
@@ -45,8 +43,6 @@ export default function ExpensesPage() {
     api<{ friends: { id: number; displayName: string }[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
     api<{ categories: { id: number; name: string }[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
   }, []);
-
-  const filtersActive = Object.values(filters).some(Boolean);
 
   return (
     <AppShell>
@@ -75,7 +71,7 @@ export default function ExpensesPage() {
         </div>
         {filtersActive && (
           <button
-            onClick={() => setFilters(EMPTY_FILTERS)}
+            onClick={reset}
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
           >
             <X className="h-3.5 w-3.5" /> Clear filters

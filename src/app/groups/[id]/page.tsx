@@ -6,7 +6,7 @@ import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, ChartBar, X,
 } from "lucide-react";
-import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync, useFilters } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
 import { ExpenseForm, Member } from "@/components/expense-form";
@@ -65,9 +65,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // filters
-  const [filters, setFilters] = useState({ q: "", cat: "", payer: "", from: "", to: "" });
-  const setFilter = (k: keyof typeof filters) => (e: { target: { value: string } }) =>
-    setFilters((f) => ({ ...f, [k]: e.target.value }));
+  const { filters, setFilter, reset: resetFilters, active: filtersActive } =
+    useFilters({ q: "", cat: "", payer: "", from: "", to: "" });
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
 
   // modals
@@ -186,7 +185,6 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const memberName = (uid: number) => detail?.members.find((m) => m.id === uid)?.displayName ?? "Someone";
-  const filtersActive = Object.values(filters).some(Boolean);
 
   const TABS: { key: Tab; label: string; icon: typeof Receipt }[] = [
     { key: "expenses", label: "Expenses", icon: Receipt },
@@ -328,7 +326,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             </div>
             {filtersActive && (
               <button
-                onClick={() => setFilters({ q: "", cat: "", payer: "", from: "", to: "" })}
+                onClick={resetFilters}
                 className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               >
                 <X className="h-3.5 w-3.5" /> Clear filters
@@ -444,8 +442,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         if (!window.confirm(`Stop the recurring expense "${r.title}"? Existing expenses are kept.`)) return;
                         try {
                           await api(`/api/recurring/${r.id}`, { method: "DELETE" });
-                        } catch {}
-                        loadDetail();
+                          loadDetail();
+                        } catch (e) {
+                          window.alert(e instanceof ApiClientError ? e.message : "Could not stop the recurring expense");
+                        }
                       }}
                       className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
                     >
