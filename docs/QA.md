@@ -12,7 +12,7 @@ Round 1 agents: money math, auth/security, DB integrity + realtime + chat, UX/fr
 
 - Security: SQL injection — none (all tagged-template params); access control verified on every route; sessions/password handling clean.
 - DB/realtime: atomicity of expense writes, recurring-expense races, chat pagination/dedup, sync cursor scope — found and fixed (see git history).
-- Round 2: re-review after fixes until no blocking/important findings remain.
+- Round 2: re-review found 1 blocking (CTE sibling-visibility breaking expense edits) + 2 important (recurrence anchor drift, over-eager deactivation) — all fixed and re-verified live against the API. Converged.
 
 ## Browser verification (agent-browser)
 
