@@ -68,6 +68,7 @@ export default function DmPage({ params }: { params: Promise<{ friendId: string 
             meId={me.id}
             refreshKey={refreshKey}
             emptyHint="No messages yet — start the conversation."
+            readScope={`msg:dm:${friendId}`}
           />
         )}
       </Card>

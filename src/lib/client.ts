@@ -53,9 +53,47 @@ export function todayStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+export interface Unread {
+  messages: number;
+  activity: number;
+  nudges: number;
+}
+
 export interface SyncCursors {
   activityCursor: number;
   messageCursor: number;
+  unread?: Unread;
+}
+
+// Mark a read scope ('activity', 'msg:group:<id>', 'msg:dm:<friendId>') seen up
+// to lastId. Fire-and-forget — a failed mark just leaves the badge until the
+// next view.
+export function markRead(scope: string, lastId: number) {
+  api("/api/read", { body: { scope, lastId } }).catch(() => {});
+}
+
+// Polls /api/sync and exposes the latest unread counts for nav badges.
+export function useUnread(intervalMs = 5000): Unread {
+  const [unread, setUnread] = useState<Unread>({ messages: 0, activity: 0, nudges: 0 });
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function tick() {
+      try {
+        const c = await api<SyncCursors>("/api/sync");
+        if (!stopped && c.unread) setUnread(c.unread);
+      } catch {
+        // logged out or offline; keep trying
+      }
+      if (!stopped) timer = setTimeout(tick, document.hidden ? intervalMs * 4 : intervalMs);
+    }
+    tick();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [intervalMs]);
+  return unread;
 }
 
 // Polls /api/sync and invokes onChange whenever a cursor advances. This is the

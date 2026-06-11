@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
 import { api, fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
-import { Card, EmptyState, Input, Select } from "@/components/ui";
+import { Card, EmptyState, Input, Select, Button } from "@/components/ui";
 
 interface Expense {
   id: number;
@@ -27,6 +27,10 @@ export default function ExpensesPage() {
   const [friends, setFriends] = useState<{ id: number; displayName: string }[]>([]);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const { filters, setFilter, reset, active: filtersActive } = useFilters(EMPTY_FILTERS);
+  const [limit, setLimit] = useState(50);
+
+  // Reset to the first page whenever the filters change.
+  useEffect(() => { setLimit(50); }, [filters]);
 
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());
@@ -35,8 +39,10 @@ export default function ExpensesPage() {
   if (filters.friendId) params.set("friendId", filters.friendId);
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
-  const { data } = useApiData<{ expenses: Expense[] }>(`/api/expenses?${params}`, filters.q.trim() ? 250 : 0);
+  params.set("limit", String(limit));
+  const { data } = useApiData<{ expenses: Expense[]; hasMore: boolean }>(`/api/expenses?${params}`, filters.q.trim() ? 250 : 0);
   const expenses = data?.expenses ?? null;
+  const hasMore = data?.hasMore ?? false;
 
   useEffect(() => {
     api<{ groups: { id: number; name: string }[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
@@ -105,6 +111,11 @@ export default function ExpensesPage() {
               </li>
             ))}
           </ul>
+        )}
+        {expenses && expenses.length > 0 && hasMore && (
+          <div className="border-t border-line p-3 text-center">
+            <Button variant="secondary" onClick={() => setLimit((l) => l + 50)}>Load more</Button>
+          </div>
         )}
         </div>
       </Card>

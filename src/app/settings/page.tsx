@@ -1,0 +1,200 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Copy, Check, KeyRound, LogOut, ShieldCheck, UserCog } from "lucide-react";
+import { api, useFormState } from "@/lib/client";
+import { AppShell, PageTitle } from "@/components/shell";
+import { Card, CardHeader, Button, Field, Input, ErrorNote } from "@/components/ui";
+
+interface Me {
+  id: number;
+  username: string;
+  displayName: string;
+  inviteCode: string;
+}
+
+export default function SettingsPage() {
+  const router = useRouter();
+  const [me, setMe] = useState<Me | null>(null);
+
+  useEffect(() => {
+    api<{ user: Me }>("/api/me").then((r) => setMe(r.user)).catch(() => {});
+  }, []);
+
+  async function logout() {
+    await api("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+  }
+
+  return (
+    <AppShell>
+      <PageTitle title="Settings" subtitle="Manage your account, security, and recovery." />
+      <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
+        <ProfileCard me={me} onSaved={setMe} />
+        <PasswordCard />
+        <RecoveryCard />
+        <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+          <div>
+            <p className="font-medium">Log out</p>
+            <p className="text-sm text-ink-faint">End your session on this device.</p>
+          </div>
+          <Button variant="danger" onClick={logout}>
+            <LogOut className="h-4 w-4" /> Log out
+          </Button>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
+
+function ProfileCard({ me, onSaved }: { me: Me | null; onSaved: (m: Me) => void }) {
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
+  const [done, setDone] = useState(false);
+  const { error, busy, run } = useFormState();
+
+  useEffect(() => {
+    if (me) {
+      setDisplayName(me.displayName);
+      setUsername(me.username);
+    }
+  }, [me]);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setDone(false);
+    run(async () => {
+      const r = await api<{ user: Me }>("/api/me", { method: "PATCH", body: { displayName, username } });
+      onSaved(r.user);
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    }, "Could not save profile");
+  }
+
+  return (
+    <Card>
+      <CardHeader title={<span className="flex items-center gap-2"><UserCog className="h-4 w-4" /> Profile</span>} />
+      <form onSubmit={submit} className="space-y-4 p-4">
+        <Field label="Display name">
+          <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required maxLength={50} disabled={!me} />
+        </Field>
+        <Field label="Username" hint="Letters, numbers, and underscores. Must be unique.">
+          <Input value={username} onChange={(e) => setUsername(e.target.value)} required disabled={!me} autoComplete="username" />
+        </Field>
+        <ErrorNote message={error} />
+        <div className="flex items-center gap-3">
+          <Button type="submit" busy={busy} disabled={!me}>Save profile</Button>
+          {done && <span className="flex items-center gap-1 text-sm text-owed"><Check className="h-4 w-4" /> Saved</span>}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function PasswordCard() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [done, setDone] = useState(false);
+  const { error, setError, busy, run } = useFormState();
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setDone(false);
+    if (newPassword !== confirm) return setError("New passwords do not match");
+    run(async () => {
+      await api("/api/auth/password", { body: { currentPassword, newPassword } });
+      setCurrentPassword(""); setNewPassword(""); setConfirm("");
+      setDone(true);
+      setTimeout(() => setDone(false), 2000);
+    }, "Could not change password");
+  }
+
+  return (
+    <Card>
+      <CardHeader title={<span className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> Password</span>} />
+      <form onSubmit={submit} className="space-y-4 p-4">
+        <Field label="Current password">
+          <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoComplete="current-password" />
+        </Field>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Field label="New password">
+            <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required autoComplete="new-password" />
+          </Field>
+          <Field label="Confirm new password">
+            <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required autoComplete="new-password" />
+          </Field>
+        </div>
+        <ErrorNote message={error} />
+        <div className="flex items-center gap-3">
+          <Button type="submit" busy={busy}>Change password</Button>
+          {done && <span className="flex items-center gap-1 text-sm text-owed"><Check className="h-4 w-4" /> Password changed</span>}
+        </div>
+      </form>
+    </Card>
+  );
+}
+
+function RecoveryCard() {
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [copied, setCopied] = useState(false);
+  const { error, busy, run } = useFormState();
+
+  const loadRemaining = () =>
+    api<{ remaining: number }>("/api/me/recovery-codes").then((r) => setRemaining(r.remaining)).catch(() => {});
+
+  useEffect(() => { loadRemaining(); }, []);
+
+  function regenerate() {
+    if (codes && !window.confirm("Generate new recovery codes? Your old codes will stop working.")) return;
+    run(async () => {
+      const r = await api<{ codes: string[] }>("/api/me/recovery-codes", { method: "POST" });
+      setCodes(r.codes);
+      setRemaining(r.codes.length);
+    }, "Could not generate recovery codes");
+  }
+
+  function copyCodes() {
+    if (!codes) return;
+    navigator.clipboard.writeText(codes.join("\n")).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader title={<span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Account recovery</span>} />
+      <div className="space-y-4 p-4">
+        <p className="text-sm text-ink-soft">
+          Recovery codes let you reset your password if you forget it. Store them somewhere safe — each code works once.
+        </p>
+        {codes ? (
+          <div className="rounded-lg border border-line bg-paper p-3">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-sm">
+              {codes.map((c) => <span key={c}>{c}</span>)}
+            </div>
+            <div className="mt-3 flex items-center gap-3">
+              <Button variant="secondary" onClick={copyCodes}>
+                {copied ? <Check className="h-4 w-4 text-owed" /> : <Copy className="h-4 w-4" />} Copy codes
+              </Button>
+              <span className="text-xs text-ink-faint">These won&apos;t be shown again.</span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-faint">
+            {remaining === null ? "Checking…" : remaining > 0
+              ? `You have ${remaining} unused recovery ${remaining === 1 ? "code" : "codes"}.`
+              : "You have no recovery codes yet."}
+          </p>
+        )}
+        <ErrorNote message={error} />
+        <Button variant={remaining ? "secondary" : "primary"} onClick={regenerate} busy={busy}>
+          {remaining ? "Regenerate codes" : "Generate recovery codes"}
+        </Button>
+      </div>
+    </Card>
+  );
+}

@@ -164,6 +164,63 @@ async function main() {
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  // One-time account recovery codes. Each code is scrypt-hashed (never stored
+  // plaintext) and single-use; spending one stamps used_at.
+  await sql`CREATE TABLE IF NOT EXISTS recovery_codes (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_hash TEXT NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS recovery_codes_user_idx ON recovery_codes (user_id)`;
+
+  // Per-expense comment threads (Splitwise-style discussion on a single bill).
+  await sql`CREATE TABLE IF NOT EXISTS expense_comments (
+    id BIGSERIAL PRIMARY KEY,
+    expense_id BIGINT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
+    author_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS expense_comments_idx ON expense_comments (expense_id, id)`;
+
+  // Per-user read cursors. `scope` is a string like 'activity',
+  // 'msg:group:<id>', or 'msg:dm:<friendId>'; last_id is the highest id the
+  // user has seen in that scope. Drives unread badges.
+  await sql`CREATE TABLE IF NOT EXISTS read_state (
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL,
+    last_id BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (user_id, scope)
+  )`;
+
+  // Settle-up nudges. A reminder from one user to another (optionally scoped to
+  // a group) to settle an outstanding balance. Surfaces as the recipient's
+  // notification until they dismiss it (seen_at).
+  await sql`CREATE TABLE IF NOT EXISTS nudges (
+    id BIGSERIAL PRIMARY KEY,
+    from_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    group_id BIGINT REFERENCES groups(id) ON DELETE CASCADE,
+    note TEXT NOT NULL DEFAULT '',
+    seen_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS nudges_to_idx ON nudges (to_id, id)`;
+
+  // Pending friend requests. Adding a friend by code now creates a request the
+  // recipient accepts or declines, instead of an instant two-way friendship.
+  await sql`CREATE TABLE IF NOT EXISTS friend_requests (
+    id BIGSERIAL PRIMARY KEY,
+    from_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    to_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (from_id, to_id),
+    CHECK (from_id <> to_id)
+  )`;
+
   // Dedupe global categories: UNIQUE(owner_id, name) does not constrain rows
   // where owner_id IS NULL (NULLs are distinct in Postgres), so non-idempotent
   // seeds accumulated duplicates. Repoint references to the lowest id per name,

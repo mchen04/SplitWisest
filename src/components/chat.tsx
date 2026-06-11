@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, SendHorizonal } from "lucide-react";
-import { api, fmtTime } from "@/lib/client";
+import { api, fmtTime, markRead } from "@/lib/client";
 import { Avatar, Input } from "./ui";
 
 interface Message {
@@ -36,17 +36,21 @@ export function ChatPane({
   meId,
   refreshKey,
   emptyHint,
+  readScope,
 }: {
   endpoint: string; // e.g. /api/groups/1/messages
   meId: number;
   refreshKey: number;
   emptyHint: string;
+  readScope?: string; // e.g. msg:group:1 — marks the conversation read on view
 }) {
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [sending, setSending] = useState(false);
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const lastId = useRef(0);
   const inflight = useRef<Promise<void> | null>(null);
@@ -54,10 +58,35 @@ export function ChatPane({
 
   async function loadAll() {
     const seq = ++searchSeq.current;
-    const r = await api<{ messages: Message[] }>(endpoint);
+    const r = await api<{ messages: Message[]; hasMore?: boolean }>(endpoint);
     if (seq !== searchSeq.current) return; // a newer search superseded this
     setMessages(r.messages);
+    setHasMoreOlder(!!r.hasMore);
     lastId.current = r.messages.at(-1)?.id ?? 0;
+    if (readScope && lastId.current > 0) markRead(readScope, lastId.current);
+  }
+
+  // Prepend an older page of history while preserving scroll position.
+  async function loadEarlier() {
+    if (loadingOlder || !messages || messages.length === 0) return;
+    setLoadingOlder(true);
+    const before = messages[0].id;
+    const scrollEl = scroller.current;
+    const prevHeight = scrollEl?.scrollHeight ?? 0;
+    try {
+      const r = await api<{ messages: Message[]; hasMore?: boolean }>(`${endpoint}?before=${before}`);
+      setMessages((m) => {
+        const have = new Set((m ?? []).map((x) => x.id));
+        return [...r.messages.filter((x) => !have.has(x.id)), ...(m ?? [])];
+      });
+      setHasMoreOlder(!!r.hasMore);
+      // Keep the viewport anchored where the user was after prepending.
+      requestAnimationFrame(() => {
+        if (scrollEl) scrollEl.scrollTop += scrollEl.scrollHeight - prevHeight;
+      });
+    } finally {
+      setLoadingOlder(false);
+    }
   }
 
   // Serialized + deduped: concurrent callers share one request, and appends
@@ -72,6 +101,7 @@ export function ChatPane({
           return [...(m ?? []), ...r.messages.filter((x) => !have.has(x.id))];
         });
         lastId.current = Math.max(lastId.current, r.messages.at(-1)!.id);
+        if (readScope && lastId.current > 0) markRead(readScope, lastId.current);
       }
     })().finally(() => {
       inflight.current = null;
@@ -93,9 +123,11 @@ export function ChatPane({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
+  // Scroll to the newest message only when the last id advances (a new message
+  // arrived or was sent) — not when older history is prepended.
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [messages?.length]);
+  }, [messages?.at(-1)?.id]);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,6 +176,17 @@ export function ChatPane({
         </div>
       </div>
       <div ref={scroller} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
+        {hasMoreOlder && !searching && messages && messages.length > 0 && (
+          <div className="text-center">
+            <button
+              onClick={loadEarlier}
+              disabled={loadingOlder}
+              className="rounded-full border border-line px-3 py-1 text-xs font-medium text-ink-soft hover:border-accent disabled:opacity-50"
+            >
+              {loadingOlder ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
         {messages === null ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, i) => (

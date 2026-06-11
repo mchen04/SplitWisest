@@ -2,8 +2,19 @@
 
 ## Getting in
 
-- **Sign up** with a display name, username, password, and an invite code — either the group's bootstrap code or a friend's personal code (using a friend's code automatically makes you friends).
+- **Sign up** with a display name, username, password, and an invite code — either the group's bootstrap code or a friend's personal code (using a friend's code at signup automatically makes you friends, since the inviter shared their code deliberately).
 - **Your invite code** is on the Balances page. Share it so friends can sign up or add you.
+- **Forgot your password?** Use the "Forgot your password?" link on login and one of your recovery codes (generate these in Settings) to set a new one.
+
+## Account & settings
+
+- **Settings** (gear icon / profile in the sidebar) lets you change your display name and username, change your password (requires your current one), generate one-time **recovery codes**, and log out.
+- **Recovery codes** are shown once when generated — store them safely. Each works a single time and regenerating invalidates the old set.
+
+## Friend requests
+
+- **Adding a friend by code** sends a **pending request**; you become friends only once they **accept** it (Balances → Friend requests). You can cancel a request you sent, and accept or decline ones you receive. If you both request each other, the friendship is created automatically.
+- **Group invites stay open**: anyone with a group's invite code can join directly (no approval step), and joining a group makes everyone in it friends. This keeps group onboarding frictionless while friend connections stay consent-based.
 
 ## Groups
 
@@ -31,4 +42,15 @@
 
 ## Chat
 
-Each group has a chat tab; each friend has a direct chat (Balances → Chat). Messages and balances update live for everyone viewing — no refresh needed.
+Each group has a chat tab; each friend has a direct chat. The **Chat** nav item lists every conversation. Messages and balances update live for everyone viewing — no refresh needed. Long histories load the newest messages first with a "Load earlier messages" affordance.
+
+## Staying on top of things
+
+- **Unread badges** on the Chat, Activity, and Balances nav items show new messages, new activity, and pending settle-up nudges. A badge clears once you view the relevant screen.
+- **Activity** has its own nav page with the full cross-group feed (paged with "Load more").
+- **Expense details**: tap an expense to open a read-only view — payer, split breakdown, notes, inline receipt previews, and a **per-expense comment thread**. Edit/Delete are available from there too.
+- **Settle-up nudges**: on Balances, nudge a friend who owes you to settle up. They see it as a reminder (and an unread badge) until they dismiss it.
+
+## Pagination
+
+Expenses, settlements, activity, and chat all load a bounded first page and fetch more on demand ("Load more" / "Load earlier"), so large groups stay fast.

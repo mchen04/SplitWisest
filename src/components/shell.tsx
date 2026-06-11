@@ -3,21 +3,38 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ReactNode } from "react";
-import { LayoutDashboard, Users, Scale, Receipt, LogOut, Wallet } from "lucide-react";
-import { api, useMe } from "@/lib/client";
+import {
+  LayoutDashboard, Users, Scale, Receipt, LogOut, Wallet,
+  MessageSquare, ScrollText, Settings,
+} from "lucide-react";
+import { api, useMe, useUnread, type Unread } from "@/lib/client";
 import { Avatar } from "./ui";
 
-const NAV = [
+type BadgeKey = keyof Unread;
+
+const NAV: { href: string; label: string; icon: typeof LayoutDashboard; badge?: BadgeKey }[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/groups", label: "Groups", icon: Users },
-  { href: "/balances", label: "Balances", icon: Scale },
+  { href: "/balances", label: "Balances", icon: Scale, badge: "nudges" },
   { href: "/expenses", label: "Expenses", icon: Receipt },
+  { href: "/chat", label: "Chat", icon: MessageSquare, badge: "messages" },
+  { href: "/activity", label: "Activity", icon: ScrollText, badge: "activity" },
 ];
+
+function Badge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white">
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const me = useMe();
+  const unread = useUnread();
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
@@ -38,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="font-display text-lg font-bold tracking-tight">SplitWisest</span>
         </Link>
         <nav className="flex flex-1 flex-col gap-1 px-3">
-          {NAV.map(({ href, label, icon: Icon }) => (
+          {NAV.map(({ href, label, icon: Icon, badge }) => (
             <Link
               key={href}
               href={href}
@@ -49,18 +66,29 @@ export function AppShell({ children }: { children: ReactNode }) {
               }`}
             >
               <Icon className="h-4.5 w-4.5" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {badge && <Badge count={unread[badge]} />}
             </Link>
           ))}
         </nav>
         <div className="border-t border-line p-3">
           {me && (
             <div className="flex items-center gap-2.5 px-2 py-1.5">
-              <Avatar name={me.displayName} size="sm" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{me.displayName}</p>
-                <p className="truncate text-xs text-ink-faint">@{me.username}</p>
-              </div>
+              <Link href="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:opacity-80">
+                <Avatar name={me.displayName} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{me.displayName}</p>
+                  <p className="truncate text-xs text-ink-faint">@{me.username}</p>
+                </div>
+              </Link>
+              <Link
+                href="/settings"
+                aria-label="Settings"
+                title="Settings"
+                className="rounded-lg p-1.5 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+              >
+                <Settings className="h-4 w-4" />
+              </Link>
               <button
                 onClick={logout}
                 aria-label="Log out"
@@ -82,13 +110,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <span className="font-display text-base font-bold">SplitWisest</span>
         </Link>
-        <button
-          onClick={logout}
-          aria-label="Log out"
-          className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
-        >
-          <LogOut className="h-4.5 w-4.5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+          >
+            <Settings className="h-4.5 w-4.5" />
+          </Link>
+          <button
+            onClick={logout}
+            aria-label="Log out"
+            className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
+          >
+            <LogOut className="h-4.5 w-4.5" />
+          </button>
+        </div>
       </header>
 
       <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-hidden md:pb-6 md:pt-6 lg:px-10">
@@ -97,18 +134,25 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile bottom nav */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-card/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-card/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {NAV.map(({ href, label, icon: Icon }) => (
+        {NAV.map(({ href, label, icon: Icon, badge }) => (
           <Link
             key={href}
             href={href}
-            className={`flex flex-col items-center gap-0.5 py-2 text-[11px] font-medium ${
+            className={`relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
               isActive(href) ? "text-accent-dark" : "text-ink-faint"
             }`}
           >
-            <Icon className="h-5 w-5" />
+            <span className="relative">
+              <Icon className="h-5 w-5" />
+              {badge && unread[badge] > 0 && (
+                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-white">
+                  {unread[badge] > 9 ? "9+" : unread[badge]}
+                </span>
+              )}
+            </span>
             {label}
           </Link>
         ))}

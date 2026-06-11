@@ -14,6 +14,7 @@ import { ExpenseForm, Member } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
 import { RecurringModal, ExistingRecurring } from "@/components/recurring-modal";
 import { GroupSettingsModal } from "@/components/group-settings-modal";
+import { ExpenseDetailModal } from "@/components/expense-detail";
 import { ChatPane } from "@/components/chat";
 import { SpendCharts } from "@/components/spend-charts";
 
@@ -74,8 +75,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const me = useMe();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
+  const [expenseLimit, setExpenseLimit] = useState(50);
+  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
   const [recurring, setRecurring] = useState<Recurring[]>([]);
   const [settlements, setSettlements] = useState<Settlement[] | null>(null);
+  const [settlementLimit, setSettlementLimit] = useState(50);
+  const [hasMoreSettlements, setHasMoreSettlements] = useState(false);
   const [activity, setActivity] = useState<{ id: number; summary: string; createdAt: string }[] | null>(null);
   const [tab, setTab] = useState<Tab>("expenses");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -91,6 +96,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [editing, setEditing] = useState<Parameters<typeof ExpenseForm>[0]["existing"]>(null);
   const [settleOpen, setSettleOpen] = useState(false);
   const [settlePrefill, setSettlePrefill] = useState<{ payerId: number; recipientId: number; amountCents: number } | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<Expense | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
@@ -109,10 +115,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     api<{ activity: { id: number; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
       .then((r) => setActivity(r.activity))
       .catch(() => {});
-    api<{ settlements: Settlement[] }>(`/api/groups/${groupId}/settlements`)
-      .then((r) => setSettlements(r.settlements))
+    api<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${settlementLimit}`)
+      .then((r) => { setSettlements(r.settlements); setHasMoreSettlements(r.hasMore); })
       .catch(() => {});
-  }, [groupId]);
+  }, [groupId, settlementLimit]);
 
   const loadExpenses = useCallback(() => {
     const p = new URLSearchParams();
@@ -121,10 +127,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     if (filters.payer) p.set("payerId", filters.payer);
     if (filters.from) p.set("from", filters.from);
     if (filters.to) p.set("to", filters.to);
-    api<{ expenses: Expense[] }>(`/api/groups/${groupId}/expenses?${p}`)
-      .then((r) => setExpenses(r.expenses))
+    p.set("limit", String(expenseLimit));
+    api<{ expenses: Expense[]; hasMore: boolean }>(`/api/groups/${groupId}/expenses?${p}`)
+      .then((r) => { setExpenses(r.expenses); setHasMoreExpenses(r.hasMore); })
       .catch(() => {});
-  }, [groupId, filters]);
+  }, [groupId, filters, expenseLimit]);
+
+  // Reset to the first page whenever the filters change.
+  useEffect(() => { setExpenseLimit(50); }, [filters]);
 
   useEffect(loadDetail, [loadDetail]);
   useEffect(() => {
@@ -132,9 +142,16 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     return () => clearTimeout(t);
   }, [loadExpenses, filters.q]);
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("add") === "1") {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("add") === "1") {
       setEditing(null);
       setExpenseOpen(true);
+    }
+    const t = params.get("tab");
+    if (t && ["expenses", "balances", "insights", "chat", "activity"].includes(t)) {
+      setTab(t as Tab);
+    }
+    if (params.get("add") === "1" || t) {
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
@@ -371,6 +388,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   const myShare = me ? (e.shares.find((s) => s.userId === me.id)?.convertedShareCents ?? 0) : 0;
                   return (
                     <li key={e.id} className="group flex min-h-16 items-center gap-3 px-4 py-2.5">
+                      <button
+                        onClick={() => setDetailId(e.id)}
+                        className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                        aria-label={`View ${e.title}`}
+                      >
                       <div className="hidden w-12 shrink-0 text-center sm:block">
                         <p className="text-[11px] font-semibold uppercase text-ink-faint">
                           {new Date(String(e.date).slice(0, 10) + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
@@ -400,6 +422,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                               : "not involved"}
                         </p>
                       </div>
+                      </button>
                       <div className="flex shrink-0 gap-0.5">
                         <button onClick={() => openEdit(e.id)} aria-label={`Edit ${e.title}`} className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark">
                           <Pencil className="h-4 w-4" />
@@ -412,6 +435,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   );
                 })}
               </ul>
+            )}
+            {expenses && expenses.length > 0 && hasMoreExpenses && (
+              <div className="border-t border-line p-3 text-center">
+                <Button variant="secondary" onClick={() => setExpenseLimit((l) => l + 50)}>
+                  Load more
+                </Button>
+              </div>
             )}
             </div>
           </Card>
@@ -563,6 +593,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               ))}
             </ul>
           )}
+          {settlements && settlements.length > 0 && hasMoreSettlements && (
+            <div className="border-t border-line p-3 text-center">
+              <Button variant="secondary" onClick={() => setSettlementLimit((l) => l + 50)}>Load more</Button>
+            </div>
+          )}
         </Card>
         </div>
       )}
@@ -574,6 +609,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             meId={me.id}
             refreshKey={refreshKey}
             emptyHint="No messages yet. Say hi or hash out that bill."
+            readScope={`msg:group:${groupId}`}
           />
         </Card>
       )}
@@ -654,6 +690,21 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             onGone={() => router.push("/groups")}
           />
         </>
+      )}
+
+      {me && (
+        <ExpenseDetailModal
+          expenseId={detailId}
+          meId={me.id}
+          open={detailId !== null}
+          onClose={() => setDetailId(null)}
+          onEdit={(eid) => { setDetailId(null); openEdit(eid); }}
+          onDelete={(eid) => {
+            const exp = expenses?.find((x) => x.id === eid) ?? null;
+            setDetailId(null);
+            if (exp) setDeleting(exp);
+          }}
+        />
       )}
 
       <Modal open={!!deleting} onClose={() => setDeleting(null)} title="Delete expense?">

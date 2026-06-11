@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt } from "lucide-react";
-import { api, ApiClientError, fmtMoney, todayStr, useApiData, useFormState, useMe } from "@/lib/client";
+import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt, Bell, X } from "lucide-react";
+import { api, ApiClientError, fmtMoney, fmtTime, todayStr, useApiData, useFormState, useMe } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
 import { SettleFields } from "@/components/settle-fields";
@@ -16,25 +16,89 @@ interface Friend {
   netByCurrency: Record<string, number>;
 }
 
+interface FriendRequest {
+  id: number;
+  userId: number;
+  displayName: string;
+  username: string;
+  createdAt: string;
+}
+
+interface Nudge {
+  id: number;
+  fromName: string;
+  groupName: string | null;
+  note: string;
+  seen: boolean;
+  createdAt: string;
+}
+
 export default function BalancesPage() {
-  const { data, reload } = useApiData<{ friends: Friend[]; myInviteCode: string }>("/api/friends");
+  const { data, reload } = useApiData<{
+    friends: Friend[];
+    incomingRequests: FriendRequest[];
+    outgoingRequests: FriendRequest[];
+    myInviteCode: string;
+  }>("/api/friends");
   const friends = data?.friends ?? null;
+  const incomingRequests = data?.incomingRequests ?? [];
+  const outgoingRequests = data?.outgoingRequests ?? [];
   const inviteCode = data?.myInviteCode ?? "";
   const [copied, setCopied] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
+  const [addNote, setAddNote] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [settleFriend, setSettleFriend] = useState<Friend | null>(null);
   const [historyFriend, setHistoryFriend] = useState<Friend | null>(null);
+  const [nudgedId, setNudgedId] = useState<number | null>(null);
   const me = useMe();
   const { error, setError, busy, run } = useFormState();
+
+  const { data: nudgeData, reload: reloadNudges } =
+    useApiData<{ nudges: Nudge[] }>("/api/nudges");
+  const reminders = (nudgeData?.nudges ?? []).filter((n) => !n.seen);
+
+  async function nudge(f: Friend) {
+    try {
+      await api("/api/nudges", { body: { toId: f.id } });
+      setNudgedId(f.id);
+      setTimeout(() => setNudgedId((v) => (v === f.id ? null : v)), 2000);
+    } catch (err) {
+      window.alert(err instanceof ApiClientError ? err.message : "Could not send nudge");
+    }
+  }
+
+  async function dismissReminder(id: number) {
+    try {
+      await api(`/api/nudges/${id}`, { method: "DELETE" });
+      reloadNudges();
+    } catch {
+      // ignore
+    }
+  }
 
   function addFriend(e: React.FormEvent) {
     e.preventDefault();
     run(async () => {
-      await api("/api/friends", { body: { code } });
-      setAddOpen(false); setCode("");
+      const r = await api<{ status: string; displayName: string }>("/api/friends", { body: { code } });
+      setCode(""); setAddOpen(false);
+      setAddNote(
+        r.status === "accepted"
+          ? `You and ${r.displayName} are now friends.`
+          : `Friend request sent to ${r.displayName}.`
+      );
+      setTimeout(() => setAddNote(null), 4000);
       reload();
     }, "Could not add friend");
+  }
+
+  async function respondRequest(id: number, action: "accept" | "decline" | "cancel") {
+    try {
+      await api("/api/friends/requests", { body: { requestId: id, action } });
+      reload();
+    } catch (err) {
+      window.alert(err instanceof ApiClientError ? err.message : "Could not update request");
+    }
   }
 
   function copyInvite() {
@@ -81,6 +145,66 @@ export default function BalancesPage() {
         </button>
       </Card>
 
+      {addNote && (
+        <div className="mb-4 rounded-lg bg-owed-soft px-3 py-2 text-sm text-owed md:shrink-0">{addNote}</div>
+      )}
+
+      {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
+        <Card className="mb-4 md:shrink-0">
+          <CardHeader title={<span className="flex items-center gap-2"><UserPlus className="h-4 w-4 text-accent" /> Friend requests</span>} />
+          <ul className="divide-y divide-line">
+            {incomingRequests.map((r) => (
+              <li key={`in-${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <Avatar name={r.displayName} size="sm" />
+                <span className="min-w-0 flex-1 text-sm">
+                  <strong>{r.displayName}</strong> <span className="text-ink-faint">@{r.username}</span> wants to be friends
+                </span>
+                <div className="flex gap-1.5">
+                  <Button className="!min-h-9 !px-3" onClick={() => respondRequest(r.id, "accept")}>Accept</Button>
+                  <Button variant="secondary" className="!min-h-9 !px-3" onClick={() => respondRequest(r.id, "decline")}>Decline</Button>
+                </div>
+              </li>
+            ))}
+            {outgoingRequests.map((r) => (
+              <li key={`out-${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                <Avatar name={r.displayName} size="sm" />
+                <span className="min-w-0 flex-1 text-sm">
+                  Request sent to <strong>{r.displayName}</strong> <span className="text-ink-faint">@{r.username}</span>
+                </span>
+                <Button variant="secondary" className="!min-h-9 !px-3" onClick={() => respondRequest(r.id, "cancel")}>Cancel</Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {reminders.length > 0 && (
+        <Card className="mb-4 md:shrink-0">
+          <CardHeader title={<span className="flex items-center gap-2"><Bell className="h-4 w-4 text-accent" /> Reminders</span>} />
+          <ul className="divide-y divide-line">
+            {reminders.map((n) => (
+              <li key={n.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="min-w-0 flex-1">
+                  <span className="block">
+                    <strong>{n.fromName}</strong> nudged you to settle up
+                    {n.groupName ? <span className="text-ink-faint"> in {n.groupName}</span> : ""}.
+                  </span>
+                  {n.note && <span className="block text-xs text-ink-soft">“{n.note}”</span>}
+                  <span className="block text-xs text-ink-faint">{fmtTime(n.createdAt)}</span>
+                </span>
+                <button
+                  onClick={() => dismissReminder(n.id)}
+                  aria-label="Dismiss reminder"
+                  className="rounded-lg p-1.5 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card className="flex flex-col md:min-h-0 md:flex-1">
         <CardHeader title="Friends" />
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
@@ -123,6 +247,18 @@ export default function BalancesPage() {
                         <span className="hidden sm:inline">Settle</span>
                       </Button>
                     )}
+                    {entries.some(([, amt]) => amt > 0) && (
+                      <Button
+                        variant="secondary"
+                        className="!min-h-9 !px-2.5"
+                        onClick={() => nudge(f)}
+                        title={`Nudge ${f.displayName} to settle up`}
+                        aria-label={`Nudge ${f.displayName}`}
+                      >
+                        {nudgedId === f.id ? <Check className="h-4 w-4 text-owed" /> : <Bell className="h-4 w-4" />}
+                        <span className="hidden sm:inline">{nudgedId === f.id ? "Nudged" : "Nudge"}</span>
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       className="!min-h-9 !px-2.5"
@@ -158,13 +294,13 @@ export default function BalancesPage() {
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add a friend">
         <form onSubmit={addFriend} className="space-y-4">
-          <Field label="Friend's invite code">
+          <Field label="Friend's invite code" hint="We'll send them a request — you become friends once they accept.">
             <Input value={code} onChange={(e) => setCode(e.target.value)} required autoFocus />
           </Field>
           <ErrorNote message={error} />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button type="submit" busy={busy}>Add friend</Button>
+            <Button type="submit" busy={busy}>Send request</Button>
           </div>
         </form>
       </Modal>

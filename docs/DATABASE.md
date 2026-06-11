@@ -27,6 +27,11 @@ DATABASE_URL=... pnpm tsx scripts/migrate.ts
 | `activity` | append-only log rows shown in activity feeds |
 | `messages` | group chat (`group_id`) or DM (`dm_a < dm_b`) |
 | `fx_rates` | cached currency rates (units per USD), refreshed daily from open.er-api.com with static fallback |
+| `recovery_codes` | one-time account-recovery codes, scrypt-hashed; `used_at` marks a spent code |
+| `expense_comments` | per-expense comment threads |
+| `read_state` | per-user read cursors keyed by `scope` (`activity`, `msg:group:<id>`, `msg:dm:<friendId>`); drives unread badges |
+| `nudges` | settle-up reminders from one user to another (optionally group-scoped); `seen_at` dismisses |
+| `friend_requests` | pending friend requests (`from_id` → `to_id`); accepting creates a `friendships` row |
 
 ## Conventions
 

@@ -14,6 +14,7 @@ export const GET = handler(async (req: NextRequest) => {
   const friendId = q.get("friendId") ? Number(q.get("friendId")) : null;
   const from = q.get("from") || null;
   const to = q.get("to") || null;
+  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 1000);
 
   const rows = await sql`
     SELECT e.id, e.group_id, g.name AS group_name, e.title, e.amount_cents, e.currency,
@@ -33,10 +34,14 @@ export const GET = handler(async (req: NextRequest) => {
       AND (${from}::date IS NULL OR e.expense_date >= ${from}::date)
       AND (${to}::date IS NULL OR e.expense_date <= ${to}::date)
     ORDER BY e.expense_date DESC, e.id DESC
-    LIMIT 300`;
+    LIMIT ${limit + 1}`;
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
 
   return NextResponse.json({
-    expenses: rows.map((e) => ({
+    hasMore,
+    expenses: page.map((e) => ({
       id: Number(e.id),
       groupId: Number(e.group_id),
       groupName: e.group_name,

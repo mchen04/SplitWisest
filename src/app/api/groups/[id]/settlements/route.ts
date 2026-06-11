@@ -16,19 +16,23 @@ const Body = z.object({
   ...settlementFields,
 });
 
-export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
+export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const groupId = Number((await params).id);
   if (!Number.isInteger(groupId)) notFound();
   if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const limit = Math.min(Math.max(Number(req.nextUrl.searchParams.get("limit")) || 50, 1), 1000);
   const rows = await sql`
     SELECT s.id, s.payer_id, s.recipient_id, s.amount_cents, s.currency, s.converted_cents,
       s.settled_date, s.note, p.display_name AS payer_name, r.display_name AS recipient_name
     FROM settlements s
     JOIN users p ON p.id = s.payer_id JOIN users r ON r.id = s.recipient_id
-    WHERE s.group_id = ${groupId} ORDER BY s.settled_date DESC, s.id DESC LIMIT 200`;
+    WHERE s.group_id = ${groupId} ORDER BY s.settled_date DESC, s.id DESC LIMIT ${limit + 1}`;
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
   return NextResponse.json({
-    settlements: rows.map((s) => ({
+    hasMore,
+    settlements: page.map((s) => ({
       id: Number(s.id),
       payerId: Number(s.payer_id),
       recipientId: Number(s.recipient_id),

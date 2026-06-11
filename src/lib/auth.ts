@@ -23,6 +23,21 @@ export function newToken(): string {
   return randomBytes(32).toString("hex");
 }
 
+// Recovery codes are short, human-typable, and shown to the user exactly once.
+// We store only their scrypt hash, so a DB leak can't reveal them.
+export function newRecoveryCode(): string {
+  const raw = randomBytes(5).toString("hex").toUpperCase(); // 10 hex chars
+  return `${raw.slice(0, 5)}-${raw.slice(5)}`;
+}
+
+export function hashRecoveryCode(code: string): string {
+  return hashPassword(code.trim().toUpperCase());
+}
+
+export function verifyRecoveryCode(code: string, stored: string): boolean {
+  return verifyPassword(code.trim().toUpperCase(), stored);
+}
+
 export function newInviteCode(): string {
   return randomBytes(4).toString("hex");
 }

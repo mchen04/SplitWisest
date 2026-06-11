@@ -21,6 +21,10 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const payerId = q.get("payerId") ? Number(q.get("payerId")) : null;
   const from = q.get("from") || null;
   const to = q.get("to") || null;
+  // Pagination: bounded page (default 50, max 200) with offset. Fetch one extra
+  // row to tell the client whether more pages remain.
+  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 1000);
+  const offset = Math.max(Number(q.get("offset")) || 0, 0);
 
   const rows = await sql`
     SELECT e.id, e.title, e.amount_cents, e.currency, e.converted_cents, e.expense_date,
@@ -41,10 +45,14 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       AND (${from}::date IS NULL OR e.expense_date >= ${from}::date)
       AND (${to}::date IS NULL OR e.expense_date <= ${to}::date)
     ORDER BY e.expense_date DESC, e.id DESC
-    LIMIT 500`;
+    LIMIT ${limit + 1} OFFSET ${offset}`;
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
 
   return NextResponse.json({
-    expenses: rows.map((e) => ({
+    hasMore,
+    expenses: page.map((e) => ({
       id: Number(e.id),
       title: e.title,
       amountCents: Number(e.amount_cents),
