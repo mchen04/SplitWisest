@@ -1,0 +1,46 @@
+import { NextRequest, NextResponse } from "next/server";
+import { sql } from "@/lib/db";
+import { handler, notFound, forbidden } from "@/lib/api";
+import { requireUser } from "@/lib/auth";
+import { isGroupMember } from "@/lib/balances";
+
+type Ctx = { params: Promise<{ id: string }> };
+
+async function loadWithAccess(id: number, userId: number) {
+  const rows = await sql`
+    SELECT a.id, a.filename, a.mime, a.data, e.group_id
+    FROM attachments a JOIN expenses e ON e.id = a.expense_id
+    WHERE a.id = ${id}`;
+  if (rows.length === 0) notFound("Attachment not found");
+  if (!(await isGroupMember(Number(rows[0].group_id), userId))) forbidden();
+  return rows[0];
+}
+
+export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
+  const user = await requireUser();
+  const id = Number((await params).id);
+  if (!Number.isInteger(id)) notFound();
+  const a = await loadWithAccess(id, user.id);
+  // neon returns bytea as \x-prefixed hex string
+  const raw = a.data as unknown;
+  const buf =
+    typeof raw === "string"
+      ? Buffer.from(raw.startsWith("\\x") ? raw.slice(2) : raw, "hex")
+      : Buffer.from(raw as Uint8Array);
+  return new NextResponse(new Uint8Array(buf), {
+    headers: {
+      "Content-Type": a.mime,
+      "Content-Disposition": `inline; filename="${a.filename.replace(/"/g, "")}"`,
+      "Cache-Control": "private, max-age=3600",
+    },
+  });
+});
+
+export const DELETE = handler(async (_req: NextRequest, { params }: Ctx) => {
+  const user = await requireUser();
+  const id = Number((await params).id);
+  if (!Number.isInteger(id)) notFound();
+  await loadWithAccess(id, user.id);
+  await sql`DELETE FROM attachments WHERE id = ${id}`;
+  return NextResponse.json({ ok: true });
+});
