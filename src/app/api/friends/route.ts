@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, badRequest } from "@/lib/api";
+import { handler, badRequest, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { friendBalances } from "@/lib/balances";
+import { logActivity } from "@/lib/activity";
 
 export const GET = handler(async () => {
   const user = await requireUser();
@@ -38,4 +39,26 @@ export const POST = handler(async (req: NextRequest) => {
   const [a, b] = friendId < user.id ? [friendId, user.id] : [user.id, friendId];
   await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
   return NextResponse.json({ id: friendId, displayName: rows[0].display_name });
+});
+
+const DeleteBody = z.object({ friendId: z.number().int().positive() });
+
+// Remove a friend. Blocked while you still owe each other money (in any shared
+// group or via direct settlements) so the relationship can't hide a live debt.
+export const DELETE = handler(async (req: NextRequest) => {
+  const user = await requireUser();
+  const { friendId } = DeleteBody.parse(await req.json());
+  const [a, b] = friendId < user.id ? [friendId, user.id] : [user.id, friendId];
+  const existing = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
+  if (existing.length === 0) notFound("You are not friends with this user");
+
+  const balances = await friendBalances(user.id);
+  const fb = balances.find((x) => x.friendId === friendId);
+  if (fb && Object.keys(fb.netByCurrency).length > 0) {
+    badRequest("Settle up with this friend before removing them");
+  }
+
+  await sql`DELETE FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
+  await logActivity(null, user.id, "friend.removed", `${user.displayName} removed a friend`);
+  return NextResponse.json({ ok: true });
 });

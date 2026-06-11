@@ -5,11 +5,22 @@ import { api, useFormState } from "@/lib/client";
 import { Button, Field, Input, Select, Modal, ErrorNote } from "./ui";
 import { Member } from "./expense-form";
 
+export interface ExistingRecurring {
+  id: number;
+  title: string;
+  amountCents: number;
+  payerId: number;
+  cadence: "weekly" | "monthly";
+  nextDate: string;
+  active: boolean;
+}
+
 export function RecurringModal({
-  open, onClose, onSaved, groupId, members, meId, defaultCurrency,
+  open, onClose, onSaved, groupId, members, meId, defaultCurrency, existing,
 }: {
   open: boolean; onClose: () => void; onSaved: () => void;
   groupId: number; members: Member[]; meId: number; defaultCurrency: string;
+  existing?: ExistingRecurring | null;
 }) {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -20,29 +31,50 @@ export function RecurringModal({
 
   useEffect(() => {
     if (!open) return;
-    setTitle(""); setAmount(""); setPayerId(meId); setCadence("monthly");
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    setStartDate(d.toISOString().slice(0, 10));
     setError(null);
-  }, [open, meId, setError]);
+    if (existing) {
+      setTitle(existing.title);
+      setAmount((existing.amountCents / 100).toFixed(2));
+      setPayerId(existing.payerId);
+      setCadence(existing.cadence);
+      setStartDate(String(existing.nextDate).slice(0, 10));
+    } else {
+      setTitle(""); setAmount(""); setPayerId(meId); setCadence("monthly");
+      const d = new Date(); d.setDate(d.getDate() + 1);
+      setStartDate(d.toISOString().slice(0, 10));
+    }
+    // Reset only when the modal opens or the edited rule changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, existing?.id]);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const amountCents = Math.round(parseFloat(amount || "0") * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
+    const participantIds = members.map((m) => m.id);
     run(async () => {
-      await api(`/api/groups/${groupId}/recurring`, {
-        body: {
-          title: title.trim(), amountCents, currency: defaultCurrency, payerId,
-          participantIds: members.map((m) => m.id), cadence, startDate, notes: "",
-        },
-      });
+      if (existing) {
+        await api(`/api/recurring/${existing.id}`, {
+          method: "PATCH",
+          body: {
+            title: title.trim(), amountCents, currency: defaultCurrency, payerId,
+            participantIds, cadence, nextDate: startDate, notes: "", active: existing.active,
+          },
+        });
+      } else {
+        await api(`/api/groups/${groupId}/recurring`, {
+          body: {
+            title: title.trim(), amountCents, currency: defaultCurrency, payerId,
+            participantIds, cadence, startDate, notes: "",
+          },
+        });
+      }
       onSaved(); onClose();
-    }, "Could not create recurring expense");
+    }, existing ? "Could not update recurring expense" : "Could not create recurring expense");
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add recurring expense">
+    <Modal open={open} onClose={onClose} title={existing ? "Edit recurring expense" : "Add recurring expense"}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Title">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="Rent" autoFocus />
@@ -62,7 +94,7 @@ export function RecurringModal({
               <option value="weekly">Weekly</option>
             </Select>
           </Field>
-          <Field label="First date">
+          <Field label={existing ? "Next date" : "First date"}>
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
           </Field>
         </div>
@@ -72,7 +104,7 @@ export function RecurringModal({
         <ErrorNote message={error} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" busy={busy}>Create</Button>
+          <Button type="submit" busy={busy}>{existing ? "Save changes" : "Create"}</Button>
         </div>
       </form>
     </Modal>

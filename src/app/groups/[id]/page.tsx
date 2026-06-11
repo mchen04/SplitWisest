@@ -2,21 +2,23 @@
 
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
-  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X,
+  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings,
 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync, useFilters } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
 import { ExpenseForm, Member } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
-import { RecurringModal } from "@/components/recurring-modal";
+import { RecurringModal, ExistingRecurring } from "@/components/recurring-modal";
+import { GroupSettingsModal } from "@/components/group-settings-modal";
 import { ChatPane } from "@/components/chat";
 import { SpendCharts } from "@/components/spend-charts";
 
 interface GroupDetail {
-  group: { id: number; name: string; currency: string; inviteCode: string };
+  group: { id: number; name: string; currency: string; inviteCode: string; createdBy: number };
   members: (Member & { username: string })[];
   balances: { userId: number; displayName: string; netCents: number }[];
   suggestions: { from: number; to: number; amountCents: number }[];
@@ -44,21 +46,36 @@ interface Recurring {
   title: string;
   amountCents: number;
   currency: string;
+  payerId: number;
   payerName: string;
   cadence: string;
   nextDate: string;
   active: boolean;
 }
 
-type Tab = "expenses" | "balances" | "chat" | "activity";
+interface Settlement {
+  id: number;
+  payerId: number;
+  recipientId: number;
+  payerName: string;
+  recipientName: string;
+  amountCents: number;
+  currency: string;
+  date: string;
+  note: string;
+}
+
+type Tab = "expenses" | "balances" | "insights" | "chat" | "activity";
 
 export default function GroupPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const groupId = Number(id);
+  const router = useRouter();
   const me = useMe();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [recurring, setRecurring] = useState<Recurring[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[] | null>(null);
   const [activity, setActivity] = useState<{ id: number; summary: string; createdAt: string }[] | null>(null);
   const [tab, setTab] = useState<Tab>("expenses");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -77,6 +94,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [deleting, setDeleting] = useState<Expense | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [recurringOpen, setRecurringOpen] = useState(false);
+  const [editingRecurring, setEditingRecurring] = useState<ExistingRecurring | null>(null);
+  const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const loadDetail = useCallback(() => {
     api<GroupDetail>(`/api/groups/${groupId}`)
@@ -87,6 +107,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       .catch(() => {});
     api<{ activity: { id: number; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
       .then((r) => setActivity(r.activity))
+      .catch(() => {});
+    api<{ settlements: Settlement[] }>(`/api/groups/${groupId}/settlements`)
+      .then((r) => setSettlements(r.settlements))
       .catch(() => {});
   }, [groupId]);
 
@@ -170,13 +193,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const TABS: { key: Tab; label: string; icon: typeof Receipt }[] = [
     { key: "expenses", label: "Expenses", icon: Receipt },
     { key: "balances", label: "Balances", icon: Scale },
+    { key: "insights", label: "Insights", icon: PieChart },
     { key: "chat", label: "Chat", icon: MessageSquare },
     { key: "activity", label: "Activity", icon: ScrollText },
   ];
 
   return (
     <AppShell>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-3 md:shrink-0">
         <Link href="/groups" aria-label="Back to groups" className="rounded-lg p-2 text-ink-soft hover:bg-accent-soft">
           <ArrowLeft className="h-5 w-5" />
         </Link>
@@ -213,11 +237,20 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           <Button onClick={() => { setEditing(null); setExpenseOpen(true); }}>
             <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add expense</span>
           </Button>
+          <Button
+            variant="secondary"
+            disabled={!detail}
+            title="Group settings"
+            aria-label="Group settings"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
       {/* Balance strip */}
-      <Card className="mb-4 overflow-x-auto">
+      <Card className="mb-4 overflow-x-auto md:shrink-0">
         <div className="flex min-h-20 items-stretch divide-x divide-line">
           {detail === null ? (
             <div className="flex flex-1 items-center gap-4 px-4">
@@ -242,35 +275,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Card>
 
-      {/* Settlement suggestions */}
-      {detail && detail.suggestions.length > 0 && (
-        <Card className="mb-4">
-          <CardHeader title="Suggested settle-up" />
-          <ul className="divide-y divide-line">
-            {detail.suggestions.map((s, i) => (
-              <li key={i} className="flex min-h-12 flex-wrap items-center gap-2 px-4 py-2 text-sm">
-                <span className="font-medium">{memberName(s.from)}</span>
-                <span className="text-ink-faint">pays</span>
-                <span className="font-medium">{memberName(s.to)}</span>
-                <span className="tnum ml-auto font-semibold">{fmtMoney(s.amountCents, detail.group.currency)}</span>
-                <Button
-                  variant="secondary"
-                  className="!min-h-8 !px-2.5 !py-1 text-xs"
-                  onClick={() => {
-                    setSettlePrefill({ payerId: s.from, recipientId: s.to, amountCents: s.amountCents });
-                    setSettleOpen(true);
-                  }}
-                >
-                  Record
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
       {/* Tabs */}
-      <div role="tablist" aria-label="Group sections" className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-1">
+      <div role="tablist" aria-label="Group sections" className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-1 md:shrink-0">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -286,9 +292,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         ))}
       </div>
 
+      <div className="md:min-h-0 md:flex-1 md:overflow-hidden">
       {tab === "expenses" && (
-        <>
-          <Card className="mb-4 p-3">
+        <div className="flex flex-col md:h-full md:min-h-0">
+          <Card className="mb-4 p-3 md:shrink-0">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -315,7 +322,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             )}
           </Card>
 
-          <Card>
+          <Card className="flex flex-col md:min-h-0 md:flex-1">
             <CardHeader
               title="Expenses"
               action={
@@ -326,6 +333,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 ) : undefined
               }
             />
+            <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
             {expenses === null ? (
               <div className="space-y-3 p-4">
                 {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}
@@ -391,10 +399,15 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 })}
               </ul>
             )}
+            </div>
           </Card>
+        </div>
+      )}
 
+      {tab === "insights" && (
+        <div className="space-y-4 md:h-full md:overflow-y-auto">
           {/* Recurring */}
-          <Card className="mt-4">
+          <Card>
             <CardHeader
               title="Recurring expenses"
               action={
@@ -417,6 +430,16 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       </span>
                     </span>
                     <span className="tnum font-medium">{fmtMoney(r.amountCents, r.currency)}</span>
+                    <button
+                      aria-label={`Edit ${r.title}`}
+                      onClick={() => setEditingRecurring({
+                        id: r.id, title: r.title, amountCents: r.amountCents, payerId: r.payerId,
+                        cadence: r.cadence as "weekly" | "monthly", nextDate: r.nextDate, active: r.active,
+                      })}
+                      className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
                     <button
                       aria-label={`Stop ${r.title}`}
                       onClick={async () => {
@@ -442,10 +465,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           {expenses && expenses.length > 0 && detail && (
             <SpendCharts expenses={expenses} currency={detail.group.currency} />
           )}
-        </>
+          {(!expenses || expenses.length === 0) && (
+            <EmptyState icon={<PieChart className="h-8 w-8" />} title="No insights yet" hint="Add a few expenses to see spending by category, over time, and by person." />
+          )}
+        </div>
       )}
 
       {tab === "balances" && detail && (
+        <div className="space-y-4 md:h-full md:overflow-y-auto">
         <Card>
           <CardHeader title="Who owes who" />
           {detail.suggestions.length === 0 ? (
@@ -471,10 +498,63 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             </ul>
           )}
         </Card>
+
+        <Card>
+          <CardHeader title="Recorded payments" />
+          {settlements === null ? (
+            <div className="space-y-3 p-4">{[...Array(2)].map((_, i) => <div key={i} className="skeleton h-10 w-full" />)}</div>
+          ) : settlements.length === 0 ? (
+            <p className="px-4 py-4 text-sm text-ink-faint">No payments recorded yet. When someone settles up offline, record it here so balances stay accurate.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {settlements.map((s) => (
+                <li key={s.id} className="flex min-h-14 flex-wrap items-center gap-3 px-4 py-3">
+                  <HandCoins className="h-4 w-4 shrink-0 text-owed" />
+                  <span className="min-w-0 flex-1 text-sm">
+                    <span className="block">
+                      <strong>{s.payerName}</strong> paid <strong>{s.recipientName}</strong>
+                    </span>
+                    <span className="block text-xs text-ink-faint">
+                      {fmtDate(s.date)}
+                      {s.note ? ` · ${s.note}` : ""}
+                      {s.currency !== detail.group.currency ? ` · ${fmtMoney(s.amountCents, s.currency)}` : ""}
+                    </span>
+                  </span>
+                  <span className="tnum font-semibold">{fmtMoney(s.amountCents, s.currency)}</span>
+                  <div className="flex shrink-0 gap-0.5">
+                    <button
+                      onClick={() => setEditingSettlement(s)}
+                      aria-label="Edit payment"
+                      className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      aria-label="Delete payment"
+                      onClick={async () => {
+                        if (!window.confirm(`Delete this recorded payment (${fmtMoney(s.amountCents, s.currency)} from ${s.payerName} to ${s.recipientName})? Balances will update.`)) return;
+                        try {
+                          await api(`/api/settlements/${s.id}`, { method: "DELETE" });
+                          refreshAll();
+                        } catch (e) {
+                          window.alert(e instanceof ApiClientError ? e.message : "Could not delete the payment");
+                        }
+                      }}
+                      className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+        </div>
       )}
 
       {tab === "chat" && me && (
-        <Card>
+        <Card className="md:flex md:h-full md:min-h-0 md:flex-col">
           <ChatPane
             endpoint={`/api/groups/${groupId}/messages`}
             meId={me.id}
@@ -485,8 +565,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       )}
 
       {tab === "activity" && (
-        <Card>
+        <Card className="md:flex md:h-full md:min-h-0 md:flex-col">
           <CardHeader title="Activity log" />
+          <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (
             <div className="space-y-3 p-4">{[...Array(4)].map((_, i) => <div key={i} className="skeleton h-8 w-full" />)}</div>
           ) : activity.length === 0 ? (
@@ -501,8 +582,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               ))}
             </ul>
           )}
+          </div>
         </Card>
       )}
+      </div>
 
       {/* Modals */}
       {detail && me && (
@@ -527,14 +610,34 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             defaultCurrency={detail.group.currency}
             prefill={settlePrefill}
           />
+          <SettleModal
+            open={!!editingSettlement}
+            onClose={() => setEditingSettlement(null)}
+            onSaved={refreshAll}
+            groupId={groupId}
+            members={detail.members}
+            meId={me.id}
+            defaultCurrency={detail.group.currency}
+            existing={editingSettlement}
+          />
           <RecurringModal
-            open={recurringOpen}
-            onClose={() => setRecurringOpen(false)}
+            open={recurringOpen || !!editingRecurring}
+            onClose={() => { setRecurringOpen(false); setEditingRecurring(null); }}
             onSaved={loadDetail}
             groupId={groupId}
             members={detail.members}
             meId={me.id}
             defaultCurrency={detail.group.currency}
+            existing={editingRecurring}
+          />
+          <GroupSettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            group={{ id: groupId, name: detail.group.name, createdBy: detail.group.createdBy }}
+            members={detail.members}
+            meId={me.id}
+            onChanged={() => { loadDetail(); }}
+            onGone={() => router.push("/groups")}
           />
         </>
       )}

@@ -65,6 +65,7 @@ export function ExpenseForm({
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCategory, setNewCategory] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [savedAttachments, setSavedAttachments] = useState<ExistingExpense["attachments"]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -74,6 +75,7 @@ export function ExpenseForm({
     setError(null);
     setBusy(false);
     setFiles([]);
+    setSavedAttachments(existing?.attachments ?? []);
     if (existing) {
       setTitle(existing.title);
       setAmount((existing.amountCents / 100).toFixed(2));
@@ -376,15 +378,32 @@ export function ExpenseForm({
                 </button>
               </span>
             ))}
-            {existing?.attachments.map((a) => (
-              <a
+            {savedAttachments.map((a) => (
+              <span
                 key={a.id}
-                href={`/api/attachments/${a.id}`}
-                target="_blank"
-                className="inline-flex items-center gap-1 rounded-full bg-paper px-2.5 py-1 text-xs text-ink-soft underline"
+                className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1 text-xs text-ink-soft"
               >
-                {a.filename}
-              </a>
+                <a href={`/api/attachments/${a.id}`} target="_blank" className="underline">
+                  {a.filename}
+                </a>
+                <button
+                  type="button"
+                  aria-label={`Remove ${a.filename}`}
+                  className="text-ink-faint hover:text-danger"
+                  onClick={async () => {
+                    if (!window.confirm(`Remove the receipt "${a.filename}"?`)) return;
+                    try {
+                      await api(`/api/attachments/${a.id}`, { method: "DELETE" });
+                      setSavedAttachments((xs) => xs.filter((x) => x.id !== a.id));
+                      onSaved();
+                    } catch (err) {
+                      setError(err instanceof ApiClientError ? err.message : "Could not remove the receipt");
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              </span>
             ))}
           </div>
         </Field>

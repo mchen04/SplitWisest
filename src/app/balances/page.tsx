@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Copy, Check, MessageSquare, UserPlus, HandCoins, Scale } from "lucide-react";
-import { api, fmtMoney, todayStr, useApiData, useFormState } from "@/lib/client";
+import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale } from "lucide-react";
+import { api, ApiClientError, fmtMoney, todayStr, useApiData, useFormState } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
 import { SettleFields } from "@/components/settle-fields";
@@ -41,6 +41,16 @@ export default function BalancesPage() {
     });
   }
 
+  async function removeFriend(f: Friend) {
+    if (!window.confirm(`Remove ${f.displayName} from your friends? You'll need an invite code to reconnect.`)) return;
+    try {
+      await api("/api/friends", { method: "DELETE", body: { friendId: f.id } });
+      reload();
+    } catch (err) {
+      window.alert(err instanceof ApiClientError ? err.message : "Could not remove friend");
+    }
+  }
+
   return (
     <AppShell>
       <PageTitle
@@ -53,7 +63,7 @@ export default function BalancesPage() {
         }
       />
 
-      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:shrink-0">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Your invite code</p>
           <p className="text-sm text-ink-faint">Friends sign up or add you with this code.</p>
@@ -68,8 +78,9 @@ export default function BalancesPage() {
         </button>
       </Card>
 
-      <Card>
+      <Card className="flex flex-col md:min-h-0 md:flex-1">
         <CardHeader title="Friends" />
+        <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {friends === null ? (
           <div className="space-y-3 p-4">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}</div>
         ) : friends.length === 0 ? (
@@ -115,12 +126,22 @@ export default function BalancesPage() {
                         <span className="hidden sm:inline">Chat</span>
                       </Button>
                     </Link>
+                    <Button
+                      variant="secondary"
+                      className="!min-h-9 !px-2.5"
+                      onClick={() => removeFriend(f)}
+                      title={`Remove ${f.displayName}`}
+                      aria-label={`Remove ${f.displayName}`}
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
+        </div>
       </Card>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add a friend">
