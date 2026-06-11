@@ -125,6 +125,8 @@ export function ExpenseForm({
       setValues({});
       setItems([]);
     }
+    // Reset only when the modal opens or the edited expense changes — background
+    // sync replaces members/categories references and must not wipe live input.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existing?.id]);
 
@@ -186,24 +188,30 @@ export function ExpenseForm({
     }
   }
 
+  // Normalize the per-participant payload: itemized derives participants from
+  // item rows; exact carries cents; percentage/shares carry the raw weight.
+  function buildParticipants(): { userId: number; value?: number }[] {
+    if (method === "itemized") {
+      return [...new Set(items.flatMap((i) => i.participantIds))].map((userId) => ({ userId }));
+    }
+    return participantList.map((m) => ({
+      userId: m.id,
+      value:
+        method === "equal"
+          ? undefined
+          : method === "exact"
+            ? Math.round(parseFloat(values[m.id] || "0") * 100)
+            : parseFloat(values[m.id] || "0") || 0,
+    }));
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     if (amountCents <= 0) return setError("Enter a positive amount");
     if (method !== "itemized" && participantList.length === 0) return setError("Pick at least one participant");
 
-    const participants =
-      method === "itemized"
-        ? [...new Set(items.flatMap((i) => i.participantIds))].map((userId) => ({ userId }))
-        : participantList.map((m) => ({
-            userId: m.id,
-            value:
-              method === "equal"
-                ? undefined
-                : method === "exact"
-                  ? Math.round(parseFloat(values[m.id] || "0") * 100)
-                  : parseFloat(values[m.id] || "0") || 0,
-          }));
+    const participants = buildParticipants();
     if (participants.length === 0) return setError("Each item needs participants");
 
     const body = {

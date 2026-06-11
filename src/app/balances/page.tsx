@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Copy, Check, MessageSquare, UserPlus, HandCoins, Scale } from "lucide-react";
-import { api, ApiClientError, fmtMoney, todayStr, useMe, useSync, CURRENCIES } from "@/lib/client";
+import { api, fmtMoney, todayStr, useApiData, useFormState } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
+import { SettleFields } from "@/components/settle-fields";
 
 interface Friend {
   id: number;
@@ -15,36 +16,22 @@ interface Friend {
 }
 
 export default function BalancesPage() {
-  const me = useMe();
-  const [friends, setFriends] = useState<Friend[] | null>(null);
-  const [inviteCode, setInviteCode] = useState("");
+  const { data, reload } = useApiData<{ friends: Friend[]; myInviteCode: string }>("/api/friends");
+  const friends = data?.friends ?? null;
+  const inviteCode = data?.myInviteCode ?? "";
   const [copied, setCopied] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [code, setCode] = useState("");
   const [settleFriend, setSettleFriend] = useState<Friend | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { error, setError, busy, run } = useFormState();
 
-  const load = useCallback(() => {
-    api<{ friends: Friend[]; myInviteCode: string }>("/api/friends")
-      .then((r) => { setFriends(r.friends); setInviteCode(r.myInviteCode); })
-      .catch(() => {});
-  }, []);
-  useEffect(load, [load]);
-  useSync(load);
-
-  async function addFriend(e: React.FormEvent) {
+  function addFriend(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setError(null);
-    try {
+    run(async () => {
       await api("/api/friends", { body: { code } });
       setAddOpen(false); setCode("");
-      load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not add friend");
-    } finally {
-      setBusy(false);
-    }
+      reload();
+    }, "Could not add friend");
   }
 
   function copyInvite() {
@@ -149,30 +136,26 @@ export default function BalancesPage() {
         </form>
       </Modal>
 
-      {me && (
-        <DirectSettleModal
-          friend={settleFriend}
-          meId={me.id}
-          onClose={() => setSettleFriend(null)}
-          onSaved={load}
-        />
-      )}
+      <DirectSettleModal
+        friend={settleFriend}
+        onClose={() => setSettleFriend(null)}
+        onSaved={reload}
+      />
     </AppShell>
   );
 }
 
 function DirectSettleModal({
-  friend, meId, onClose, onSaved,
+  friend, onClose, onSaved,
 }: {
-  friend: Friend | null; meId: number; onClose: () => void; onSaved: () => void;
+  friend: Friend | null; onClose: () => void; onSaved: () => void;
 }) {
   const [direction, setDirection] = useState<"i-paid" | "they-paid">("i-paid");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { error, setError, busy, run } = useFormState();
 
   useEffect(() => {
     if (!friend) return;
@@ -181,26 +164,24 @@ function DirectSettleModal({
     setCurrency(cur);
     setAmount(amt !== 0 ? (Math.abs(amt) / 100).toFixed(2) : "");
     setDirection(amt < 0 ? "i-paid" : "they-paid");
-    setDate(todayStr()); setNote(""); setError(null); setBusy(false);
+    setDate(todayStr()); setNote("");
+    setError(null);
+    // setError is stable; reset only when the target friend changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friend]);
 
   if (!friend) return null;
-  void meId;
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const amountCents = Math.round(parseFloat(amount || "0") * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
-    setBusy(true);
-    try {
+    run(async () => {
       await api("/api/settlements", {
         body: { friendId: friend!.id, direction, amountCents, currency, date, note },
       });
       onSaved(); onClose();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not record settlement");
-      setBusy(false);
-    }
+    }, "Could not record settlement");
   }
 
   return (
@@ -215,22 +196,13 @@ function DirectSettleModal({
             <option value="they-paid">{friend.displayName} paid me</option>
           </Select>
         </Field>
-        <div className="grid grid-cols-[1fr_auto] gap-2">
-          <Field label="Amount">
-            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
-          </Field>
-          <Field label="Currency">
-            <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-24">
-              {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
-            </Select>
-          </Field>
-        </div>
-        <Field label="Date">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </Field>
-        <Field label="Note">
-          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Venmo'd you back" />
-        </Field>
+        <SettleFields
+          amount={amount} setAmount={setAmount}
+          currency={currency} setCurrency={setCurrency}
+          date={date} setDate={setDate}
+          note={note} setNote={setNote}
+          notePlaceholder="Venmo'd you back"
+        />
         <ErrorNote message={error} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>

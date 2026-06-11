@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ApiClientError, todayStr, CURRENCIES, fmtMoney } from "@/lib/client";
-import { Button, Field, Input, Select, Modal, ErrorNote } from "./ui";
+import { api, todayStr, fmtMoney, useFormState } from "@/lib/client";
+import { Button, Field, Select, Modal, ErrorNote } from "./ui";
+import { SettleFields } from "./settle-fields";
 import { Member } from "./expense-form";
 
 // Records an offline payment — purely a ledger entry, no money moves here.
@@ -31,13 +32,11 @@ export function SettleModal({
   const [currency, setCurrency] = useState(defaultCurrency);
   const [date, setDate] = useState(todayStr());
   const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { error, setError, busy, run } = useFormState();
 
   useEffect(() => {
     if (!open) return;
     setError(null);
-    setBusy(false);
     setDate(todayStr());
     setNote("");
     setCurrency(defaultCurrency);
@@ -55,23 +54,19 @@ export function SettleModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     const amountCents = Math.round(parseFloat(amount || "0") * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
     if (payerId === recipientId) return setError("Payer and recipient must be different");
-    setBusy(true);
-    try {
+    run(async () => {
       await api(`/api/groups/${groupId}/settlements`, {
         body: { payerId, recipientId, amountCents, currency, date, note },
       });
       onSaved();
       onClose();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not record settlement");
-      setBusy(false);
-    }
+    }, "Could not record settlement");
   }
 
   return (
@@ -101,24 +96,13 @@ export function SettleModal({
             </Select>
           </Field>
         </div>
-        <div className="grid grid-cols-[1fr_auto] gap-2">
-          <Field label="Amount">
-            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
-          </Field>
-          <Field label="Currency">
-            <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-24">
-              {CURRENCIES.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-        <Field label="Date">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </Field>
-        <Field label="Note">
-          <Input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Paid in cash" />
-        </Field>
+        <SettleFields
+          amount={amount} setAmount={setAmount}
+          currency={currency} setCurrency={setCurrency}
+          date={date} setDate={setDate}
+          note={note} setNote={setNote}
+          notePlaceholder="Paid in cash"
+        />
         <ErrorNote message={error} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>

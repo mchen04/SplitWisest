@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
-import { api, fmtMoney, fmtDate, useSync } from "@/lib/client";
+import { api, fmtMoney, fmtDate, useApiData } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Input, Select } from "@/components/ui";
 
@@ -20,34 +20,25 @@ interface Expense {
   splitMethod: string;
 }
 
+const EMPTY_FILTERS = { q: "", groupId: "", categoryId: "", friendId: "", from: "", to: "" };
+
 export default function ExpensesPage() {
-  const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
   const [friends, setFriends] = useState<{ id: number; displayName: string }[]>([]);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
-  const [q, setQ] = useState("");
-  const [groupId, setGroupId] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [friendId, setFriendId] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const setFilter = (k: keyof typeof EMPTY_FILTERS) => (e: { target: { value: string } }) =>
+    setFilters((f) => ({ ...f, [k]: e.target.value }));
 
-  const load = useCallback(() => {
-    const p = new URLSearchParams();
-    if (q.trim()) p.set("q", q.trim());
-    if (groupId) p.set("groupId", groupId);
-    if (categoryId) p.set("categoryId", categoryId);
-    if (friendId) p.set("friendId", friendId);
-    if (from) p.set("from", from);
-    if (to) p.set("to", to);
-    api<{ expenses: Expense[] }>(`/api/expenses?${p}`).then((r) => setExpenses(r.expenses)).catch(() => {});
-  }, [q, groupId, categoryId, friendId, from, to]);
-
-  useEffect(() => {
-    const t = setTimeout(load, q ? 250 : 0);
-    return () => clearTimeout(t);
-  }, [load, q]);
-  useSync(load);
+  const params = new URLSearchParams();
+  if (filters.q.trim()) params.set("q", filters.q.trim());
+  if (filters.groupId) params.set("groupId", filters.groupId);
+  if (filters.categoryId) params.set("categoryId", filters.categoryId);
+  if (filters.friendId) params.set("friendId", filters.friendId);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  const { data } = useApiData<{ expenses: Expense[] }>(`/api/expenses?${params}`, filters.q.trim() ? 250 : 0);
+  const expenses = data?.expenses ?? null;
 
   useEffect(() => {
     api<{ groups: { id: number; name: string }[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
@@ -55,7 +46,7 @@ export default function ExpensesPage() {
     api<{ categories: { id: number; name: string }[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
   }, []);
 
-  const filtersActive = !!(q || groupId || categoryId || friendId || from || to);
+  const filtersActive = Object.values(filters).some(Boolean);
 
   return (
     <AppShell>
@@ -65,26 +56,26 @@ export default function ExpensesPage() {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
           <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title or notes" className="pl-8" aria-label="Search expenses" />
+            <Input value={filters.q} onChange={setFilter("q")} placeholder="Search by title or notes" className="pl-8" aria-label="Search expenses" />
           </div>
-          <Select value={groupId} onChange={(e) => setGroupId(e.target.value)} aria-label="Filter by group">
+          <Select value={filters.groupId} onChange={setFilter("groupId")} aria-label="Filter by group">
             <option value="">All groups</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
           </Select>
-          <Select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} aria-label="Filter by category">
+          <Select value={filters.categoryId} onChange={setFilter("categoryId")} aria-label="Filter by category">
             <option value="">All categories</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
-          <Select value={friendId} onChange={(e) => setFriendId(e.target.value)} aria-label="Filter by friend">
+          <Select value={filters.friendId} onChange={setFilter("friendId")} aria-label="Filter by friend">
             <option value="">Any friend involved</option>
             {friends.map((f) => <option key={f.id} value={f.id}>{f.displayName}</option>)}
           </Select>
-          <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
-          <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
+          <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
+          <Input type="date" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
         </div>
         {filtersActive && (
           <button
-            onClick={() => { setQ(""); setGroupId(""); setCategoryId(""); setFriendId(""); setFrom(""); setTo(""); }}
+            onClick={() => setFilters(EMPTY_FILTERS)}
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
           >
             <X className="h-3.5 w-3.5" /> Clear filters

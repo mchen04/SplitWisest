@@ -8,9 +8,10 @@ import {
 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync } from "@/lib/client";
 import { AppShell } from "@/components/shell";
-import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal, ErrorNote, Field } from "@/components/ui";
+import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
 import { ExpenseForm, Member } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
+import { RecurringModal } from "@/components/recurring-modal";
 import { ChatPane } from "@/components/chat";
 import { BarChart, TimeChart } from "@/components/charts";
 
@@ -64,11 +65,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // filters
-  const [q, setQ] = useState("");
-  const [filterCat, setFilterCat] = useState("");
-  const [filterPayer, setFilterPayer] = useState("");
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [filters, setFilters] = useState({ q: "", cat: "", payer: "", from: "", to: "" });
+  const setFilter = (k: keyof typeof filters) => (e: { target: { value: string } }) =>
+    setFilters((f) => ({ ...f, [k]: e.target.value }));
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
 
   // modals
@@ -94,21 +93,21 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   const loadExpenses = useCallback(() => {
     const p = new URLSearchParams();
-    if (q.trim()) p.set("q", q.trim());
-    if (filterCat) p.set("categoryId", filterCat);
-    if (filterPayer) p.set("payerId", filterPayer);
-    if (filterFrom) p.set("from", filterFrom);
-    if (filterTo) p.set("to", filterTo);
+    if (filters.q.trim()) p.set("q", filters.q.trim());
+    if (filters.cat) p.set("categoryId", filters.cat);
+    if (filters.payer) p.set("payerId", filters.payer);
+    if (filters.from) p.set("from", filters.from);
+    if (filters.to) p.set("to", filters.to);
     api<{ expenses: Expense[] }>(`/api/groups/${groupId}/expenses?${p}`)
       .then((r) => setExpenses(r.expenses))
       .catch(() => {});
-  }, [groupId, q, filterCat, filterPayer, filterFrom, filterTo]);
+  }, [groupId, filters]);
 
   useEffect(loadDetail, [loadDetail]);
   useEffect(() => {
-    const t = setTimeout(loadExpenses, q ? 250 : 0);
+    const t = setTimeout(loadExpenses, filters.q ? 250 : 0);
     return () => clearTimeout(t);
-  }, [loadExpenses, q]);
+  }, [loadExpenses, filters.q]);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("add") === "1") {
       setEditing(null);
@@ -139,9 +138,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       const r = await api<{ expense: NonNullable<typeof editing> }>(`/api/expenses/${expenseId}`);
       setEditing(r.expense);
       setExpenseOpen(true);
-    } catch {
-      // expense may have just been deleted by another member
-      refreshAll();
+    } catch (e) {
+      // A 404 means another member deleted it — refresh the list to drop it.
+      // Anything else is unexpected and should surface, not vanish.
+      if (e instanceof ApiClientError) refreshAll();
+      else throw e;
     }
   }
 
@@ -185,7 +186,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const memberName = (uid: number) => detail?.members.find((m) => m.id === uid)?.displayName ?? "Someone";
-  const filtersActive = !!(q || filterCat || filterPayer || filterFrom || filterTo);
+  const filtersActive = Object.values(filters).some(Boolean);
 
   const TABS: { key: Tab; label: string; icon: typeof Receipt }[] = [
     { key: "expenses", label: "Expenses", icon: Receipt },
@@ -312,22 +313,22 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search expenses" className="pl-8" aria-label="Search expenses" />
+                <Input value={filters.q} onChange={setFilter("q")} placeholder="Search expenses" className="pl-8" aria-label="Search expenses" />
               </div>
-              <Select value={filterCat} onChange={(e) => setFilterCat(e.target.value)} aria-label="Filter by category">
+              <Select value={filters.cat} onChange={setFilter("cat")} aria-label="Filter by category">
                 <option value="">All categories</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
-              <Select value={filterPayer} onChange={(e) => setFilterPayer(e.target.value)} aria-label="Filter by payer">
+              <Select value={filters.payer} onChange={setFilter("payer")} aria-label="Filter by payer">
                 <option value="">All payers</option>
                 {detail?.members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
               </Select>
-              <Input type="date" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} aria-label="From date" />
-              <Input type="date" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} aria-label="To date" />
+              <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
+              <Input type="date" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
             </div>
             {filtersActive && (
               <button
-                onClick={() => { setQ(""); setFilterCat(""); setFilterPayer(""); setFilterFrom(""); setFilterTo(""); }}
+                onClick={() => setFilters({ q: "", cat: "", payer: "", from: "", to: "" })}
                 className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
               >
                 <X className="h-3.5 w-3.5" /> Clear filters
@@ -581,84 +582,5 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Modal>
     </AppShell>
-  );
-}
-
-function RecurringModal({
-  open, onClose, onSaved, groupId, members, meId, defaultCurrency,
-}: {
-  open: boolean; onClose: () => void; onSaved: () => void;
-  groupId: number; members: Member[]; meId: number; defaultCurrency: string;
-}) {
-  const [title, setTitle] = useState("");
-  const [amount, setAmount] = useState("");
-  const [payerId, setPayerId] = useState(meId);
-  const [cadence, setCadence] = useState<"weekly" | "monthly">("monthly");
-  const [startDate, setStartDate] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setTitle(""); setAmount(""); setPayerId(meId); setCadence("monthly");
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    setStartDate(d.toISOString().slice(0, 10));
-    setError(null); setBusy(false);
-  }, [open, meId]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const amountCents = Math.round(parseFloat(amount || "0") * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
-    setBusy(true);
-    try {
-      await api(`/api/groups/${groupId}/recurring`, {
-        body: {
-          title: title.trim(), amountCents, currency: defaultCurrency, payerId,
-          participantIds: members.map((m) => m.id), cadence, startDate, notes: "",
-        },
-      });
-      onSaved(); onClose();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not create recurring expense");
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="Add recurring expense">
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Title">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="Rent" autoFocus />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label={`Amount (${defaultCurrency})`}>
-            <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
-          </Field>
-          <Field label="Paid by">
-            <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
-              {members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
-            </Select>
-          </Field>
-          <Field label="Repeats">
-            <Select value={cadence} onChange={(e) => setCadence(e.target.value as "weekly" | "monthly")}>
-              <option value="monthly">Monthly</option>
-              <option value="weekly">Weekly</option>
-            </Select>
-          </Field>
-          <Field label="First date">
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-          </Field>
-        </div>
-        <p className="rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
-          Splits equally among all current group members each time it runs.
-        </p>
-        <ErrorNote message={error} />
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" busy={busy}>Create</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export class ApiClientError extends Error {
   status: number;
@@ -87,6 +87,43 @@ export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
       clearTimeout(timer);
     };
   }, [intervalMs]);
+}
+
+// Fetches `path`, refreshes on every sync tick, and exposes a manual reload.
+// `debounceMs` delays the fetch (used for search-as-you-type). Errors are
+// swallowed to a null/stale value — pages render skeletons off `data === null`.
+export function useApiData<T>(path: string, debounceMs = 0): { data: T | null; reload: () => void } {
+  const [data, setData] = useState<T | null>(null);
+  const pathRef = useRef(path);
+  pathRef.current = path;
+  const reload = useCallback(() => {
+    api<T>(pathRef.current).then(setData).catch(() => {});
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(reload, debounceMs);
+    return () => clearTimeout(t);
+  }, [path, reload, debounceMs]);
+  useSync(reload);
+  return { data, reload };
+}
+
+// Form submission state for modals: tracks error + busy and wraps a submit in
+// the canonical try/catch that unwraps ApiClientError to a user-facing message.
+export function useFormState() {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = useCallback(async (fn: () => Promise<void>, fallback: string) => {
+    setError(null);
+    setBusy(true);
+    try {
+      await fn();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : fallback);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  return { error, setError, busy, run };
 }
 
 export function useMe() {

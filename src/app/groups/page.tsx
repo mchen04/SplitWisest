@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Users, KeyRound } from "lucide-react";
-import { api, ApiClientError, useSync, CURRENCIES } from "@/lib/client";
+import { api, useApiData, useFormState, CURRENCIES } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, Money, EmptyState, Button, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
 
@@ -20,45 +20,29 @@ interface Group {
 
 export default function GroupsPage() {
   const router = useRouter();
-  const [groups, setGroups] = useState<Group[] | null>(null);
+  const { data } = useApiData<{ groups: Group[] }>("/api/groups");
+  const groups = data?.groups ?? null;
   const [createOpen, setCreateOpen] = useState(false);
   const [joinOpen, setJoinOpen] = useState(false);
   const [name, setName] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { error, setError, busy, run } = useFormState();
 
-  const load = useCallback(() => {
-    api<{ groups: Group[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
-  }, []);
-  useEffect(load, [load]);
-  useSync(load);
-
-  async function create(e: React.FormEvent) {
+  function create(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
+    run(async () => {
       const r = await api<{ id: number }>("/api/groups", { body: { name, currency } });
       router.push(`/groups/${r.id}`);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not create group");
-      setBusy(false);
-    }
+    }, "Could not create group");
   }
 
-  async function join(e: React.FormEvent) {
+  function join(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
+    run(async () => {
       const r = await api<{ id: number }>("/api/groups/join", { body: { code } });
       router.push(`/groups/${r.id}`);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not join group");
-      setBusy(false);
-    }
+    }, "Could not join group");
   }
 
   return (

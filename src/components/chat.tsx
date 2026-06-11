@@ -82,11 +82,14 @@ export function ChatPane({
 
   useEffect(() => {
     loadAll().catch(() => {});
+    // loadAll closes over endpoint; re-run only when the conversation changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
 
   useEffect(() => {
     if (refreshKey > 0 && !searching) loadNew().catch(() => {});
+    // Fire on each sync tick (refreshKey bump) only; loadNew/searching are refs
+    // or read fresh and intentionally excluded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshKey]);
 
