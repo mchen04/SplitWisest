@@ -33,7 +33,8 @@ export default function SignupPage() {
     <AuthFrame>
       <h1 className="font-display text-2xl font-bold">Create your account</h1>
       <p className="mt-1 text-sm text-ink-soft">
-        You need an invite code from a friend already on SplitWisest.
+        Have an invite code from a friend or group? It connects you automatically — but you can also join without
+        one.
       </p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <Field label="Display name" hint="How friends will see you">
@@ -59,8 +60,8 @@ export default function SignupPage() {
             minLength={8}
           />
         </Field>
-        <Field label="Invite code">
-          <Input value={form.inviteCode} onChange={set("inviteCode")} required />
+        <Field label="Invite code (optional)" hint="A friend's code makes you friends; a group's code joins that group">
+          <Input value={form.inviteCode} onChange={set("inviteCode")} placeholder="Leave blank to skip" />
         </Field>
         <ErrorNote message={error} />
         <Button type="submit" busy={busy} className="w-full">

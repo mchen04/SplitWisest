@@ -13,19 +13,26 @@ const Body = z.object({
     .regex(/^[a-z0-9_]+$/i, "Username can only contain letters, numbers, and underscores"),
   password: z.string().min(8, "Password must be at least 8 characters").max(200),
   displayName: z.string().trim().min(1, "Display name is required").max(50),
-  inviteCode: z.string().trim().min(1, "Invite code is required"),
+  inviteCode: z.string().trim().optional().default(""),
 });
 
 export const POST = handler(async (req: NextRequest) => {
   const { username, password, displayName, inviteCode } = Body.parse(await req.json());
 
-  // The invite code must be either the app signup code or a friend's personal
-  // code (which also creates the friendship).
+  // The invite code is optional. If provided it must be the app signup code,
+  // a friend's personal code (creates the friendship), or a group's invite
+  // code (joins that group and friends its members).
   let inviterId: number | null = null;
-  if (inviteCode !== process.env.SIGNUP_CODE) {
+  let joinGroupId: number | null = null;
+  if (inviteCode && inviteCode !== process.env.SIGNUP_CODE) {
     const inviter = await sql`SELECT id FROM users WHERE invite_code = ${inviteCode}`;
-    if (inviter.length === 0) badRequest("Invalid invite code");
-    inviterId = Number(inviter[0].id);
+    if (inviter.length > 0) {
+      inviterId = Number(inviter[0].id);
+    } else {
+      const group = await sql`SELECT id FROM groups WHERE invite_code = ${inviteCode}`;
+      if (group.length === 0) badRequest("Invalid invite code");
+      joinGroupId = Number(group[0].id);
+    }
   }
 
   const existing = await sql`SELECT 1 FROM users WHERE lower(username) = lower(${username})`;
@@ -40,6 +47,16 @@ export const POST = handler(async (req: NextRequest) => {
   if (inviterId) {
     const [a, b] = inviterId < userId ? [inviterId, userId] : [userId, inviterId];
     await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
+  }
+  if (joinGroupId) {
+    await sql`INSERT INTO group_members (group_id, user_id) VALUES (${joinGroupId}, ${userId}) ON CONFLICT DO NOTHING`;
+    const members = await sql`SELECT user_id FROM group_members WHERE group_id = ${joinGroupId} AND user_id <> ${userId}`;
+    for (const m of members) {
+      const other = Number(m.user_id);
+      const [a, b] = other < userId ? [other, userId] : [userId, other];
+      await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
+    }
+    await logActivity(joinGroupId, userId, "group.joined", `${displayName} joined the group`);
   }
   await logActivity(null, userId, "user.joined", `${displayName} joined SplitWisest`);
 
