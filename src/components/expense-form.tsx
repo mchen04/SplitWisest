@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Paperclip, Plus, Trash2 } from "lucide-react";
+import { Paperclip, Plus } from "lucide-react";
 import { api, ApiClientError, fmtMoney, todayStr, CURRENCIES } from "@/lib/client";
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
+import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
 
 export interface Member {
   id: number;
@@ -29,22 +30,6 @@ interface ExistingExpense {
   shares: { userId: number; shareCents: number; rawInput: number | null }[];
   items: { name: string; amountCents: number; participantIds: number[] }[];
   attachments: { id: number; filename: string; mime: string }[];
-}
-
-type Method = "equal" | "exact" | "percentage" | "shares" | "itemized";
-
-const METHOD_LABELS: Record<Method, string> = {
-  equal: "Equal",
-  exact: "Exact amounts",
-  percentage: "Percentages",
-  shares: "Shares",
-  itemized: "Itemized bill",
-};
-
-interface ItemRow {
-  name: string;
-  amount: string;
-  participantIds: number[];
 }
 
 export function ExpenseForm({
@@ -340,124 +325,19 @@ export function ExpenseForm({
         </Field>
 
         {method !== "itemized" ? (
-          <fieldset>
-            <legend className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">
-              Participants
-            </legend>
-            <div className="divide-y divide-line rounded-lg border border-line">
-              {members.map((m) => {
-                const checked = selected.has(m.id);
-                return (
-                  <div key={m.id} className="flex min-h-12 items-center gap-3 px-3 py-1.5">
-                    <input
-                      id={`p-${m.id}`}
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleMember(m.id)}
-                      className="h-4 w-4 accent-[var(--color-accent)]"
-                    />
-                    <label htmlFor={`p-${m.id}`} className="flex-1 truncate text-sm font-medium">
-                      {m.displayName}
-                    </label>
-                    {checked && method === "equal" && amountCents > 0 && (
-                      <span className="tnum text-sm text-ink-faint">
-                        ≈ {fmtMoney(Math.floor(amountCents / Math.max(participantList.length, 1)), currency)}
-                      </span>
-                    )}
-                    {checked && method !== "equal" && (
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          inputMode="decimal"
-                          value={values[m.id] ?? ""}
-                          onChange={(e) => setValues((v) => ({ ...v, [m.id]: e.target.value }))}
-                          className="!w-24 text-right"
-                          aria-label={`${METHOD_LABELS[method]} for ${m.displayName}`}
-                          placeholder={method === "exact" ? "0.00" : method === "percentage" ? "%" : "1"}
-                        />
-                        <span className="w-4 text-xs text-ink-faint">
-                          {method === "percentage" ? "%" : method === "exact" ? currency.slice(0, 1) : "×"}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </fieldset>
+          <ParticipantSplit
+            members={members}
+            selected={selected}
+            method={method}
+            values={values}
+            amountCents={amountCents}
+            currency={currency}
+            participantCount={participantList.length}
+            onToggle={toggleMember}
+            onValue={(id, value) => setValues((v) => ({ ...v, [id]: value }))}
+          />
         ) : (
-          <fieldset>
-            <legend className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">
-              Items — pick who shared each one
-            </legend>
-            <div className="space-y-2">
-              {items.map((item, idx) => (
-                <div key={idx} className="rounded-lg border border-line p-3">
-                  <div className="flex gap-2">
-                    <Input
-                      value={item.name}
-                      onChange={(e) => setItems((arr) => arr.map((x, i) => (i === idx ? { ...x, name: e.target.value } : x)))}
-                      placeholder="Pad thai"
-                      aria-label={`Item ${idx + 1} name`}
-                    />
-                    <Input
-                      inputMode="decimal"
-                      value={item.amount}
-                      onChange={(e) => setItems((arr) => arr.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))}
-                      className="!w-28 text-right"
-                      placeholder="0.00"
-                      aria-label={`Item ${idx + 1} amount`}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setItems((arr) => arr.filter((_, i) => i !== idx))}
-                      aria-label={`Remove item ${idx + 1}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {members.map((m) => {
-                      const on = item.participantIds.includes(m.id);
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          aria-pressed={on}
-                          onClick={() =>
-                            setItems((arr) =>
-                              arr.map((x, i) =>
-                                i === idx
-                                  ? {
-                                      ...x,
-                                      participantIds: on
-                                        ? x.participantIds.filter((p) => p !== m.id)
-                                        : [...x.participantIds, m.id],
-                                    }
-                                  : x
-                              )
-                            )
-                          }
-                          className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
-                            on ? "border-accent bg-accent-soft text-accent-dark" : "border-line text-ink-soft"
-                          }`}
-                        >
-                          {m.displayName}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setItems((arr) => [...arr, { name: "", amount: "", participantIds: [] }])}
-              >
-                <Plus className="h-4 w-4" /> Add item
-              </Button>
-            </div>
-          </fieldset>
+          <ItemizedSplit members={members} items={items} setItems={setItems} />
         )}
 
         {splitStatus && (

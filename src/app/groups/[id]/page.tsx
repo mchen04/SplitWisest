@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, use } from "react";
+import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
-  RefreshCcw, MessageSquare, ScrollText, Scale, Search, ChartBar, X,
+  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X,
 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync, useFilters } from "@/lib/client";
 import { AppShell } from "@/components/shell";
@@ -13,7 +13,7 @@ import { ExpenseForm, Member } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
 import { RecurringModal } from "@/components/recurring-modal";
 import { ChatPane } from "@/components/chat";
-import { BarChart, TimeChart } from "@/components/charts";
+import { SpendCharts } from "@/components/spend-charts";
 
 interface GroupDetail {
   group: { id: number; name: string; currency: string; inviteCode: string };
@@ -156,25 +156,6 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       setDeleteBusy(false);
     }
   }
-
-  const charts = useMemo(() => {
-    if (!expenses || !detail) return null;
-    const byCat = new Map<string, number>();
-    const byMonth = new Map<string, number>();
-    const byPayer = new Map<string, number>();
-    for (const e of expenses) {
-      byCat.set(e.categoryName ?? "Uncategorized", (byCat.get(e.categoryName ?? "Uncategorized") ?? 0) + e.convertedCents);
-      const m = String(e.date).slice(0, 7);
-      byMonth.set(m, (byMonth.get(m) ?? 0) + e.convertedCents);
-      byPayer.set(e.payerName, (byPayer.get(e.payerName) ?? 0) + e.convertedCents);
-    }
-    return {
-      byCat: [...byCat.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
-      byMonth: [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12)
-        .map(([label, value]) => ({ label: label.slice(2), value })),
-      byPayer: [...byPayer.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value),
-    };
-  }, [expenses, detail]);
 
   if (loadError) {
     return (
@@ -458,21 +439,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </Card>
 
           {/* Charts */}
-          {charts && expenses && expenses.length > 0 && detail && (
-            <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <Card className="p-4">
-                <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-ink-soft"><ChartBar className="h-4 w-4" /> By category</h3>
-                <BarChart data={charts.byCat} currency={detail.group.currency} title="Spending by category" />
-              </Card>
-              <Card className="p-4">
-                <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-ink-soft"><ChartBar className="h-4 w-4" /> Over time</h3>
-                <TimeChart data={charts.byMonth} currency={detail.group.currency} />
-              </Card>
-              <Card className="p-4">
-                <h3 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-ink-soft"><ChartBar className="h-4 w-4" /> Paid by person</h3>
-                <BarChart data={charts.byPayer} currency={detail.group.currency} title="Total paid by person" />
-              </Card>
-            </div>
+          {expenses && expenses.length > 0 && detail && (
+            <SpendCharts expenses={expenses} currency={detail.group.currency} />
           )}
         </>
       )}
