@@ -91,8 +91,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </button>
       </header>
 
-      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-56 md:pb-10 md:pt-6 lg:px-10">
-        <div className="mx-auto w-full max-w-5xl">{children}</div>
+      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-hidden md:pb-6 md:pt-6 lg:px-10">
+        <div className="mx-auto flex w-full max-w-5xl flex-col md:h-full md:min-h-0">{children}</div>
       </main>
 
       {/* Mobile bottom nav */}
@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
       <div>
         <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}

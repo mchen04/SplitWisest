@@ -48,7 +48,7 @@ export default function ExpensesPage() {
     <AppShell>
       <PageTitle title="All expenses" subtitle="Search and filter across every group you're in." />
 
-      <Card className="mb-4 p-3">
+      <Card className="mb-4 p-3 md:shrink-0">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
           <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -79,7 +79,8 @@ export default function ExpensesPage() {
         )}
       </Card>
 
-      <Card>
+      <Card className="flex flex-col md:min-h-0 md:flex-1">
+        <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {expenses === null ? (
           <div className="space-y-3 p-4">{[...Array(5)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}</div>
         ) : expenses.length === 0 ? (
@@ -105,6 +106,7 @@ export default function ExpensesPage() {
             ))}
           </ul>
         )}
+        </div>
       </Card>
     </AppShell>
   );

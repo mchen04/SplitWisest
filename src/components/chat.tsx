@@ -130,7 +130,7 @@ export function ChatPane({
   }
 
   return (
-    <div className="flex h-[28rem] flex-col">
+    <div className="flex h-[28rem] flex-col md:h-full md:min-h-0">
       <div className="border-b border-line px-3 py-2">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />

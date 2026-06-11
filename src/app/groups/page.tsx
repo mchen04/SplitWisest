@@ -62,7 +62,8 @@ export default function GroupsPage() {
         }
       />
 
-      <Card>
+      <Card className="flex flex-col md:min-h-0 md:flex-1">
+        <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {groups === null ? (
           <div className="space-y-3 p-4">
             {[...Array(3)].map((_, i) => (
@@ -110,6 +111,7 @@ export default function GroupsPage() {
             ))}
           </ul>
         )}
+        </div>
       </Card>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New group">

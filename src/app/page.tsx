@@ -72,14 +72,14 @@ export default function Dashboard() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 md:shrink-0">
         <SummaryCard label="You are owed" entries={owedToMe} tone="owed" loading={friends === null} />
         <SummaryCard label="You owe" entries={iOwe} tone="owe" loading={friends === null} />
         <SummaryCard label="Net balance" entries={netByCur} tone="net" loading={friends === null} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Card>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 md:min-h-0 md:flex-1">
+        <Card className="flex flex-col md:min-h-0">
           <CardHeader
             title="Your groups"
             action={
@@ -88,6 +88,7 @@ export default function Dashboard() {
               </Link>
             }
           />
+          <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {groups === null ? (
             <SkeletonRows n={3} />
           ) : groups.length === 0 ? (
@@ -128,10 +129,12 @@ export default function Dashboard() {
               ))}
             </ul>
           )}
+          </div>
         </Card>
 
-        <Card>
+        <Card className="flex flex-col md:min-h-0">
           <CardHeader title="Recent activity" />
+          <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (
             <SkeletonRows n={4} />
           ) : activity.length === 0 ? (
@@ -142,7 +145,7 @@ export default function Dashboard() {
             />
           ) : (
             <ul className="divide-y divide-line">
-              {activity.slice(0, 8).map((a) => (
+              {activity.slice(0, 50).map((a) => (
                 <li key={a.id} className="px-4 py-2.5">
                   <p className="text-sm leading-snug">{a.summary}</p>
                   <p className="mt-0.5 text-xs text-ink-faint">
@@ -153,6 +156,7 @@ export default function Dashboard() {
               ))}
             </ul>
           )}
+          </div>
         </Card>
       </div>
     </AppShell>

@@ -45,7 +45,7 @@ export default function DmPage({ params }: { params: Promise<{ friendId: string 
 
   return (
     <AppShell>
-      <div className="mb-4 flex items-center gap-3">
+      <div className="mb-4 flex items-center gap-3 md:shrink-0">
         <Link href="/balances" aria-label="Back to balances" className="rounded-lg p-2 text-ink-soft hover:bg-accent-soft">
           <ArrowLeft className="h-5 w-5" />
         </Link>
@@ -61,7 +61,7 @@ export default function DmPage({ params }: { params: Promise<{ friendId: string 
           <div className="skeleton h-9 w-44" />
         )}
       </div>
-      <Card>
+      <Card className="md:flex md:min-h-0 md:flex-1 md:flex-col">
         {me && (
           <ChatPane
             endpoint={`/api/dm/${friendId}/messages`}
