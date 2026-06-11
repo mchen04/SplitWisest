@@ -1,5 +1,7 @@
 # SplitWisest
 
+**Live:** https://splitwisest-kappa.vercel.app
+
 A private, friend-group expense tracker inspired by Splitwise. Track shared expenses, see who owes who, simplify debts, record offline settlements, and chat in context. **Not a payment app** — no bank connections, cards, or payment processing; settlements are ledger records of payments that happened offline.
 
 ## Features

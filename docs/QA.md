@@ -28,4 +28,6 @@ Flows exercised end-to-end (API + browser): signup ×2, login, create group, joi
 
 ## Production smoke test
 
-- [ ] Filled in after Vercel deployment (see README).
+- [x] Deployed to Vercel: https://splitwisest-kappa.vercel.app (2026-06-11)
+- [x] Smoke flow against production + Neon: signup, login, create group, add expense, balances correct, group chat, CSV export, sync cursor — all passing. Test fixtures removed afterward.
+- Note: the per-deployment `*-projects.vercel.app` URLs are behind Vercel deployment protection; the public app URL is the `splitwisest-kappa.vercel.app` alias.
