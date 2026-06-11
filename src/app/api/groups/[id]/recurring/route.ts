@@ -62,10 +62,10 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   for (const pid of body.participantIds) if (!memberIds.has(pid)) badRequest("All participants must be group members");
   const rows = await sql`
     INSERT INTO recurring_expenses (group_id, title, amount_cents, currency, payer_id, category_id,
-      participant_ids, notes, cadence, next_date, created_by)
+      participant_ids, notes, cadence, next_date, anchor_day, created_by)
     VALUES (${groupId}, ${body.title}, ${body.amountCents}, ${body.currency}, ${body.payerId},
       ${body.categoryId ?? null}, ${body.participantIds}, ${body.notes}, ${body.cadence},
-      ${body.startDate}, ${user.id})
+      ${body.startDate}, ${Number(body.startDate.slice(8, 10))}, ${user.id})
     RETURNING id`;
   await logActivity(groupId, user.id, "recurring.created",
     `${user.displayName} set up a ${body.cadence} recurring expense "${body.title}"`);

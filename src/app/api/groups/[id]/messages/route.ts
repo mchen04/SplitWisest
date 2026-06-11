@@ -21,7 +21,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
         FROM messages m JOIN users u ON u.id = m.sender_id
         WHERE m.group_id = ${groupId} AND m.id > ${since}
           AND (${q}::text IS NULL OR m.body ILIKE '%' || ${q} || '%')
-        ORDER BY m.id ASC LIMIT 500`
+        ORDER BY m.id DESC LIMIT 200`
     : (
         await sql`
           SELECT * FROM (
@@ -31,8 +31,9 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
             ORDER BY m.id DESC LIMIT 100
           ) sub ORDER BY id ASC`
       );
+  const ordered = [...rows].sort((x, y) => Number(x.id) - Number(y.id));
   return NextResponse.json({
-    messages: rows.map((m) => ({
+    messages: ordered.map((m) => ({
       id: Number(m.id),
       senderId: Number(m.sender_id),
       senderName: m.display_name,

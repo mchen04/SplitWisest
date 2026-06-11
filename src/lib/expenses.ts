@@ -2,7 +2,7 @@ import { z } from "zod";
 import { sql } from "./db";
 import { computeShares, computeItemizedShares, SplitMethod } from "./money";
 import { convert, CURRENCIES } from "./fx";
-import { badRequest } from "./api";
+import { ApiError, badRequest } from "./api";
 
 export const ExpenseBody = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
@@ -158,6 +158,9 @@ export async function updateExpense(
       SELECT ${expenseId}, x.user_id, x.share_cents, x.raw_input
       FROM jsonb_to_recordset(${sharesJson(shares, input)}::jsonb)
         AS x(user_id bigint, share_cents bigint, raw_input numeric)
+      -- referencing del_s forces it to run first; sibling CTEs are otherwise
+      -- unordered and the insert would collide with the old PK rows
+      WHERE (SELECT count(*) FROM del_s) >= 0
       RETURNING 1
     ),
     ins_i AS (
@@ -166,6 +169,7 @@ export async function updateExpense(
         ARRAY(SELECT jsonb_array_elements_text(x.participant_ids)::bigint)
       FROM jsonb_to_recordset(${itemsJson(input)}::jsonb)
         AS x(name text, amount_cents bigint, participant_ids jsonb)
+      WHERE (SELECT count(*) FROM del_i) >= 0
       RETURNING 1
     )
     SELECT 1`;
@@ -196,7 +200,7 @@ export async function materializeRecurring(groupId: number) {
     JOIN groups g ON g.id = r.group_id
     WHERE r.group_id = ${groupId} AND r.active AND r.next_date <= CURRENT_DATE`;
   for (const r of due) {
-    const anchorDay = new Date(String(r.next_date).slice(0, 10) + "T00:00:00Z").getUTCDate();
+    const anchorDay = Number(r.anchor_day ?? new Date(String(r.next_date).slice(0, 10) + "T00:00:00Z").getUTCDate());
     let current = String(r.next_date).slice(0, 10);
     for (let i = 0; i < 24; i++) {
       if (new Date(current + "T00:00:00Z").getTime() > Date.now()) break;
@@ -227,10 +231,16 @@ export async function materializeRecurring(groupId: number) {
           Number(r.id)
         );
       } catch (e) {
-        // Validation failures (e.g. payer left the group) won't heal on retry:
-        // deactivate so the group view doesn't re-attempt forever.
         console.error(`recurring ${r.id} failed to materialize:`, e);
-        await sql`UPDATE recurring_expenses SET active = false WHERE id = ${r.id}`;
+        if (e instanceof ApiError && e.status === 400) {
+          // Validation failures (e.g. payer left the group) won't heal on
+          // retry: deactivate so the group view doesn't re-attempt forever.
+          await sql`UPDATE recurring_expenses SET active = false WHERE id = ${r.id}`;
+        } else {
+          // Transient error: release the claim so the period retries later.
+          await sql`UPDATE recurring_expenses SET next_date = ${current}
+                    WHERE id = ${r.id} AND next_date = ${next}`;
+        }
         break;
       }
       current = next;

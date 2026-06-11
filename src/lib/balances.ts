@@ -132,7 +132,7 @@ export async function friendBalances(userId: number): Promise<FriendBalance[]> {
       if (amt === 0) delete fb.netByCurrency[cur];
     }
   }
-  return [...map.values()].filter((f) => Object.keys(f.netByCurrency).length > 0 || true);
+  return [...map.values()];
 }
 
 export async function isGroupMember(groupId: number, userId: number): Promise<boolean> {

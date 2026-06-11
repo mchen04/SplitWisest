@@ -122,10 +122,13 @@ async function main() {
     notes TEXT NOT NULL DEFAULT '',
     cadence TEXT NOT NULL CHECK (cadence IN ('weekly','monthly')),
     next_date DATE NOT NULL,
+    anchor_day INT,
     active BOOLEAN NOT NULL DEFAULT true,
     created_by BIGINT NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+
+  await sql`ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS anchor_day INT`;
 
   await sql`CREATE TABLE IF NOT EXISTS activity (
     id BIGSERIAL PRIMARY KEY,
