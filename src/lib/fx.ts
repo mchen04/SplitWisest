@@ -1,8 +1,6 @@
 import { sql } from "./db";
-
-export const CURRENCIES = [
-  "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "INR", "MXN", "CNY", "KRW", "CHF", "SEK", "NZD", "BRL",
-];
+import { CURRENCIES } from "./currencies";
+export { CURRENCIES };
 
 // Fallback approximate rates (units per USD) used if the live fetch fails and
 // the cache is empty. Conversion rates are snapshotted onto each expense at

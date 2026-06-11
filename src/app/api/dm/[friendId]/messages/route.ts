@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
+import { mapMessages } from "@/lib/messages";
 
 type Ctx = { params: Promise<{ friendId: string }> };
 
@@ -36,16 +37,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
             ORDER BY m.id DESC LIMIT 100
           ) sub ORDER BY id ASC`
       );
-  const ordered = [...rows].sort((x, y) => Number(x.id) - Number(y.id));
-  return NextResponse.json({
-    messages: ordered.map((m) => ({
-      id: Number(m.id),
-      senderId: Number(m.sender_id),
-      senderName: m.display_name,
-      body: m.body,
-      createdAt: m.created_at,
-    })),
-  });
+  return NextResponse.json({ messages: mapMessages(rows) });
 });
 
 const Body = z.object({ body: z.string().trim().min(1, "Message is empty").max(4000) });

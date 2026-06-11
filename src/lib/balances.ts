@@ -139,3 +139,8 @@ export async function isGroupMember(groupId: number, userId: number): Promise<bo
   const rows = await sql`SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${userId}`;
   return rows.length > 0;
 }
+
+export async function loadGroupMemberIds(groupId: number): Promise<Set<number>> {
+  const rows = await sql`SELECT user_id FROM group_members WHERE group_id = ${groupId}`;
+  return new Set(rows.map((r) => Number(r.user_id)));
+}

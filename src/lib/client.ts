@@ -144,6 +144,4 @@ export function useMe() {
   return me;
 }
 
-export const CURRENCIES = [
-  "USD", "EUR", "GBP", "CAD", "AUD", "JPY", "INR", "MXN", "CNY", "KRW", "CHF", "SEK", "NZD", "BRL",
-];
+export { CURRENCIES } from "./currencies";

@@ -3,6 +3,7 @@ import { sql } from "./db";
 import { computeShares, computeItemizedShares, SplitMethod } from "./money";
 import { convert, CURRENCIES } from "./fx";
 import { ApiError, badRequest } from "./api";
+import { loadGroupMemberIds } from "./balances";
 
 export const ExpenseBody = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
@@ -30,8 +31,7 @@ export const ExpenseBody = z.object({
 export type ExpenseInput = z.infer<typeof ExpenseBody>;
 
 export async function validateExpense(groupId: number, userId: number, input: ExpenseInput) {
-  const memberRows = await sql`SELECT user_id FROM group_members WHERE group_id = ${groupId}`;
-  const memberIds = new Set(memberRows.map((r) => Number(r.user_id)));
+  const memberIds = await loadGroupMemberIds(groupId);
   if (!memberIds.has(input.payerId)) badRequest("Payer must be a group member");
   for (const p of input.participants) {
     if (!memberIds.has(p.userId)) badRequest("All participants must be group members");

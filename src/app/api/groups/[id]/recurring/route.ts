@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, notFound, forbidden, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { isGroupMember } from "@/lib/balances";
+import { isGroupMember, loadGroupMemberIds } from "@/lib/balances";
 import { logActivity } from "@/lib/activity";
 import { CURRENCIES } from "@/lib/fx";
 
@@ -56,8 +56,7 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   if (!Number.isInteger(groupId)) notFound();
   if (!(await isGroupMember(groupId, user.id))) forbidden();
   const body = Body.parse(await req.json());
-  const members = await sql`SELECT user_id FROM group_members WHERE group_id = ${groupId}`;
-  const memberIds = new Set(members.map((m) => Number(m.user_id)));
+  const memberIds = await loadGroupMemberIds(groupId);
   if (!memberIds.has(body.payerId)) badRequest("Payer must be a group member");
   for (const pid of body.participantIds) if (!memberIds.has(pid)) badRequest("All participants must be group members");
   const rows = await sql`
