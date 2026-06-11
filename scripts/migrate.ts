@@ -164,6 +164,27 @@ async function main() {
     fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  // Dedupe global categories: UNIQUE(owner_id, name) does not constrain rows
+  // where owner_id IS NULL (NULLs are distinct in Postgres), so non-idempotent
+  // seeds accumulated duplicates. Repoint references to the lowest id per name,
+  // delete the rest, then enforce uniqueness with a partial index.
+  await sql`
+    UPDATE expenses e SET category_id = k.keep_id FROM (
+      SELECT name, min(id) AS keep_id FROM categories WHERE owner_id IS NULL GROUP BY name
+    ) k JOIN categories c ON c.name = k.name AND c.owner_id IS NULL
+    WHERE e.category_id = c.id AND e.category_id <> k.keep_id`;
+  await sql`
+    UPDATE recurring_expenses e SET category_id = k.keep_id FROM (
+      SELECT name, min(id) AS keep_id FROM categories WHERE owner_id IS NULL GROUP BY name
+    ) k JOIN categories c ON c.name = k.name AND c.owner_id IS NULL
+    WHERE e.category_id = c.id AND e.category_id <> k.keep_id`;
+  await sql`
+    DELETE FROM categories c WHERE c.owner_id IS NULL AND c.id <> (
+      SELECT min(id) FROM categories c2 WHERE c2.owner_id IS NULL AND c2.name = c.name
+    )`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS categories_global_name_idx
+    ON categories (name) WHERE owner_id IS NULL`;
+
   await sql`INSERT INTO categories (name, icon, owner_id) VALUES
     ('General','tag',NULL),
     ('Food & Drink','utensils',NULL),
