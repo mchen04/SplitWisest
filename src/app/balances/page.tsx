@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale } from "lucide-react";
-import { api, ApiClientError, fmtMoney, todayStr, useApiData, useFormState } from "@/lib/client";
+import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt } from "lucide-react";
+import { api, ApiClientError, fmtMoney, todayStr, useApiData, useFormState, useMe } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
 import { SettleFields } from "@/components/settle-fields";
+import { DirectPaymentsModal } from "@/components/direct-payments-modal";
 
 interface Friend {
   id: number;
@@ -23,6 +24,8 @@ export default function BalancesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [code, setCode] = useState("");
   const [settleFriend, setSettleFriend] = useState<Friend | null>(null);
+  const [historyFriend, setHistoryFriend] = useState<Friend | null>(null);
+  const me = useMe();
   const { error, setError, busy, run } = useFormState();
 
   function addFriend(e: React.FormEvent) {
@@ -120,6 +123,15 @@ export default function BalancesPage() {
                         <span className="hidden sm:inline">Settle</span>
                       </Button>
                     )}
+                    <Button
+                      variant="secondary"
+                      className="!min-h-9 !px-2.5"
+                      onClick={() => setHistoryFriend(f)}
+                      title={`Recorded payments with ${f.displayName}`}
+                      aria-label={`Payments with ${f.displayName}`}
+                    >
+                      <Receipt className="h-4 w-4" />
+                    </Button>
                     <Link href={`/chat/${f.id}`}>
                       <Button variant="secondary" className="!min-h-9 !px-2.5" title={`Chat with ${f.displayName}`}>
                         <MessageSquare className="h-4 w-4" />
@@ -162,6 +174,16 @@ export default function BalancesPage() {
         onClose={() => setSettleFriend(null)}
         onSaved={reload}
       />
+
+      {me && (
+        <DirectPaymentsModal
+          friend={historyFriend}
+          meId={me.id}
+          meName={me.displayName}
+          onClose={() => setHistoryFriend(null)}
+          onChanged={reload}
+        />
+      )}
     </AppShell>
   );
 }

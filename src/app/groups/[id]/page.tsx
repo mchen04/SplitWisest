@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
-  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings,
+  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check,
 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync, useFilters } from "@/lib/client";
 import { AppShell } from "@/components/shell";
@@ -97,6 +97,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [editingRecurring, setEditingRecurring] = useState<ExistingRecurring | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
 
   const loadDetail = useCallback(() => {
     api<GroupDetail>(`/api/groups/${groupId}`)
@@ -208,9 +209,22 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           {detail ? (
             <>
               <h1 className="truncate font-display text-2xl font-bold tracking-tight">{detail.group.name}</h1>
-              <p className="text-xs text-ink-faint">
-                {detail.members.length} members · {detail.group.currency} · invite code{" "}
-                <code className="rounded bg-paper px-1.5 py-0.5 font-medium text-ink-soft">{detail.group.inviteCode}</code>
+              <p className="flex items-center gap-1.5 text-xs text-ink-faint">
+                {detail.members.length} members · {detail.group.currency} · invite code
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(detail.group.inviteCode).then(() => {
+                      setCodeCopied(true);
+                      setTimeout(() => setCodeCopied(false), 1500);
+                    });
+                  }}
+                  title="Copy invite code"
+                  aria-label="Copy invite code"
+                  className="inline-flex items-center gap-1 rounded bg-paper px-1.5 py-0.5 font-medium text-ink-soft hover:text-accent"
+                >
+                  {detail.group.inviteCode}
+                  {codeCopied ? <Check className="h-3 w-3 text-owed" /> : <Copy className="h-3 w-3" />}
+                </button>
               </p>
             </>
           ) : (
