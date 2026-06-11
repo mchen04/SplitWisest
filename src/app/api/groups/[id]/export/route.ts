@@ -18,9 +18,9 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   if (!(await isGroupMember(groupId, user.id))) forbidden();
 
   const rows = await sql`
-    SELECT e.expense_date, e.title, e.amount_cents, e.currency, e.converted_cents,
+    SELECT to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date, e.title, e.amount_cents, e.currency, e.converted_cents,
       p.display_name AS payer, c.name AS category, e.split_method, e.notes,
-      (SELECT string_agg(u.display_name || ': ' || (es.share_cents/100.0), '; ' ORDER BY u.display_name)
+      (SELECT string_agg(u.display_name || ': ' || to_char(es.share_cents/100.0, 'FM999999990.00'), '; ' ORDER BY u.display_name)
        FROM expense_shares es JOIN users u ON u.id = es.user_id WHERE es.expense_id = e.id) AS shares
     FROM expenses e
     JOIN users p ON p.id = e.payer_id
