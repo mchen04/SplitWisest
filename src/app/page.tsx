@@ -64,9 +64,9 @@ export default function Dashboard() {
         title={me ? `Hey, ${me.displayName.split(" ")[0]}` : "Home"}
         subtitle="Here's where things stand with your friends."
         action={
-          <Link href="/groups">
+          <Link href={groups && groups.length > 0 ? `/groups/${groups[0].id}?add=1` : "/groups"}>
             <Button>
-              <Plus className="h-4 w-4" /> Quick add
+              <Plus className="h-4 w-4" /> Add expense
             </Button>
           </Link>
         }
@@ -179,7 +179,7 @@ function SummaryCard({
         {loading ? (
           <div className="skeleton h-7 w-24" />
         ) : list.length === 0 ? (
-          <p className="font-display text-2xl font-semibold text-ink-faint">$0.00</p>
+          <p className="font-display text-2xl font-semibold text-ink-faint">All clear</p>
         ) : (
           list.map(([cur, amt]) => (
             <p key={cur} className={`font-display text-2xl font-semibold ${tone === "net" ? (amt > 0 ? "text-owed" : amt < 0 ? "text-owe" : "") : color}`}>

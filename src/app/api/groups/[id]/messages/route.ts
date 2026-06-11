@@ -14,12 +14,23 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   if (!(await isGroupMember(groupId, user.id))) forbidden();
   const since = Number(req.nextUrl.searchParams.get("since") ?? 0);
   const q = req.nextUrl.searchParams.get("q") || null;
-  const rows = await sql`
-    SELECT m.id, m.sender_id, m.body, m.created_at, u.display_name
-    FROM messages m JOIN users u ON u.id = m.sender_id
-    WHERE m.group_id = ${groupId} AND m.id > ${since}
-      AND (${q}::text IS NULL OR m.body ILIKE '%' || ${q} || '%')
-    ORDER BY m.id ASC LIMIT 500`;
+  // With no cursor, return the NEWEST messages (not the oldest 500 ever).
+  const rows = since > 0 || q
+    ? await sql`
+        SELECT m.id, m.sender_id, m.body, m.created_at, u.display_name
+        FROM messages m JOIN users u ON u.id = m.sender_id
+        WHERE m.group_id = ${groupId} AND m.id > ${since}
+          AND (${q}::text IS NULL OR m.body ILIKE '%' || ${q} || '%')
+        ORDER BY m.id ASC LIMIT 500`
+    : (
+        await sql`
+          SELECT * FROM (
+            SELECT m.id, m.sender_id, m.body, m.created_at, u.display_name
+            FROM messages m JOIN users u ON u.id = m.sender_id
+            WHERE m.group_id = ${groupId}
+            ORDER BY m.id DESC LIMIT 100
+          ) sub ORDER BY id ASC`
+      );
   return NextResponse.json({
     messages: rows.map((m) => ({
       id: Number(m.id),

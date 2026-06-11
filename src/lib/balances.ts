@@ -75,53 +75,64 @@ export interface FriendBalance {
 }
 
 export async function friendBalances(userId: number): Promise<FriendBalance[]> {
-  const rows = await sql`
-    WITH pair_expense AS (
-      -- what each share-holder owes the payer, per expense, in group currency
-      SELECT e.payer_id AS creditor, es.user_id AS debtor, g.currency,
-        CASE WHEN e.amount_cents = 0 THEN 0
-          ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END AS amt
-      FROM expense_shares es
-      JOIN expenses e ON e.id = es.expense_id
-      JOIN groups g ON g.id = e.group_id
-      WHERE es.user_id <> e.payer_id
-    ),
-    pair_settle AS (
-      SELECT s.recipient_id AS creditor, s.payer_id AS debtor,
-        COALESCE(g.currency, s.currency) AS currency,
-        -s.converted_cents AS amt
-      FROM settlements s LEFT JOIN groups g ON g.id = s.group_id
-    ),
-    all_pairs AS (
-      SELECT * FROM pair_expense UNION ALL SELECT * FROM pair_settle
-    ),
-    nets AS (
-      SELECT creditor, debtor, currency, SUM(amt) AS amt FROM all_pairs
-      WHERE creditor = ${userId} OR debtor = ${userId}
-      GROUP BY creditor, debtor, currency
-    )
-    SELECT n.creditor, n.debtor, n.currency, n.amt,
-           u.display_name, u.username, u.id AS friend_id
-    FROM nets n
-    JOIN users u ON u.id = CASE WHEN n.creditor = ${userId} THEN n.debtor ELSE n.creditor END`;
+  // Per-group friend debts are derived from the SAME net balances and greedy
+  // simplification that power the group's "suggested settle-up", so the
+  // friends screen always agrees with what the app told people to pay.
+  const groups = await sql`
+    SELECT g.id, g.currency FROM groups g
+    JOIN group_members gm ON gm.group_id = g.id WHERE gm.user_id = ${userId}`;
 
-  const map = new Map<number, FriendBalance>();
-  for (const r of rows) {
-    const fid = Number(r.friend_id);
-    let fb = map.get(fid);
-    if (!fb) {
-      fb = { friendId: fid, displayName: r.display_name, username: r.username, netByCurrency: {} };
-      map.set(fid, fb);
+  const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
+  for (const g of groups) {
+    const balances = await groupBalances(Number(g.id));
+    for (const t of simplifyDebts(new Map(balances.map((b) => [b.userId, b.netCents])))) {
+      if (t.from === userId) {
+        const key = `${t.to}:${g.currency}`;
+        pairTotals.set(key, (pairTotals.get(key) ?? 0) - t.amountCents);
+      } else if (t.to === userId) {
+        const key = `${t.from}:${g.currency}`;
+        pairTotals.set(key, (pairTotals.get(key) ?? 0) + t.amountCents);
+      }
     }
-    const signed = Number(r.creditor) === userId ? Number(r.amt) : -Number(r.amt);
-    fb.netByCurrency[r.currency] = (fb.netByCurrency[r.currency] ?? 0) + signed;
+  }
+
+  // Direct (group-less) settlements adjust pairwise nets in their own currency.
+  const direct = await sql`
+    SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
+    FROM settlements WHERE group_id IS NULL AND (payer_id = ${userId} OR recipient_id = ${userId})
+    GROUP BY payer_id, recipient_id, currency`;
+  for (const s of direct) {
+    const friendId = Number(s.payer_id) === userId ? Number(s.recipient_id) : Number(s.payer_id);
+    // friend paid me -> their debt to me shrinks (negative for me); I paid -> grows
+    const signed = Number(s.payer_id) === userId ? Number(s.amt) : -Number(s.amt);
+    const key = `${friendId}:${s.currency}`;
+    pairTotals.set(key, (pairTotals.get(key) ?? 0) + signed);
+  }
+
+  const friendIds = [...new Set([...pairTotals.keys()].map((k) => Number(k.split(":")[0])))];
+  if (friendIds.length === 0) return [];
+  const users = await sql`SELECT id, display_name, username FROM users WHERE id = ANY(${friendIds})`;
+  const map = new Map<number, FriendBalance>();
+  for (const u of users) {
+    map.set(Number(u.id), {
+      friendId: Number(u.id),
+      displayName: u.display_name,
+      username: u.username,
+      netByCurrency: {},
+    });
+  }
+  for (const [key, amt] of pairTotals) {
+    if (amt === 0) continue;
+    const [fid, cur] = key.split(":");
+    const fb = map.get(Number(fid));
+    if (fb) fb.netByCurrency[cur] = (fb.netByCurrency[cur] ?? 0) + amt;
   }
   for (const fb of map.values()) {
     for (const [cur, amt] of Object.entries(fb.netByCurrency)) {
       if (amt === 0) delete fb.netByCurrency[cur];
     }
   }
-  return [...map.values()];
+  return [...map.values()].filter((f) => Object.keys(f.netByCurrency).length > 0 || true);
 }
 
 export async function isGroupMember(groupId: number, userId: number): Promise<boolean> {

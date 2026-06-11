@@ -27,7 +27,9 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       e.payer_id, e.category_id, e.notes, e.split_method, e.created_at, e.updated_at,
       p.display_name AS payer_name, c.name AS category_name, c.icon AS category_icon,
       (SELECT COUNT(*) FROM attachments a WHERE a.expense_id = e.id) AS attachment_count,
-      (SELECT json_agg(json_build_object('userId', es.user_id, 'shareCents', es.share_cents))
+      (SELECT json_agg(json_build_object('userId', es.user_id, 'shareCents', es.share_cents,
+        'convertedShareCents', CASE WHEN e.amount_cents = 0 THEN 0
+          ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END))
         FROM expense_shares es WHERE es.expense_id = e.id) AS shares
     FROM expenses e
     JOIN users p ON p.id = e.payer_id

@@ -40,6 +40,7 @@ export function splitExact(totalCents: number, inputs: SplitInput[]): Map<number
 
 export function splitPercentage(totalCents: number, inputs: SplitInput[]): Map<number, number> {
   if (inputs.length === 0) throw new Error("No participants");
+  if (inputs.some((i) => (i.value ?? 0) < 0)) throw new Error("Percentages must be positive");
   const totalPct = inputs.reduce((s, i) => s + (i.value ?? 0), 0);
   if (Math.abs(totalPct - 100) > 0.001) {
     throw new Error(`Percentages must add up to 100 (got ${totalPct})`);
@@ -52,6 +53,7 @@ export function splitPercentage(totalCents: number, inputs: SplitInput[]): Map<n
 
 export function splitShares(totalCents: number, inputs: SplitInput[]): Map<number, number> {
   if (inputs.length === 0) throw new Error("No participants");
+  if (inputs.some((i) => (i.value ?? 0) < 0)) throw new Error("Shares must be positive");
   const totalShares = inputs.reduce((s, i) => s + (i.value ?? 0), 0);
   if (totalShares <= 0) throw new Error("Total shares must be positive");
   return distributeProportional(
@@ -160,7 +162,12 @@ export function formatMoney(cents: number, currency: string): string {
 }
 
 export function parseAmountToCents(input: string): number {
-  const cleaned = input.replace(/[^0-9.]/g, "");
+  // Treat a comma followed by 1-2 trailing digits as a decimal separator
+  // ("12,34" → 12.34); otherwise commas are thousands separators.
+  const normalized = /,\d{1,2}$/.test(input.trim()) && !input.includes(".")
+    ? input.replace(/,(\d{1,2})$/, ".$1")
+    : input;
+  const cleaned = normalized.replace(/[^0-9.]/g, "");
   if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) throw new Error("Invalid amount");
   const cents = Math.round(parseFloat(cleaned) * 100);
   if (!Number.isFinite(cents) || cents <= 0) throw new Error("Amount must be positive");

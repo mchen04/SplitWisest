@@ -49,6 +49,7 @@ interface ItemRow {
 
 export function ExpenseForm({
   groupId,
+  groupCurrency,
   members,
   meId,
   existing,
@@ -57,6 +58,7 @@ export function ExpenseForm({
   onSaved,
 }: {
   groupId: number;
+  groupCurrency: string;
   members: Member[];
   meId: number;
   existing?: ExistingExpense | null;
@@ -113,6 +115,7 @@ export function ExpenseForm({
     } else {
       setTitle("");
       setAmount("");
+      setCurrency(groupCurrency);
       setDate(todayStr());
       setPayerId(meId);
       setCategoryId("");

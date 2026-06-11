@@ -50,7 +50,10 @@ export function SettleModal({
       setRecipientId(members.find((m) => m.id !== meId)?.id ?? 0);
       setAmount("");
     }
-  }, [open, prefill, meId, members, defaultCurrency]);
+    // Only reset when the modal opens — background sync refreshes replace the
+    // members array reference and must not wipe in-progress input.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

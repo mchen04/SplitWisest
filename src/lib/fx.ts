@@ -16,9 +16,11 @@ const MAX_AGE_MS = 24 * 3600 * 1000;
 
 export async function getRatesPerUsd(): Promise<Record<string, number>> {
   const cached = await sql`SELECT currency, rate_per_usd, fetched_at FROM fx_rates`;
-  const fresh =
-    cached.length > 0 &&
-    Date.now() - new Date(cached[0].fetched_at).getTime() < MAX_AGE_MS;
+  const oldest = cached.reduce(
+    (min, r) => Math.min(min, new Date(r.fetched_at).getTime()),
+    Infinity
+  );
+  const fresh = cached.length > 0 && Date.now() - oldest < MAX_AGE_MS;
   if (fresh) {
     return Object.fromEntries(cached.map((r) => [r.currency, Number(r.rate_per_usd)]));
   }

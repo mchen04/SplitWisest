@@ -35,7 +35,7 @@ interface Expense {
   notes: string;
   splitMethod: string;
   attachmentCount: number;
-  shares: { userId: number; shareCents: number }[];
+  shares: { userId: number; shareCents: number; convertedShareCents: number }[];
 }
 
 interface Recurring {
@@ -110,6 +110,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     return () => clearTimeout(t);
   }, [loadExpenses, q]);
   useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("add") === "1") {
+      setEditing(null);
+      setExpenseOpen(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     api<{ categories: { id: number; name: string }[] }>("/api/categories")
       .then((r) => setCategories(r.categories))
       .catch(() => {});
@@ -127,9 +135,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   };
 
   async function openEdit(expenseId: number) {
-    const r = await api<{ expense: NonNullable<typeof editing> }>(`/api/expenses/${expenseId}`);
-    setEditing(r.expense);
-    setExpenseOpen(true);
+    try {
+      const r = await api<{ expense: NonNullable<typeof editing> }>(`/api/expenses/${expenseId}`);
+      setEditing(r.expense);
+      setExpenseOpen(true);
+    } catch {
+      // expense may have just been deleted by another member
+      refreshAll();
+    }
   }
 
   async function confirmDelete() {
@@ -209,7 +222,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               <Download className="h-4 w-4" /> <span className="hidden sm:inline">CSV</span>
             </Button>
           </a>
-          <Button variant="secondary" onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}>
+          <Button
+            variant="secondary"
+            disabled={(detail?.members.length ?? 0) < 2}
+            title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
+            onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
+          >
             <HandCoins className="h-4 w-4" /> <span className="hidden sm:inline">Settle up</span>
           </Button>
           <Button onClick={() => { setEditing(null); setExpenseOpen(true); }}>
@@ -348,7 +366,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             ) : (
               <ul className="divide-y divide-line">
                 {expenses.map((e) => {
-                  const myShare = me ? (e.shares.find((s) => s.userId === me.id)?.shareCents ?? 0) : 0;
+                  const myShare = me ? (e.shares.find((s) => s.userId === me.id)?.convertedShareCents ?? 0) : 0;
                   return (
                     <li key={e.id} className="group flex min-h-16 items-center gap-3 px-4 py-2.5">
                       <div className="hidden w-12 shrink-0 text-center sm:block">
@@ -374,9 +392,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         <p className="tnum font-semibold">{fmtMoney(e.convertedCents, detail?.group.currency ?? e.currency)}</p>
                         <p className="text-xs text-ink-faint">
                           {me && e.payerId === me.id
-                            ? `you lent ${fmtMoney(e.convertedCents - Math.round(myShare * (e.convertedCents / e.amountCents)), detail?.group.currency ?? e.currency)}`
+                            ? `you lent ${fmtMoney(e.convertedCents - myShare, detail?.group.currency ?? e.currency)}`
                             : myShare > 0
-                              ? `your share ${fmtMoney(Math.round(myShare * (e.convertedCents / e.amountCents)), detail?.group.currency ?? e.currency)}`
+                              ? `your share ${fmtMoney(myShare, detail?.group.currency ?? e.currency)}`
                               : "not involved"}
                         </p>
                       </div>
@@ -422,7 +440,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     <button
                       aria-label={`Stop ${r.title}`}
                       onClick={async () => {
-                        await api(`/api/recurring/${r.id}`, { method: "DELETE" });
+                        if (!window.confirm(`Stop the recurring expense "${r.title}"? Existing expenses are kept.`)) return;
+                        try {
+                          await api(`/api/recurring/${r.id}`, { method: "DELETE" });
+                        } catch {}
                         loadDetail();
                       }}
                       className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
@@ -519,6 +540,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         <>
           <ExpenseForm
             groupId={groupId}
+            groupCurrency={detail.group.currency}
             members={detail.members}
             meId={me.id}
             existing={editing}

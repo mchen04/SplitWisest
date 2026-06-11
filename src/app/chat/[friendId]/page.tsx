@@ -12,15 +12,36 @@ export default function DmPage({ params }: { params: Promise<{ friendId: string 
   const { friendId } = use(params);
   const me = useMe();
   const [friend, setFriend] = useState<{ id: number; displayName: string; username: string } | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     api<{ friends: { id: number; displayName: string; username: string }[] }>("/api/friends")
-      .then((r) => setFriend(r.friends.find((f) => f.id === Number(friendId)) ?? null))
-      .catch(() => {});
+      .then((r) => {
+        const f = r.friends.find((x) => x.id === Number(friendId)) ?? null;
+        setFriend(f);
+        setNotFound(!f);
+      })
+      .catch(() => setNotFound(true));
   }, [friendId]);
 
   useSync(() => setRefreshKey((k) => k + 1));
+
+  if (notFound) {
+    return (
+      <AppShell>
+        <Card>
+          <div className="px-6 py-12 text-center">
+            <p className="font-medium text-ink-soft">Friend not found</p>
+            <p className="mt-1 text-sm text-ink-faint">You can only chat with people on your friends list.</p>
+            <Link href="/balances" className="mt-4 inline-block text-sm font-medium text-accent hover:underline">
+              Back to balances
+            </Link>
+          </div>
+        </Card>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

@@ -64,7 +64,12 @@ export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
   const e = await loadExpense(id, user.id);
   const input = ExpenseBody.parse(await req.json());
   const group = await sql`SELECT currency FROM groups WHERE id = ${e.group_id}`;
-  await updateExpense(id, Number(e.group_id), group[0].currency, input);
+  await updateExpense(id, Number(e.group_id), group[0].currency, user.id, input, {
+    amountCents: Number(e.amount_cents),
+    currency: e.currency,
+    convertedCents: Number(e.converted_cents),
+    fxRate: Number(e.fx_rate),
+  });
   await logActivity(Number(e.group_id), user.id, "expense.edited",
     `${user.displayName} edited "${input.title}" (${formatMoney(input.amountCents, input.currency)})`,
     { expenseId: id });

@@ -49,19 +49,35 @@ export function ChatPane({
   const [sending, setSending] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
   const lastId = useRef(0);
+  const inflight = useRef<Promise<void> | null>(null);
+  const searchSeq = useRef(0);
 
   async function loadAll() {
+    const seq = ++searchSeq.current;
     const r = await api<{ messages: Message[] }>(endpoint);
+    if (seq !== searchSeq.current) return; // a newer search superseded this
     setMessages(r.messages);
     lastId.current = r.messages.at(-1)?.id ?? 0;
   }
 
-  async function loadNew() {
-    const r = await api<{ messages: Message[] }>(`${endpoint}?since=${lastId.current}`);
-    if (r.messages.length > 0) {
-      setMessages((m) => [...(m ?? []), ...r.messages]);
-      lastId.current = r.messages.at(-1)!.id;
-    }
+  // Serialized + deduped: concurrent callers share one request, and appends
+  // skip ids we already have, so a sync tick racing a send can't duplicate.
+  function loadNew(): Promise<void> {
+    if (inflight.current) return inflight.current;
+    const p = (async () => {
+      const r = await api<{ messages: Message[] }>(`${endpoint}?since=${lastId.current}`);
+      if (r.messages.length > 0) {
+        setMessages((m) => {
+          const have = new Set((m ?? []).map((x) => x.id));
+          return [...(m ?? []), ...r.messages.filter((x) => !have.has(x.id))];
+        });
+        lastId.current = Math.max(lastId.current, r.messages.at(-1)!.id);
+      }
+    })().finally(() => {
+      inflight.current = null;
+    });
+    inflight.current = p;
+    return p;
   }
 
   useEffect(() => {
@@ -78,16 +94,22 @@ export function ChatPane({
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [messages?.length]);
 
-  async function runSearch(q: string) {
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function runSearch(q: string) {
     setQuery(q);
-    if (!q.trim()) {
-      setSearching(false);
-      await loadAll();
-      return;
-    }
-    setSearching(true);
-    const r = await api<{ messages: Message[] }>(`${endpoint}?q=${encodeURIComponent(q.trim())}`);
-    setMessages(r.messages);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      if (!q.trim()) {
+        setSearching(false);
+        await loadAll().catch(() => {});
+        return;
+      }
+      setSearching(true);
+      const seq = ++searchSeq.current;
+      const r = await api<{ messages: Message[] }>(`${endpoint}?q=${encodeURIComponent(q.trim())}`);
+      if (seq === searchSeq.current) setMessages(r.messages);
+    }, 250);
   }
 
   async function send(e: React.FormEvent) {
