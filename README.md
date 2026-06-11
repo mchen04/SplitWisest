@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SplitWisest
 
-## Getting Started
+A private, friend-group expense tracker inspired by Splitwise. Track shared expenses, see who owes who, simplify debts, record offline settlements, and chat in context. **Not a payment app** — no bank connections, cards, or payment processing; settlements are ledger records of payments that happened offline.
 
-First, run the development server:
+## Features
+
+- Username/password auth (scrypt-hashed, session cookies), invite-code-gated signup
+- Groups (trips, apartments, dinners, bills) with per-group currency
+- Expenses with equal / exact / percentage / shares / itemized splits, categories (incl. custom), notes, receipt attachments
+- Multi-currency with automatic conversion (rates snapshotted per expense)
+- Group + friend balances, greedy debt simplification ("fewest practical payments")
+- Offline settlement recording (group or direct between friends)
+- Recurring expenses (weekly/monthly, lazily materialized)
+- Search & filtering by group, friend, date, category, payer, text
+- Activity log (calm timestamped rows), CSV export, SVG charts
+- Group chat + direct friend chat with link rendering and search
+- Realtime via lightweight polling sync cursor (serverless-friendly)
+- PWA manifest, responsive from small phones to ultrawide
+
+## Stack
+
+Next.js (App Router, TypeScript), Tailwind CSS v4, Lucide icons, Neon PostgreSQL via `@neondatabase/serverless`, Zod validation, Vitest.
+
+## Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+# .env.local needs DATABASE_URL and SIGNUP_CODE (see below)
+pnpm tsx scripts/migrate.ts  # create tables (idempotent)
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Environment variables
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | Neon Postgres connection string (pooler URL, `sslmode=require`) |
+| `SIGNUP_CODE` | Bootstrap invite code for the first account(s). After that, users invite each other with personal codes. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Testing
 
-## Learn More
+```bash
+pnpm vitest run      # money math + unit tests
+pnpm tsc --noEmit    # typecheck
+pnpm next build      # production build
+```
 
-To learn more about Next.js, take a look at the following resources:
+Browser/E2E verification is done with `agent-browser` across mobile portrait, mobile landscape, tablet, desktop, and wide viewports (see `docs/QA.md`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Deployment (Vercel)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+vercel --prod
+```
 
-## Deploy on Vercel
+Set `DATABASE_URL` and `SIGNUP_CODE` in Vercel project env vars. Run the migration once against the production database before first use.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Documentation
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `docs/ARCHITECTURE.md` — auth, balance math, settlements, realtime, chat, deployment
+- `docs/DATABASE.md` — schema and migration notes for Neon
+- `docs/USAGE.md` — user-facing workflow guide
+- `docs/QA.md` — QA checklist and verification results
