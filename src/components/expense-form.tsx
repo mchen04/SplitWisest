@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Paperclip, Plus } from "lucide-react";
-import { api, ApiClientError, fmtMoney, todayStr, CURRENCIES } from "@/lib/client";
+import { api, apiCached, ApiClientError, fmtMoney, todayStr, CURRENCIES } from "@/lib/client";
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
 import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
 
@@ -82,7 +82,7 @@ export function ExpenseForm({
 
   useEffect(() => {
     if (!open) return;
-    api<{ categories: Category[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
+    apiCached<{ categories: Category[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
     // Reset the form when opening or switching the edited expense.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);

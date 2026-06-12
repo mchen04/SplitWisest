@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, Scale, Receipt, LogOut, Wallet,
-  MessageSquare, ScrollText, Settings, Moon, Sun, Plus,
+  MessageSquare, ScrollText, Settings, Moon, Sun, Plus, ChevronDown,
 } from "lucide-react";
 import { api, useApiData, useMe, useUnread, type Unread } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
 import { Avatar } from "./ui";
 
-interface GroupRef { id: number }
+interface GroupRef { id: number; name: string; unreadMessages?: number }
 
 type BadgeKey = keyof Unread;
 
@@ -45,6 +45,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   const firstGroup = groupsData?.groups?.[0];
   const addExpenseHref = firstGroup ? `/groups/${firstGroup.id}?add=1` : "/groups";
 
+  // Collapsible quick-access group list under the Groups nav item. Hydration-
+  // safe: starts closed, then restores the persisted preference after mount.
+  const [groupsOpen, setGroupsOpen] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setGroupsOpen(localStorage.getItem("nav.groupsOpen") !== "0");
+  }, []);
+  const toggleGroups = () => {
+    setGroupsOpen((o) => {
+      localStorage.setItem("nav.groupsOpen", o ? "0" : "1");
+      return !o;
+    });
+  };
+
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
     router.push("/login");
@@ -71,21 +85,51 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Plus className="h-4 w-4" /> Add expense
           </Link>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 px-2.5">
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
           {NAV.map(({ href, label, icon: Icon, badge }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
-                isActive(href)
-                  ? "bg-accent-soft text-accent-dark"
-                  : "text-ink-soft hover:bg-paper hover:text-ink"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              <span className="flex-1">{label}</span>
-              {badge && <Badge count={unread[badge]} />}
-            </Link>
+            <div key={href}>
+              <div
+                className={`flex items-center rounded-lg transition-colors ${
+                  isActive(href)
+                    ? "bg-accent-soft text-accent-dark"
+                    : "text-ink-soft hover:bg-paper hover:text-ink"
+                }`}
+              >
+                <Link href={href} className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium">
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 truncate">{label}</span>
+                  {badge && <Badge count={unread[badge]} />}
+                </Link>
+                {href === "/groups" && (groupsData?.groups?.length ?? 0) > 0 && (
+                  <button
+                    onClick={() => toggleGroups()}
+                    aria-label={groupsOpen ? "Collapse group list" : "Expand group list"}
+                    aria-expanded={groupsOpen}
+                    className="mr-1 rounded-md p-1 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                  >
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupsOpen ? "rotate-180" : ""}`} />
+                  </button>
+                )}
+              </div>
+              {href === "/groups" && groupsOpen && (
+                <div className="mt-0.5 flex flex-col gap-0.5">
+                  {groupsData?.groups?.map((g) => (
+                    <Link
+                      key={g.id}
+                      href={`/groups/${g.id}`}
+                      className={`flex items-center gap-2 rounded-lg py-1 pl-9 pr-2.5 text-sm transition-colors ${
+                        pathname === `/groups/${g.id}`
+                          ? "bg-accent-soft font-medium text-accent-dark"
+                          : "text-ink-soft hover:bg-paper hover:text-ink"
+                      }`}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                      {!!g.unreadMessages && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </nav>
         <div className="border-t border-line p-2.5">

@@ -31,20 +31,27 @@ export default function SettingsPage() {
   return (
     <AppShell>
       <PageTitle title="Settings" subtitle="Manage your account, security, and recovery." />
-      <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
-        <ProfileCard me={me} onSaved={setMe} />
-        <AppearanceCard />
-        <PasswordCard />
-        <RecoveryCard />
-        <Card className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-3">
-          <div>
-            <p className="font-medium">Log out</p>
-            <p className="text-sm text-ink-faint">End your session on this device.</p>
+      {/* Two balanced columns so everything fits one screen on desktop. */}
+      <div className="md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
+        <div className="grid grid-cols-1 items-start gap-2.5 md:grid-cols-2">
+          <div className="space-y-2.5">
+            <ProfileCard me={me} onSaved={setMe} />
+            <AppearanceCard />
+            <Card className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5">
+              <div>
+                <p className="font-medium">Log out</p>
+                <p className="text-sm text-ink-faint">End your session on this device.</p>
+              </div>
+              <Button variant="danger" onClick={logout}>
+                <LogOut className="h-4 w-4" /> Log out
+              </Button>
+            </Card>
           </div>
-          <Button variant="danger" onClick={logout}>
-            <LogOut className="h-4 w-4" /> Log out
-          </Button>
-        </Card>
+          <div className="space-y-2.5">
+            <PasswordCard />
+            <RecoveryCard />
+          </div>
+        </div>
       </div>
     </AppShell>
   );

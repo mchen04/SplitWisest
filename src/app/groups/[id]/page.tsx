@@ -7,7 +7,7 @@ import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check, ChevronDown, Users,
 } from "lucide-react";
-import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
+import { api, apiCached, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
 import { ExpenseForm } from "@/components/expense-form";
@@ -84,7 +84,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   }, [searchParams]);
 
   useEffect(() => {
-    api<{ categories: { id: number; name: string }[] }>("/api/categories")
+    apiCached<{ categories: { id: number; name: string }[] }>("/api/categories")
       .then((r) => setCategories(r.categories))
       .catch(() => {});
   }, []);
@@ -201,37 +201,69 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </div>
 
-      {/* Balance strip */}
-      <Card className="mb-2.5 md:shrink-0">
-        {detail && detail.balances.length > 3 && (
-          <div className="border-b border-line p-3">
+      {/* Members rail (desktop) — a nested sidebar instead of a full-width
+          horizontal strip, so member balances stop eating vertical space. */}
+      <div className="md:flex md:min-h-0 md:flex-1 md:gap-2.5">
+      <Card className="hidden md:flex md:min-h-0 md:w-52 md:shrink-0 md:flex-col">
+        <CardHeader title={`Members${detail ? ` · ${detail.members.length}` : ""}`} />
+        {detail && detail.balances.length > 8 && (
+          <div className="border-b border-line p-2">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
               <Input
                 value={memberQuery}
                 onChange={(e) => setMemberQuery(e.target.value)}
-                placeholder="Search group members"
+                placeholder="Search members"
                 aria-label="Search group members"
-                className="!min-h-9 !py-1.5 pl-8"
+                className="!min-h-[var(--control-h-sm)] !py-1 pl-8"
               />
             </div>
           </div>
         )}
-        <div className="overflow-x-auto">
-        <div className="flex min-h-20 items-stretch divide-x divide-line">
+        <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {detail === null ? (
-            <div className="flex flex-1 items-center gap-4 px-4">
-              {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-10 w-32" />)}
+            <div className="space-y-2 p-3">
+              {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-8 w-full" />)}
             </div>
           ) : visibleBalances.length === 0 ? (
-            <div className="flex flex-1 items-center px-4 py-5 text-sm text-ink-faint">No members match.</div>
+            <p className="px-3 py-3 text-sm text-ink-faint">No members match.</p>
           ) : (
-            visibleBalances.map((b) => (
-              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-32 flex-1 flex-col justify-center gap-0.5 px-3.5 py-2 hover:bg-paper">
-                <span className="flex items-center gap-1.5 text-xs text-ink-soft">
+            <ul className="divide-y divide-line">
+              {visibleBalances.map((b) => (
+                <li key={b.userId}>
+                  <Link href={`/people/${b.userId}`} className="flex items-center gap-2 px-3 py-1.5 hover:bg-paper">
+                    <Avatar name={b.displayName} size="sm" />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{b.displayName}</span>
+                    <span className="tnum text-xs font-semibold">
+                      {b.netCents === 0 ? (
+                        <span className="font-normal text-ink-faint">settled</span>
+                      ) : (
+                        <Money cents={b.netCents} currency={detail.group.currency} signed />
+                      )}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Card>
+
+      {/* Compact member strip (mobile only) */}
+      <Card className="mb-2.5 md:hidden">
+        <div className="overflow-x-auto">
+        <div className="flex items-stretch divide-x divide-line">
+          {detail === null ? (
+            <div className="flex flex-1 items-center gap-4 p-3">
+              {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-8 w-28" />)}
+            </div>
+          ) : (
+            detail.balances.map((b) => (
+              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-28 flex-1 flex-col justify-center gap-0.5 px-3 py-1.5 hover:bg-paper">
+                <span className="flex items-center gap-1.5 truncate text-xs text-ink-soft">
                   <Avatar name={b.displayName} size="sm" /> {b.displayName}
                 </span>
-                <span className="font-display text-lg font-semibold">
+                <span className="font-display text-base font-semibold">
                   {b.netCents === 0 ? (
                     <span className="text-ink-faint">settled</span>
                   ) : (
@@ -245,6 +277,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Card>
 
+      <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Tabs */}
       <div role="tablist" aria-label="Group sections" className="mb-2.5 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-0.5 md:shrink-0">
         {TABS.map(({ key, label, icon: Icon }) => (
@@ -582,6 +615,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </div>
         </Card>
       )}
+      </div>
+      </div>
       </div>
 
       {/* Modals */}

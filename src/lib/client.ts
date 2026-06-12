@@ -14,8 +14,9 @@ export async function api<T = unknown>(
   path: string,
   opts: { method?: string; body?: unknown; form?: FormData } = {}
 ): Promise<T> {
+  const method = opts.method ?? (opts.body || opts.form ? "POST" : "GET");
   const res = await fetch(path, {
-    method: opts.method ?? (opts.body || opts.form ? "POST" : "GET"),
+    method,
     headers: opts.body ? { "Content-Type": "application/json" } : undefined,
     body: opts.form ?? (opts.body ? JSON.stringify(opts.body) : undefined),
   });
@@ -25,7 +26,33 @@ export async function api<T = unknown>(
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiClientError(json.error ?? "Request failed", res.status);
+  // Any successful mutation invalidates the read cache so the next render
+  // refetches instead of serving pre-mutation data.
+  if (method !== "GET") {
+    dataCache.clear();
+    if (path.startsWith("/api/auth") || path.startsWith("/api/me")) meCache = null;
+  }
   return json as T;
+}
+
+// --- Read-side cache -------------------------------------------------------
+// GET responses are cached at module level (stale-while-revalidate): a
+// remounting hook renders the last known payload instantly while a fresh fetch
+// runs in the background. Identical concurrent GETs share one request.
+const dataCache = new Map<string, unknown>();
+const inflight = new Map<string, Promise<unknown>>();
+
+export function apiCached<T>(path: string): Promise<T> {
+  const pending = inflight.get(path);
+  if (pending) return pending as Promise<T>;
+  const p = api<T>(path)
+    .then((json) => {
+      dataCache.set(path, json);
+      return json;
+    })
+    .finally(() => inflight.delete(path));
+  inflight.set(path, p);
+  return p as Promise<T>;
 }
 
 // Money formatting lives in the framework-agnostic money lib so server routes
@@ -76,33 +103,65 @@ export function markRead(scope: string, lastId: number) {
   api("/api/read", { body: { scope, lastId } }).catch(() => {});
 }
 
-// Polls /api/sync and exposes the latest unread counts for nav badges.
-export function useUnread(intervalMs = 5000): Unread {
-  const [unread, setUnread] = useState<Unread>({ messages: 0, activity: 0, nudges: 0, requests: 0, balances: 0 });
-  useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    async function tick() {
+// --- Shared sync poller ----------------------------------------------------
+// One module-level loop polls /api/sync and fans the cursors out to every
+// subscriber. Previously each useUnread/useSync/useApiData instance ran its
+// own polling loop, so a busy page issued the same request several times per
+// tick. The loop runs only while at least one subscriber is mounted.
+const SYNC_INTERVAL_MS = 4000;
+const syncListeners = new Set<(c: SyncCursors) => void>();
+let lastSync: SyncCursors | null = null;
+let syncLoopRunning = false;
+let syncWake: (() => void) | null = null;
+
+function ensureSyncLoop() {
+  if (syncLoopRunning) return;
+  syncLoopRunning = true;
+  (async () => {
+    while (syncListeners.size > 0) {
       try {
         const c = await api<SyncCursors>("/api/sync");
-        if (!stopped && c.unread) setUnread(c.unread);
+        lastSync = c;
+        for (const l of [...syncListeners]) l(c);
       } catch {
-        // logged out or offline; keep trying
+        // offline or logged out; keep trying quietly
       }
-      if (!stopped) timer = setTimeout(tick, document.hidden ? intervalMs * 4 : intervalMs);
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(resolve, document.hidden ? SYNC_INTERVAL_MS * 4 : SYNC_INTERVAL_MS);
+        syncWake = () => {
+          clearTimeout(t);
+          resolve();
+        };
+      });
+      syncWake = null;
     }
-    tick();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [intervalMs]);
+    syncLoopRunning = false;
+  })();
+}
+
+function subscribeSync(listener: (c: SyncCursors) => void): () => void {
+  syncListeners.add(listener);
+  ensureSyncLoop();
+  return () => {
+    syncListeners.delete(listener);
+    if (syncListeners.size === 0) syncWake?.();
+  };
+}
+
+// Exposes the latest unread counts for nav badges via the shared sync poller.
+export function useUnread(): Unread {
+  const [unread, setUnread] = useState<Unread>(
+    () => lastSync?.unread ?? { messages: 0, activity: 0, nudges: 0, requests: 0, balances: 0 }
+  );
+  useEffect(() => subscribeSync((c) => {
+    if (c.unread) setUnread(c.unread);
+  }), []);
   return unread;
 }
 
-// Polls /api/sync and invokes onChange whenever a cursor advances. This is the
-// realtime backbone: cheap, serverless-friendly, no websockets to break.
-export function useSync(onChange: ((c: SyncCursors) => void) | undefined, intervalMs = 4000) {
+// Invokes onChange whenever a sync cursor advances. This is the realtime
+// backbone: cheap, serverless-friendly, no websockets to break.
+export function useSync(onChange: ((c: SyncCursors) => void) | undefined) {
   const enabled = !!onChange;
   const last = useRef<SyncCursors | null>(null);
   const cb = useRef(onChange);
@@ -111,33 +170,19 @@ export function useSync(onChange: ((c: SyncCursors) => void) | undefined, interv
   }, [onChange]);
   useEffect(() => {
     if (!enabled) return;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout>;
-    async function tick() {
-      try {
-        const c = await api<SyncCursors>("/api/sync");
-        if (stopped) return;
-        const prev = last.current;
-        last.current = c;
-        if (prev && (
-          c.activityCursor !== prev.activityCursor ||
-          c.messageCursor !== prev.messageCursor ||
-          c.nudgeCursor !== prev.nudgeCursor ||
-          c.requestCursor !== prev.requestCursor
-        )) {
-          cb.current?.(c);
-        }
-      } catch {
-        // offline or logged out; keep trying quietly
+    return subscribeSync((c) => {
+      const prev = last.current;
+      last.current = c;
+      if (prev && (
+        c.activityCursor !== prev.activityCursor ||
+        c.messageCursor !== prev.messageCursor ||
+        c.nudgeCursor !== prev.nudgeCursor ||
+        c.requestCursor !== prev.requestCursor
+      )) {
+        cb.current?.(c);
       }
-      if (!stopped) timer = setTimeout(tick, document.hidden ? intervalMs * 4 : intervalMs);
-    }
-    tick();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [intervalMs, enabled]);
+    });
+  }, [enabled]);
 }
 
 // Fetches `path`, refreshes on every sync tick, and exposes a manual reload.
@@ -157,7 +202,7 @@ export function useApiData<T>(
   });
   const reload = useCallback(() => {
     const requestedPath = path;
-    api<T>(path)
+    apiCached<T>(path)
       .then((next) => {
         setState({ path: requestedPath, data: next, error: null, status: 200 });
       })
@@ -175,8 +220,11 @@ export function useApiData<T>(
     return () => clearTimeout(t);
   }, [reload, debounceMs]);
   useSync(opts.sync === false ? undefined : reload);
+  // While the fresh fetch is in flight (or after a path change), serve the
+  // last cached payload for this path so navigation renders instantly.
+  const cached = (dataCache.get(path) as T | undefined) ?? null;
   return {
-    data: state.path === path ? state.data : null,
+    data: state.path === path ? state.data ?? cached : cached,
     error: state.path === path ? state.error : null,
     status: state.path === path ? state.status : null,
     reload,
@@ -212,10 +260,19 @@ export function useFilters<T extends Record<string, string>>(initial: T) {
   return { filters, setFilter, reset, active: Object.values(filters).some(Boolean) };
 }
 
+interface MeUser { id: number; username: string; displayName: string; inviteCode: string }
+let meCache: MeUser | null = null;
+
 export function useMe() {
-  const [me, setMe] = useState<{ id: number; username: string; displayName: string; inviteCode: string } | null>(null);
+  const [me, setMe] = useState<MeUser | null>(meCache);
   useEffect(() => {
-    api<{ user: typeof me }>("/api/me").then((r) => setMe(r.user)).catch(() => {});
+    if (meCache) return;
+    apiCached<{ user: MeUser }>("/api/me")
+      .then((r) => {
+        meCache = r.user;
+        setMe(r.user);
+      })
+      .catch(() => {});
   }, []);
   return me;
 }
