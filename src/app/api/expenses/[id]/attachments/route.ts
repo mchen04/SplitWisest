@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { handler, notFound, forbidden, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
+import { safeAttachmentFilename } from "@/lib/attachments";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,9 +25,10 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   if (file.size > MAX_BYTES) badRequest("File too large (max 4 MB)");
 
   const buf = Buffer.from(await file.arrayBuffer());
+  const filename = safeAttachmentFilename(file.name);
   const inserted = await sql`
     INSERT INTO attachments (expense_id, filename, mime, data)
-    VALUES (${id}, ${file.name || "receipt"}, ${file.type}, ${buf})
+    VALUES (${id}, ${filename}, ${file.type}, ${buf})
     RETURNING id`;
   return NextResponse.json({ id: Number(inserted[0].id) });
 });

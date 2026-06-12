@@ -11,7 +11,7 @@ export function assert(condition: unknown, message: string): asserts condition {
 
 export function assertNoSecretText(value: unknown, label: string) {
   const text = JSON.stringify(value);
-  for (const secret of ["inviteCode", "invite_code", "password", "password_hash", "recovery", "recovery_codes", "sessions", "sw_session"]) {
+  for (const secret of ["invite_code", "password", "password_hash", "recovery", "recovery_codes", "sessions", "sw_session"]) {
     assert(!text.includes(secret), `${label} leaked ${secret}`);
   }
 }

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { handler, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
+import { attachmentContentDisposition } from "@/lib/attachments";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -30,7 +31,7 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   return new NextResponse(new Uint8Array(buf), {
     headers: {
       "Content-Type": a.mime,
-      "Content-Disposition": `inline; filename="${a.filename.replace(/"/g, "")}"`,
+      "Content-Disposition": attachmentContentDisposition(a.filename),
       "Cache-Control": "private, max-age=3600",
     },
   });

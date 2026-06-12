@@ -1,7 +1,7 @@
 import { assert, assertNoSecretText, cleanupQaUsers, jsonArray, jsonNumber, jsonObject, request, signup, sql } from "./qa-support";
 
 const password = "profile-qa-password";
-const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+const suffix = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`;
 
 async function addSharedGroupOnlyMember(groupId: number, userId: number) {
   await sql`
