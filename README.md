@@ -27,7 +27,7 @@ Next.js (App Router, TypeScript), Tailwind CSS v4, Lucide icons, Neon PostgreSQL
 
 ```bash
 pnpm install
-# .env.local needs DATABASE_URL and SIGNUP_CODE (see below)
+# .env.local needs DATABASE_URL (SIGNUP_CODE is optional)
 pnpm tsx scripts/migrate.ts  # create tables (idempotent)
 pnpm dev
 ```
@@ -55,7 +55,7 @@ Browser/E2E verification is done with `agent-browser` across mobile portrait, mo
 vercel --prod
 ```
 
-Set `DATABASE_URL` and `SIGNUP_CODE` in Vercel project env vars. Run the migration once against the production database before first use.
+Set `DATABASE_URL` in Vercel project env vars. Add `SIGNUP_CODE` only if you want a bootstrap invite code. Run the migration once against the production database before first use.
 
 ## Documentation
 

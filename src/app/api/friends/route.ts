@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { friendBalances } from "@/lib/balances";
+import { canRemoveFriend, canRequestFriendById, friendBalances, friendshipExists } from "@/lib/balances";
 import { logActivity } from "@/lib/activity";
 
 export const GET = handler(async () => {
@@ -79,19 +79,10 @@ export const POST = handler(async (req: NextRequest) => {
   const friendId = Number(rows[0].id);
   if (friendId === user.id) badRequest("That is your own invite code");
 
-  if (userId) {
-    const shared = await sql`
-      SELECT 1
-      FROM group_members me
-      JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${friendId}
-      WHERE me.user_id = ${user.id}
-      LIMIT 1`;
-    if (shared.length === 0) badRequest("Use an invite code to add this person");
-  }
+  if (userId && !(await canRequestFriendById(user.id, friendId))) badRequest("Use an invite code to add this person");
 
   const [a, b] = friendId < user.id ? [friendId, user.id] : [user.id, friendId];
-  const already = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
-  if (already.length > 0) badRequest("You are already friends");
+  if (await friendshipExists(user.id, friendId)) badRequest("You are already friends");
 
   // Reciprocal request waiting? Accept it.
   const reciprocal = await sql`
@@ -120,11 +111,7 @@ export const DELETE = handler(async (req: NextRequest) => {
   const existing = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
   if (existing.length === 0) notFound("You are not friends with this user");
 
-  const balances = await friendBalances(user.id);
-  const fb = balances.find((x) => x.friendId === friendId);
-  if (fb && Object.keys(fb.netByCurrency).length > 0) {
-    badRequest("Settle up with this friend before removing them");
-  }
+  if (!(await canRemoveFriend(user.id, friendId))) badRequest("Settle up with this friend before removing them");
 
   await sql`DELETE FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
   await logActivity(null, user.id, "friend.removed", `${user.displayName} removed a friend`);

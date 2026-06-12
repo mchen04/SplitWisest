@@ -13,6 +13,7 @@ interface Activity {
   groupName: string | null;
   actorId: number;
   actorName: string;
+  actionText: string;
   summary: string;
   createdAt: string;
 }

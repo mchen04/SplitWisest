@@ -139,27 +139,38 @@ export function useApiData<T>(
   path: string,
   debounceMs = 0
 ): { data: T | null; error: string | null; status: number | null; reload: () => void } {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<number | null>(null);
+  const [state, setState] = useState<{ path: string; data: T | null; error: string | null; status: number | null }>({
+    path,
+    data: null,
+    error: null,
+    status: null,
+  });
   const reload = useCallback(() => {
+    const requestedPath = path;
     api<T>(path)
       .then((next) => {
-        setData(next);
-        setError(null);
-        setStatus(200);
+        setState({ path: requestedPath, data: next, error: null, status: 200 });
       })
       .catch((err) => {
-        setError(err instanceof ApiClientError ? err.message : "Could not load data");
-        setStatus(err instanceof ApiClientError ? err.status : null);
+        setState({
+          path: requestedPath,
+          data: null,
+          error: err instanceof ApiClientError ? err.message : "Could not load data",
+          status: err instanceof ApiClientError ? err.status : null,
+        });
       });
   }, [path]);
   useEffect(() => {
     const t = setTimeout(reload, debounceMs);
     return () => clearTimeout(t);
-  }, [path, reload, debounceMs]);
+  }, [reload, debounceMs]);
   useSync(reload);
-  return { data, error, status, reload };
+  return {
+    data: state.path === path ? state.data : null,
+    error: state.path === path ? state.error : null,
+    status: state.path === path ? state.status : null,
+    reload,
+  };
 }
 
 // Form submission state for modals: tracks error + busy and wraps a submit in

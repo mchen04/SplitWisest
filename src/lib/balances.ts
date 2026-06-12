@@ -74,82 +74,26 @@ export interface FriendBalance {
   netByCurrency: Record<string, number>;
 }
 
-export async function friendBalances(userId: number): Promise<FriendBalance[]> {
-  // Per-group friend debts are derived from the SAME net balances and greedy
-  // simplification that power the group's "suggested settle-up", so the
-  // friends screen always agrees with what the app told people to pay.
-  const groups = await sql`
-    SELECT g.id, g.currency FROM groups g
-    JOIN group_members gm ON gm.group_id = g.id WHERE gm.user_id = ${userId}`;
-
-  const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
-  for (const g of groups) {
-    const balances = await groupBalances(Number(g.id));
-    for (const t of simplifyDebts(new Map(balances.map((b) => [b.userId, b.netCents])))) {
-      if (t.from === userId) {
-        const key = `${t.to}:${g.currency}`;
-        pairTotals.set(key, (pairTotals.get(key) ?? 0) - t.amountCents);
-      } else if (t.to === userId) {
-        const key = `${t.from}:${g.currency}`;
-        pairTotals.set(key, (pairTotals.get(key) ?? 0) + t.amountCents);
-      }
-    }
-  }
-
-  // Direct (group-less) settlements adjust pairwise nets in their own currency.
-  const direct = await sql`
-    SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
-    FROM settlements WHERE group_id IS NULL AND (payer_id = ${userId} OR recipient_id = ${userId})
-    GROUP BY payer_id, recipient_id, currency`;
-  for (const s of direct) {
-    const friendId = Number(s.payer_id) === userId ? Number(s.recipient_id) : Number(s.payer_id);
-    // friend paid me -> their debt to me shrinks (negative for me); I paid -> grows
-    const signed = Number(s.payer_id) === userId ? Number(s.amt) : -Number(s.amt);
-    const key = `${friendId}:${s.currency}`;
-    pairTotals.set(key, (pairTotals.get(key) ?? 0) + signed);
-  }
-
-  const friendIds = [...new Set([...pairTotals.keys()].map((k) => Number(k.split(":")[0])))];
-  if (friendIds.length === 0) return [];
-  const users = await sql`SELECT id, display_name, username FROM users WHERE id = ANY(${friendIds})`;
-  const map = new Map<number, FriendBalance>();
-  for (const u of users) {
-    map.set(Number(u.id), {
-      friendId: Number(u.id),
-      displayName: u.display_name,
-      username: u.username,
-      netByCurrency: {},
-    });
-  }
-  for (const [key, amt] of pairTotals) {
-    if (amt === 0) continue;
-    const [fid, cur] = key.split(":");
-    const fb = map.get(Number(fid));
-    if (fb) fb.netByCurrency[cur] = (fb.netByCurrency[cur] ?? 0) + amt;
-  }
-  for (const fb of map.values()) {
-    for (const [cur, amt] of Object.entries(fb.netByCurrency)) {
-      if (amt === 0) delete fb.netByCurrency[cur];
-    }
-  }
-  return [...map.values()];
-}
-
-export async function pairwiseFriendBalance(userId: number, friendId: number): Promise<Record<string, number>> {
-  const pairTotals = new Map<string, number>();
+async function accumulatePairBalances(userId: number, onlyFriendId?: number): Promise<Map<number, Record<string, number>>> {
+  const groupFilter = onlyFriendId
+    ? sql`JOIN group_members them ON them.group_id = g.id AND them.user_id = ${onlyFriendId}`
+    : sql``;
   const groups = await sql`
     SELECT g.id, g.currency
     FROM groups g
-    JOIN group_members me ON me.group_id = g.id AND me.user_id = ${userId}
-    JOIN group_members them ON them.group_id = g.id AND them.user_id = ${friendId}`;
+    JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ${userId}
+    ${groupFilter}`;
+  const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
 
   for (const g of groups) {
     const balances = await groupBalances(Number(g.id));
     for (const t of simplifyDebts(new Map(balances.map((b) => [b.userId, b.netCents])))) {
-      if (t.from === userId && t.to === friendId) {
-        pairTotals.set(g.currency, (pairTotals.get(g.currency) ?? 0) - t.amountCents);
-      } else if (t.from === friendId && t.to === userId) {
-        pairTotals.set(g.currency, (pairTotals.get(g.currency) ?? 0) + t.amountCents);
+      if (t.from === userId && (!onlyFriendId || t.to === onlyFriendId)) {
+        const key = `${t.to}:${g.currency}`;
+        pairTotals.set(key, (pairTotals.get(key) ?? 0) - t.amountCents);
+      } else if (t.to === userId && (!onlyFriendId || t.from === onlyFriendId)) {
+        const key = `${t.from}:${g.currency}`;
+        pairTotals.set(key, (pairTotals.get(key) ?? 0) + t.amountCents);
       }
     }
   }
@@ -158,15 +102,85 @@ export async function pairwiseFriendBalance(userId: number, friendId: number): P
     SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
     FROM settlements
     WHERE group_id IS NULL
-      AND ((payer_id = ${userId} AND recipient_id = ${friendId})
-        OR (payer_id = ${friendId} AND recipient_id = ${userId}))
+      AND (payer_id = ${userId} OR recipient_id = ${userId})
+      AND (${onlyFriendId ?? null}::bigint IS NULL OR payer_id = ${onlyFriendId ?? null} OR recipient_id = ${onlyFriendId ?? null})
     GROUP BY payer_id, recipient_id, currency`;
   for (const s of direct) {
+    const friendId = Number(s.payer_id) === userId ? Number(s.recipient_id) : Number(s.payer_id);
     const signed = Number(s.payer_id) === userId ? Number(s.amt) : -Number(s.amt);
-    pairTotals.set(s.currency, (pairTotals.get(s.currency) ?? 0) + signed);
+    const key = `${friendId}:${s.currency}`;
+    pairTotals.set(key, (pairTotals.get(key) ?? 0) + signed);
   }
 
-  return Object.fromEntries([...pairTotals].filter(([, amount]) => amount !== 0));
+  const balances = new Map<number, Record<string, number>>();
+  for (const [key, amt] of pairTotals) {
+    if (amt === 0) continue;
+    const [fid, cur] = key.split(":");
+    const friendId = Number(fid);
+    const netByCurrency = balances.get(friendId) ?? {};
+    netByCurrency[cur] = (netByCurrency[cur] ?? 0) + amt;
+    if (netByCurrency[cur] === 0) delete netByCurrency[cur];
+    balances.set(friendId, netByCurrency);
+  }
+  return balances;
+}
+
+export async function friendBalances(userId: number): Promise<FriendBalance[]> {
+  const pairBalances = await accumulatePairBalances(userId);
+  const friendIds = [...pairBalances.keys()];
+  if (friendIds.length === 0) return [];
+  const users = await sql`SELECT id, display_name, username FROM users WHERE id = ANY(${friendIds})`;
+  return users.map((u) => ({
+    friendId: Number(u.id),
+    displayName: u.display_name,
+    username: u.username,
+    netByCurrency: pairBalances.get(Number(u.id)) ?? {},
+  }));
+}
+
+export async function pairwiseFriendBalance(userId: number, friendId: number): Promise<Record<string, number>> {
+  return (await accumulatePairBalances(userId, friendId)).get(friendId) ?? {};
+}
+
+export async function friendshipExists(userId: number, friendId: number): Promise<boolean> {
+  const [a, b] = friendId < userId ? [friendId, userId] : [userId, friendId];
+  const rows = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
+  return rows.length > 0;
+}
+
+export async function shareAnyGroup(userId: number, otherId: number): Promise<boolean> {
+  const rows = await sql`
+    SELECT 1
+    FROM group_members me
+    JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${otherId}
+    WHERE me.user_id = ${userId}
+    LIMIT 1`;
+  return rows.length > 0;
+}
+
+export async function shareGroup(groupId: number, userId: number, otherId: number): Promise<boolean> {
+  const rows = await sql`
+    SELECT
+      (SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${userId}) AS me,
+      (SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${otherId}) AS them`;
+  return !!rows[0]?.me && !!rows[0]?.them;
+}
+
+export async function canNudgeUser(userId: number, toId: number, groupId: number | null): Promise<boolean> {
+  return groupId ? shareGroup(groupId, userId, toId) : friendshipExists(userId, toId);
+}
+
+export async function canRequestFriendById(userId: number, friendId: number): Promise<boolean> {
+  return userId !== friendId && await shareAnyGroup(userId, friendId) && !(await friendshipExists(userId, friendId));
+}
+
+export async function canSettleDirectly(userId: number, friendId: number): Promise<boolean> {
+  return userId !== friendId && await friendshipExists(userId, friendId);
+}
+
+export async function canRemoveFriend(userId: number, friendId: number): Promise<boolean> {
+  return await friendshipExists(userId, friendId)
+    && Object.keys(await pairwiseFriendBalance(userId, friendId)).length === 0;
 }
 
 export async function isGroupMember(groupId: number, userId: number): Promise<boolean> {

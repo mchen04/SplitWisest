@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { handler, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
+import { activityActionText } from "@/lib/activity";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,6 +25,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       summary: a.summary,
       actorId: Number(a.actor_id),
       actorName: a.display_name,
+      actionText: activityActionText(a.summary, a.display_name),
       createdAt: a.created_at,
     })),
   });

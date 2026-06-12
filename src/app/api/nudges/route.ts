@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
+import { canNudgeUser } from "@/lib/balances";
 
 // Reminders the caller has received (newest first). Drives the "settle up"
 // nudge notifications.
@@ -44,16 +45,8 @@ export const POST = handler(async (req: NextRequest) => {
   const { toId, groupId, note } = Body.parse(await req.json());
   if (toId === user.id) badRequest("You can't nudge yourself");
 
-  if (groupId) {
-    const both = await sql`
-      SELECT
-        (SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${user.id}) AS me,
-        (SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${toId}) AS them`;
-    if (!both[0].me || !both[0].them) forbidden("You can only nudge group members");
-  } else {
-    const [a, b] = toId < user.id ? [toId, user.id] : [user.id, toId];
-    const friends = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
-    if (friends.length === 0) forbidden("You can only nudge friends");
+  if (!(await canNudgeUser(user.id, toId, groupId ?? null))) {
+    forbidden(groupId ? "You can only nudge group members" : "You can only nudge friends");
   }
 
   const existing = await sql`

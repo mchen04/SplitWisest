@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { handler } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
+import { activityActionText } from "@/lib/activity";
 
 export const GET = handler(async (req: NextRequest) => {
   const user = await requireUser();
@@ -30,6 +31,7 @@ export const GET = handler(async (req: NextRequest) => {
       groupName: a.group_name,
       actorId: Number(a.actor_id),
       actorName: a.actor_name,
+      actionText: activityActionText(a.summary, a.actor_name),
       type: a.type,
       summary: a.summary,
       createdAt: a.created_at,

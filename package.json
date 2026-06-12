@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:core": "tsx scripts/verify-core-flows.ts",
+    "verify:profiles": "tsx scripts/verify-private-profiles.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

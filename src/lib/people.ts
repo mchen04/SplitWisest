@@ -1,5 +1,5 @@
 import { sql } from "./db";
-import { pairwiseFriendBalance } from "./balances";
+import { canRemoveFriend, canRequestFriendById, canSettleDirectly, pairwiseFriendBalance } from "./balances";
 
 export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
 
@@ -195,10 +195,10 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       date: s.settled_date,
       note: s.note,
     })),
-    canChat: isFriend,
-    canSettleDirectly: isFriend,
+    canChat: await canSettleDirectly(viewerId, personId),
+    canSettleDirectly: await canSettleDirectly(viewerId, personId),
     canNudge: isFriend || hasSharedGroup,
-    canRequestFriend: relationship === "shared-group" && !request,
-    canRemoveFriend: isFriend && Object.keys(netByCurrency).length === 0,
+    canRequestFriend: !request && await canRequestFriendById(viewerId, personId),
+    canRemoveFriend: await canRemoveFriend(viewerId, personId),
   };
 }

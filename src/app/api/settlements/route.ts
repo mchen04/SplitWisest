@@ -5,6 +5,7 @@ import { handler, badRequest, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { settlementFields, settlementSummary } from "@/lib/settlements";
+import { canSettleDirectly } from "@/lib/balances";
 
 // History of direct (group-less) settlements involving the caller, optionally
 // narrowed to a single friend. Group settlements are listed per-group instead.
@@ -46,9 +47,7 @@ export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const body = Body.parse(await req.json());
   if (body.friendId === user.id) badRequest("Cannot settle with yourself");
-  const [a, b] = body.friendId < user.id ? [body.friendId, user.id] : [user.id, body.friendId];
-  const friends = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
-  if (friends.length === 0) forbidden("You are not friends with this user");
+  if (!(await canSettleDirectly(user.id, body.friendId))) forbidden("You are not friends with this user");
 
   const payerId = body.direction === "i-paid" ? user.id : body.friendId;
   const recipientId = body.direction === "i-paid" ? body.friendId : user.id;

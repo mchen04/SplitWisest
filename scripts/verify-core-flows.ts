@@ -1,7 +1,5 @@
-import { neon } from "@neondatabase/serverless";
+import { assert, assertNoSecretText, baseUrl, cleanupQaUsers, login, request, signup } from "./qa-support";
 
-const sql = neon(process.env.DATABASE_URL!);
-const baseUrl = process.env.SPLITWISEST_BASE_URL ?? "http://localhost:3000";
 const password = "core-flow-password";
 const recoveredPassword = "core-flow-recovered-password";
 const suffix = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`;
@@ -9,97 +7,14 @@ const today = new Date().toISOString().slice(0, 10);
 
 type Json = Record<string, unknown>;
 
-function assert(condition: unknown, message: string): asserts condition {
-  if (!condition) throw new Error(message);
-}
-
-function assertNoSecretText(value: unknown, label: string) {
-  const text = JSON.stringify(value);
-  for (const secret of ["password_hash", "recovery_codes", "sw_session"]) {
-    assert(!text.includes(secret), `${label} leaked ${secret}`);
-  }
-}
-
-async function cleanup() {
-  const users = await sql`SELECT id FROM users WHERE username LIKE ${`core\\_%\\_${suffix}`} ESCAPE '\\'`;
-  const userIds = users.map((u) => Number(u.id));
-  if (userIds.length === 0) return;
-  const groups = await sql`
-    SELECT DISTINCT g.id
-    FROM groups g
-    LEFT JOIN group_members gm ON gm.group_id = g.id
-    WHERE g.created_by = ANY(${userIds}) OR gm.user_id = ANY(${userIds})`;
-  const groupIds = groups.map((g) => Number(g.id));
-  if (groupIds.length > 0) await sql`DELETE FROM groups WHERE id = ANY(${groupIds})`;
-  await sql`DELETE FROM activity WHERE actor_id = ANY(${userIds})`;
-  await sql`DELETE FROM messages WHERE sender_id = ANY(${userIds}) OR dm_a = ANY(${userIds}) OR dm_b = ANY(${userIds})`;
-  await sql`DELETE FROM settlements WHERE payer_id = ANY(${userIds}) OR recipient_id = ANY(${userIds}) OR created_by = ANY(${userIds})`;
-  await sql`DELETE FROM nudges WHERE from_id = ANY(${userIds}) OR to_id = ANY(${userIds})`;
-  await sql`DELETE FROM friend_requests WHERE from_id = ANY(${userIds}) OR to_id = ANY(${userIds})`;
-  await sql`DELETE FROM friendships WHERE user_a = ANY(${userIds}) OR user_b = ANY(${userIds})`;
-  await sql`DELETE FROM recovery_codes WHERE user_id = ANY(${userIds})`;
-  await sql`DELETE FROM users WHERE id = ANY(${userIds})`;
-}
-
-async function request(path: string, opts: { cookie?: string; method?: string; body?: unknown; form?: FormData } = {}) {
-  const res = await fetch(`${baseUrl}${path}`, {
-    method: opts.method ?? (opts.body || opts.form ? "POST" : "GET"),
-    headers: {
-      ...(opts.cookie ? { cookie: opts.cookie } : {}),
-      ...(opts.body ? { "content-type": "application/json" } : {}),
-    },
-    body: opts.form ?? (opts.body ? JSON.stringify(opts.body) : undefined),
-  });
-  const contentType = res.headers.get("content-type") ?? "";
-  const json = contentType.includes("json") ? await res.json().catch(() => ({})) : {};
-  return { res, json: json as Json, text: contentType.includes("json") ? "" : await res.text().catch(() => "") };
-}
-
-async function signup(role: string) {
-  const username = `core_${role}_${suffix}`;
-  const displayName = `Core ${role} ${suffix}`;
-  const res = await fetch(`${baseUrl}/api/auth/signup`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username, password, displayName }),
-  });
-  assert(res.ok, `signup failed for ${role}: ${res.status} ${await res.text()}`);
-  const cookie = res.headers.get("set-cookie")?.split(";")[0];
-  assert(cookie, `signup did not set cookie for ${role}`);
-  const me = await request("/api/me", { cookie });
-  assert(me.res.ok, `me failed for ${role}`);
-  const user = (me.json.user as Json);
-  return {
-    id: Number(user.id),
-    username,
-    displayName,
-    inviteCode: String(user.inviteCode),
-    cookie,
-  };
-}
-
-async function login(username: string, rawPassword: string) {
-  const res = await fetch(`${baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username, password: rawPassword }),
-  });
-  const text = await res.text();
-  return {
-    res,
-    text,
-    cookie: res.headers.get("set-cookie")?.split(";")[0] ?? "",
-  };
-}
-
 async function main() {
   assert(process.env.DATABASE_URL, "DATABASE_URL is required");
-  await cleanup();
+  await cleanupQaUsers(suffix, "core");
 
-  const alice = await signup("alice");
-  const bob = await signup("bob");
-  const charlie = await signup("charlie");
-  const outsider = await signup("outsider");
+  const alice = await signup("alice", suffix, password, "core");
+  const bob = await signup("bob", suffix, password, "core");
+  const charlie = await signup("charlie", suffix, password, "core");
+  const outsider = await signup("outsider", suffix, password, "core");
 
   const created = await request("/api/groups", {
     cookie: alice.cookie,
@@ -301,4 +216,4 @@ main()
     console.error(err);
     process.exitCode = 1;
   })
-  .finally(cleanup);
+  .finally(() => cleanupQaUsers(suffix, "core"));

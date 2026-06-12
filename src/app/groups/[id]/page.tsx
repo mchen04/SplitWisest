@@ -83,7 +83,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [settlements, setSettlements] = useState<Settlement[] | null>(null);
   const [settlementLimit, setSettlementLimit] = useState(50);
   const [hasMoreSettlements, setHasMoreSettlements] = useState(false);
-  const [activity, setActivity] = useState<{ id: number; actorId: number; actorName: string; summary: string; createdAt: string }[] | null>(null);
+  const [activity, setActivity] = useState<{ id: number; actorId: number; actorName: string; actionText: string; summary: string; createdAt: string }[] | null>(null);
   const [tab, setTab] = useState<Tab>("expenses");
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -115,7 +115,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     api<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`)
       .then((r) => setRecurring(r.recurring.filter((x) => x.active)))
       .catch(() => {});
-    api<{ activity: { id: number; actorId: number; actorName: string; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
+    api<{ activity: { id: number; actorId: number; actorName: string; actionText: string; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
       .then((r) => setActivity(r.activity))
       .catch(() => {});
     api<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${settlementLimit}`)
