@@ -5,11 +5,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode } from "react";
 import {
   LayoutDashboard, Users, Scale, Receipt, LogOut, Wallet,
-  MessageSquare, ScrollText, Settings, Moon, Sun,
+  MessageSquare, ScrollText, Settings, Moon, Sun, Plus,
 } from "lucide-react";
-import { api, useMe, useUnread, type Unread } from "@/lib/client";
+import { api, useApiData, useMe, useUnread, type Unread } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
 import { Avatar } from "./ui";
+
+interface GroupRef { id: number }
 
 type BadgeKey = keyof Unread;
 
@@ -37,6 +39,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
   const unread = useUnread();
   const { theme, toggle } = useTheme();
+  // Mirror Home's behaviour: jump straight into the first group's add-expense
+  // flow, or fall back to the groups list when there's nowhere to add yet.
+  const { data: groupsData } = useApiData<{ groups: GroupRef[] }>("/api/groups");
+  const firstGroup = groupsData?.groups?.[0];
+  const addExpenseHref = firstGroup ? `/groups/${firstGroup.id}?add=1` : "/groups";
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
@@ -49,14 +56,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="paper-grain min-h-dvh">
       {/* Desktop / tablet sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-line bg-card md:flex">
-        <Link href="/" className="flex items-center gap-2 px-5 py-5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-on-accent">
-            <Wallet className="h-4.5 w-4.5" />
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[246px] flex-col border-r border-line bg-card md:flex">
+        <Link href="/" className="flex items-center gap-2.5 px-[18px] pb-3 pt-5">
+          <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-accent text-on-accent">
+            <Wallet className="h-5 w-5" />
           </span>
-          <span className="font-display text-lg font-bold tracking-tight">SplitWisest</span>
+          <span className="font-display text-xl font-bold tracking-tight">SplitWisest</span>
         </Link>
-        <nav className="flex flex-1 flex-col gap-1 px-3">
+        <div className="px-3.5 pb-2.5">
+          <Link
+            href={addExpenseHref}
+            className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-[11px] bg-accent px-2.5 py-2.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark"
+          >
+            <Plus className="h-4.5 w-4.5" /> Add expense
+          </Link>
+        </div>
+        <nav className="flex flex-1 flex-col gap-0.5 px-3">
           {NAV.map(({ href, label, icon: Icon, badge }) => (
             <Link
               key={href}
@@ -128,23 +143,23 @@ export function AppShell({ children }: { children: ReactNode }) {
             {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
           </button>
           <Link
+            href={addExpenseHref}
+            aria-label="Add expense"
+            className="rounded-lg bg-accent-soft p-2 text-accent-dark"
+          >
+            <Plus className="h-4.5 w-4.5" />
+          </Link>
+          <Link
             href="/settings"
             aria-label="Settings"
-            className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+            className="rounded-lg p-2 text-ink-soft hover:bg-paper"
           >
             <Settings className="h-4.5 w-4.5" />
           </Link>
-          <button
-            onClick={logout}
-            aria-label="Log out"
-            className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
-          >
-            <LogOut className="h-4.5 w-4.5" />
-          </button>
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-hidden md:pb-6 md:pt-6 lg:px-10">
+      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-[246px] md:h-dvh md:overflow-hidden md:pb-6 md:pt-6 lg:px-10">
         <div className="mx-auto flex w-full max-w-5xl flex-col md:h-full md:min-h-0">{children}</div>
       </main>
 
