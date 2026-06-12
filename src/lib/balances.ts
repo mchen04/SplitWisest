@@ -75,21 +75,82 @@ export interface FriendBalance {
 }
 
 async function accumulatePairBalances(userId: number, onlyFriendId?: number): Promise<Map<number, Record<string, number>>> {
-  const groupFilter = onlyFriendId
-    ? sql`JOIN group_members them ON them.group_id = g.id AND them.user_id = ${onlyFriendId}`
-    : sql``;
-  const groups = await sql`
-    SELECT g.id, g.currency
-    FROM groups g
-    JOIN group_members gm ON gm.group_id = g.id AND gm.user_id = ${userId}
-    ${groupFilter}`;
   const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
 
-  const groupBalancesList = await Promise.all(groups.map(async (g) => ({
-    currency: g.currency,
-    balances: await groupBalances(Number(g.id)),
-  })));
-  for (const g of groupBalancesList) {
+  const groupRows = await sql`
+    WITH relevant_groups AS (
+      SELECT g.id, g.currency
+      FROM groups g
+      WHERE EXISTS (
+        SELECT 1 FROM group_members me
+        WHERE me.group_id = g.id AND me.user_id = ${userId}
+      )
+      AND (${onlyFriendId ?? null}::bigint IS NULL OR EXISTS (
+        SELECT 1 FROM group_members them
+        WHERE them.group_id = g.id AND them.user_id = ${onlyFriendId ?? null}
+      ))
+    ),
+    members AS (
+      SELECT rg.id AS group_id, rg.currency, u.id AS user_id, u.display_name
+      FROM relevant_groups rg
+      JOIN group_members gm ON gm.group_id = rg.id
+      JOIN users u ON u.id = gm.user_id
+    ),
+    paid AS (
+      SELECT e.group_id, e.payer_id AS uid, COALESCE(SUM(e.converted_cents), 0) AS amt
+      FROM expenses e
+      JOIN relevant_groups rg ON rg.id = e.group_id
+      GROUP BY e.group_id, e.payer_id
+    ),
+    owed AS (
+      SELECT e.group_id, es.user_id AS uid, COALESCE(SUM(
+        CASE WHEN e.amount_cents = 0 THEN 0
+        ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END
+      ), 0) AS amt
+      FROM expense_shares es
+      JOIN expenses e ON e.id = es.expense_id
+      JOIN relevant_groups rg ON rg.id = e.group_id
+      GROUP BY e.group_id, es.user_id
+    ),
+    settled_out AS (
+      SELECT s.group_id, s.payer_id AS uid, COALESCE(SUM(s.converted_cents), 0) AS amt
+      FROM settlements s
+      JOIN relevant_groups rg ON rg.id = s.group_id
+      GROUP BY s.group_id, s.payer_id
+    ),
+    settled_in AS (
+      SELECT s.group_id, s.recipient_id AS uid, COALESCE(SUM(s.converted_cents), 0) AS amt
+      FROM settlements s
+      JOIN relevant_groups rg ON rg.id = s.group_id
+      GROUP BY s.group_id, s.recipient_id
+    )
+    SELECT m.group_id, m.currency, m.user_id, m.display_name,
+      COALESCE(p.amt,0) - COALESCE(o.amt,0) + COALESCE(so.amt,0) - COALESCE(si.amt,0) AS net
+    FROM members m
+    LEFT JOIN paid p ON p.group_id = m.group_id AND p.uid = m.user_id
+    LEFT JOIN owed o ON o.group_id = m.group_id AND o.uid = m.user_id
+    LEFT JOIN settled_out so ON so.group_id = m.group_id AND so.uid = m.user_id
+    LEFT JOIN settled_in si ON si.group_id = m.group_id AND si.uid = m.user_id
+    ORDER BY m.group_id, m.display_name`;
+
+  const byGroup = new Map<number, { currency: string; balances: MemberBalance[] }>();
+  for (const row of groupRows) {
+    const groupId = Number(row.group_id);
+    const group = byGroup.get(groupId) ?? { currency: row.currency as string, balances: [] as MemberBalance[] };
+    group.balances.push({
+      userId: Number(row.user_id),
+      displayName: row.display_name,
+      netCents: Number(row.net),
+    });
+    byGroup.set(groupId, group);
+  }
+
+  for (const g of byGroup.values()) {
+    const drift = g.balances.reduce((sum, b) => sum + b.netCents, 0);
+    if (drift !== 0 && g.balances.length > 0) {
+      const target = g.balances.reduce((a, b) => (Math.abs(b.netCents) > Math.abs(a.netCents) ? b : a));
+      target.netCents -= drift;
+    }
     for (const t of simplifyDebts(new Map(g.balances.map((b) => [b.userId, b.netCents])))) {
       if (t.from === userId && (!onlyFriendId || t.to === onlyFriendId)) {
         const key = `${t.to}:${g.currency}`;

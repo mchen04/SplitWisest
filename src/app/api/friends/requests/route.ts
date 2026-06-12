@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { logActivity } from "@/lib/activity";
+import { logUserActivity } from "@/lib/activity";
 import { cancelFriendRequest, createFriendship, friendshipExists } from "@/lib/relationships";
 
 const Body = z.object({
@@ -39,6 +39,12 @@ export const POST = handler(async (req: NextRequest) => {
     badRequest("You are already friends");
   }
   await createFriendship(fromId, toId);
-  await logActivity(null, user.id, "friend.added", `${user.displayName} accepted a friend request`, {}, "accepted a friend request");
+  await logUserActivity({
+    actorId: user.id,
+    visibleUserIds: [fromId, toId],
+    type: "friend.added",
+    summary: `${user.displayName} accepted a friend request`,
+    actionText: "accepted a friend request",
+  });
   return NextResponse.json({ ok: true });
 });

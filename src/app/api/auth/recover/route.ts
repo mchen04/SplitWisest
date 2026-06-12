@@ -29,8 +29,13 @@ export const POST = handler(async (req: NextRequest) => {
   const match = codes.find((c) => verifyRecoveryCode(code, c.code_hash));
   if (!match) badRequest("Invalid username or recovery code");
 
+  const consumed = await sql`
+    UPDATE recovery_codes SET used_at = now()
+    WHERE id = ${match.id} AND used_at IS NULL
+    RETURNING id`;
+  if (consumed.length === 0) badRequest("Invalid username or recovery code");
+
   await sql`UPDATE users SET password_hash = ${hashPassword(newPassword)} WHERE id = ${userId}`;
-  await sql`UPDATE recovery_codes SET used_at = now() WHERE id = ${match.id}`;
   // Invalidate existing sessions so a thief who knew the old password is kicked.
   await sql`DELETE FROM sessions WHERE user_id = ${userId}`;
 
