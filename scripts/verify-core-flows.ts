@@ -1,11 +1,9 @@
-import { assert, assertNoSecretText, baseUrl, cleanupQaUsers, login, request, signup } from "./qa-support";
+import { assert, assertNoSecretText, baseUrl, cleanupQaUsers, jsonArray, jsonNumber, jsonObject, jsonString, login, request, signup } from "./qa-support";
 
 const password = "core-flow-password";
 const recoveredPassword = "core-flow-recovered-password";
 const suffix = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`;
 const today = new Date().toISOString().slice(0, 10);
-
-type Json = Record<string, unknown>;
 
 async function main() {
   assert(process.env.DATABASE_URL, "DATABASE_URL is required");
@@ -28,13 +26,15 @@ async function main() {
   assert(join.res.status === 200, `join group returned ${join.res.status}`);
 
   const bobGroups = await request("/api/groups", { cookie: bob.cookie });
-  assert((bobGroups.json.groups as unknown[]).some((g) => Number((g as Json).id) === groupId), "joined group missing for Bob");
+  assert(jsonArray(bobGroups.json.groups, "groups").some((g) => jsonNumber(jsonObject(g, "group").id, "group.id") === groupId), "joined group missing for Bob");
   assertNoSecretText(bobGroups.json, "groups response");
 
   const friendReq = await request("/api/friends", { cookie: charlie.cookie, body: { code: alice.inviteCode } });
   assert(friendReq.res.status === 200, `friend request returned ${friendReq.res.status}`);
   const aliceFriends = await request("/api/friends", { cookie: alice.cookie });
-  const incoming = (aliceFriends.json.incomingRequests as Json[]).find((r) => Number(r.userId) === charlie.id);
+  const incoming = jsonArray(aliceFriends.json.incomingRequests, "incomingRequests")
+    .map((r) => jsonObject(r, "incoming request"))
+    .find((r) => jsonNumber(r.userId, "incoming userId") === charlie.id);
   assert(incoming, "incoming friend request not visible");
   const accept = await request("/api/friends/requests", {
     cookie: alice.cookie,
@@ -59,7 +59,7 @@ async function main() {
 
   const detail = await request(`/api/expenses/${expenseId}`, { cookie: bob.cookie });
   assert(detail.res.status === 200, `expense detail returned ${detail.res.status}`);
-  assert((detail.json.expense as Json).title === expenseBody.title, "expense title mismatch");
+  assert(jsonObject(detail.json.expense, "expense").title === expenseBody.title, "expense title mismatch");
 
   const patched = await request(`/api/expenses/${expenseId}`, {
     cookie: alice.cookie,
@@ -157,13 +157,13 @@ async function main() {
   const dm = await request(`/api/dm/${charlie.id}/messages`, { cookie: alice.cookie, body: { body: `dm hello ${suffix}` } });
   assert(dm.res.status === 200, `dm returned ${dm.res.status}`);
   const bobSync = await request("/api/sync", { cookie: bob.cookie });
-  assert(Number(((bobSync.json.unread as Json).messages)) > 0, "Bob should have unread group message");
+  assert(jsonNumber(jsonObject(bobSync.json.unread, "unread").messages, "unread.messages") > 0, "Bob should have unread group message");
   await request("/api/read", { cookie: bob.cookie, body: { scope: `msg:group:${groupId}`, lastId: Number(groupMsg.json.id) } });
 
   const nudge = await request("/api/nudges", { cookie: alice.cookie, body: { toId: bob.id, groupId, note: "please settle" } });
   assert(nudge.res.status === 200, `nudge returned ${nudge.res.status}`);
   const bobSyncAfterNudge = await request("/api/sync", { cookie: bob.cookie });
-  assert(Number((bobSyncAfterNudge.json.unread as Json).nudges) > 0, "Bob should have unread nudge");
+  assert(jsonNumber(jsonObject(bobSyncAfterNudge.json.unread, "unread").nudges, "unread.nudges") > 0, "Bob should have unread nudge");
 
   const csv = await fetch(`${baseUrl}/api/groups/${groupId}/export`, { headers: { cookie: alice.cookie } });
   assert(csv.status === 200, `CSV returned ${csv.status}`);
@@ -171,7 +171,8 @@ async function main() {
 
   const recovery = await request("/api/me/recovery-codes", { cookie: alice.cookie, method: "POST" });
   assert(recovery.res.status === 200, `recovery returned ${recovery.res.status}`);
-  assert((recovery.json.codes as unknown[]).length === 8, "recovery code count mismatch");
+  const recoveryCodes = jsonArray(recovery.json.codes, "recovery codes");
+  assert(recoveryCodes.length === 8, "recovery code count mismatch");
   const settings = await request("/api/me", {
     cookie: alice.cookie,
     method: "PATCH",
@@ -194,7 +195,7 @@ async function main() {
   const deleteExpense = await request(`/api/expenses/${expenseId}`, { cookie: alice.cookie, method: "DELETE" });
   assert(deleteExpense.res.status === 200, `delete expense returned ${deleteExpense.res.status}`);
 
-  const recoveryCode = String((recovery.json.codes as string[])[0]);
+  const recoveryCode = jsonString(recoveryCodes[0], "recovery code");
   const recovered = await fetch(`${baseUrl}/api/auth/recover`, {
     method: "POST",
     headers: { "content-type": "application/json" },

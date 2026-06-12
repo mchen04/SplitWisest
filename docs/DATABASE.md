@@ -29,9 +29,9 @@ DATABASE_URL=... pnpm tsx scripts/migrate.ts
 | `fx_rates` | cached currency rates (units per USD), refreshed daily from open.er-api.com with static fallback |
 | `recovery_codes` | one-time account-recovery codes, scrypt-hashed; `used_at` marks a spent code |
 | `expense_comments` | per-expense comment threads |
-| `read_state` | per-user read cursors keyed by `scope` (`activity`, `msg:group:<id>`, `msg:dm:<friendId>`); drives unread badges |
-| `nudges` | settle-up reminders from one user to another (optionally group-scoped); `seen_at` dismisses |
-| `friend_requests` | pending friend requests (`from_id` → `to_id`); accepting creates a `friendships` row |
+| `read_state` | per-user read cursors keyed by `scope` (`activity`, `msg:group:<id>`, `msg:dm:<friendId>`); clears activity/message unread badges |
+| `nudges` | settle-up reminders from one user to another (optionally group-scoped); max unseen id is a sync cursor and `seen_at` dismisses |
+| `friend_requests` | pending friend requests (`from_id` → `to_id`); max incoming id is a sync cursor, and accepting/declining/canceling clears request badges |
 
 ## Conventions
 

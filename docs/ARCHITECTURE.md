@@ -26,7 +26,7 @@ Settlements are ledger rows only (payer, recipient, amount, date, note) — no m
 
 ## Realtime
 
-`GET /api/sync` returns the max visible activity id and message id for the user. The client polls every 4s (16s when the tab is hidden) via `useSync`; when a cursor advances, affected views refetch and chat panes fetch messages `since` their last id. No websockets — reliable on serverless, no connection state to break.
+`GET /api/sync` returns visible cursors for activity, messages, nudges, and friend requests, plus unread counts for messages, activity, nudges, requests, and the aggregate Balances badge. The client polls every 4s (16s when the tab is hidden) via `useSync`; when any cursor advances, affected views refetch and chat panes fetch messages `since` their last id. Activity and message scopes clear through `read_state`; nudges clear via `seen_at`; friend requests clear when accepted/declined/canceled. No websockets — reliable on serverless, no connection state to break.
 
 ## Chat
 

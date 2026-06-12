@@ -64,6 +64,8 @@ export interface Unread {
 export interface SyncCursors {
   activityCursor: number;
   messageCursor: number;
+  nudgeCursor: number;
+  requestCursor: number;
   unread?: Unread;
 }
 
@@ -117,7 +119,12 @@ export function useSync(onChange: ((c: SyncCursors) => void) | undefined, interv
         if (stopped) return;
         const prev = last.current;
         last.current = c;
-        if (prev && (c.activityCursor !== prev.activityCursor || c.messageCursor !== prev.messageCursor)) {
+        if (prev && (
+          c.activityCursor !== prev.activityCursor ||
+          c.messageCursor !== prev.messageCursor ||
+          c.nudgeCursor !== prev.nudgeCursor ||
+          c.requestCursor !== prev.requestCursor
+        )) {
           cb.current?.(c);
         }
       } catch {

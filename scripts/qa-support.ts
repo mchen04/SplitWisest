@@ -16,6 +16,27 @@ export function assertNoSecretText(value: unknown, label: string) {
   }
 }
 
+export function jsonObject(value: unknown, label: string): Json {
+  assert(value !== null && typeof value === "object" && !Array.isArray(value), `${label} must be an object`);
+  return value as Json;
+}
+
+export function jsonArray(value: unknown, label: string): unknown[] {
+  assert(Array.isArray(value), `${label} must be an array`);
+  return value;
+}
+
+export function jsonNumber(value: unknown, label: string): number {
+  const n = Number(value);
+  assert(Number.isFinite(n), `${label} must be numeric`);
+  return n;
+}
+
+export function jsonString(value: unknown, label: string): string {
+  assert(typeof value === "string", `${label} must be a string`);
+  return value;
+}
+
 export async function request(path: string, opts: { cookie?: string; method?: string; body?: unknown; form?: FormData } = {}) {
   const res = await fetch(`${baseUrl}${path}`, {
     method: opts.method ?? (opts.body || opts.form ? "POST" : "GET"),
@@ -44,7 +65,7 @@ export async function signup(role: string, suffix: string, password: string, pre
   assert(cookie, `signup did not set cookie for ${role}`);
   const me = await request("/api/me", { cookie });
   assert(me.res.ok, `me failed for ${role}`);
-  const user = me.json.user as Json;
+  const user = jsonObject(me.json.user, "me.user");
   return {
     id: Number(user.id),
     username,

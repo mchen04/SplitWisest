@@ -1,4 +1,4 @@
-import { assert, assertNoSecretText, cleanupQaUsers, request, signup, sql, Json } from "./qa-support";
+import { assert, assertNoSecretText, cleanupQaUsers, jsonArray, jsonNumber, jsonObject, request, signup, sql } from "./qa-support";
 
 const password = "profile-qa-password";
 const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -24,7 +24,9 @@ async function main() {
   const friendRequest = await request("/api/friends", { cookie: friend.cookie, body: { code: viewer.inviteCode } });
   assert(friendRequest.res.status === 200, `friend request failed: ${friendRequest.res.status}`);
   const viewerFriends = await request("/api/friends", { cookie: viewer.cookie });
-  const incomingFriend = (viewerFriends.json.incomingRequests as Json[]).find((r) => Number(r.userId) === friend.id);
+  const incomingFriend = jsonArray(viewerFriends.json.incomingRequests, "incomingRequests")
+    .map((r) => jsonObject(r, "incoming request"))
+    .find((r) => jsonNumber(r.userId, "incoming userId") === friend.id);
   assert(incomingFriend, "friend request not visible to viewer");
   const acceptFriend = await request("/api/friends/requests", {
     cookie: viewer.cookie,
@@ -82,29 +84,30 @@ async function main() {
     const { res, json } = await request(`/api/people/${c.id}`, { cookie: viewer.cookie });
     assert(res.status === 200, `${c.relationship} profile returned ${res.status}`);
     assertNoSecretText(json, `${c.relationship} profile`);
-    const profile = json.profile as Json;
+    const profile = jsonObject(json.profile, `${c.relationship} profile`);
     assert(profile?.relationship === c.relationship, `expected ${c.relationship}, got ${String(profile?.relationship)}`);
   }
 
-  const friendProfile = (await request(`/api/people/${friend.id}`, { cookie: viewer.cookie })).json.profile as Json;
-  assert((friendProfile.sharedGroups as unknown[]).length === 1, "friend profile should include shared group");
-  assert((friendProfile.recentExpenses as unknown[]).length === 1, "friend profile should include shared expense");
-  assert((friendProfile.recentPayments as unknown[]).length === 1, "friend profile should include shared settlement");
-  assert(Number(((friendProfile.recentPayments as Json[])[0]).amountCents) === 500, "settlement history should show original amount");
-  assert(((friendProfile.recentPayments as Json[])[0]).currency === "EUR", "settlement history should show original currency");
+  const friendProfile = jsonObject((await request(`/api/people/${friend.id}`, { cookie: viewer.cookie })).json.profile, "friend profile");
+  assert(jsonArray(friendProfile.sharedGroups, "friend sharedGroups").length === 1, "friend profile should include shared group");
+  assert(jsonArray(friendProfile.recentExpenses, "friend recentExpenses").length === 1, "friend profile should include shared expense");
+  const friendPayments = jsonArray(friendProfile.recentPayments, "friend recentPayments").map((p) => jsonObject(p, "recent payment"));
+  assert(friendPayments.length === 1, "friend profile should include shared settlement");
+  assert(jsonNumber(friendPayments[0].amountCents, "payment amount") === 500, "settlement history should show original amount");
+  assert(friendPayments[0].currency === "EUR", "settlement history should show original currency");
   assert(friendProfile.canChat === true, "friend profile should allow chat");
   assert(friendProfile.canSettleDirectly === true, "friend profile should allow direct settlement");
 
-  const sharedProfile = (await request(`/api/people/${shared.id}`, { cookie: viewer.cookie })).json.profile as Json;
-  assert((sharedProfile.sharedGroups as unknown[]).length === 1, "shared profile should include only shared groups");
+  const sharedProfile = jsonObject((await request(`/api/people/${shared.id}`, { cookie: viewer.cookie })).json.profile, "shared profile");
+  assert(jsonArray(sharedProfile.sharedGroups, "shared sharedGroups").length === 1, "shared profile should include only shared groups");
   assert(sharedProfile.canChat === false, "shared non-friend profile should not allow direct chat");
   assert(sharedProfile.canRequestFriend === true, "shared non-friend profile should allow friend request");
 
-  const pendingProfile = (await request(`/api/people/${pending.id}`, { cookie: viewer.cookie })).json.profile as Json;
-  assert((pendingProfile.sharedGroups as unknown[]).length === 0, "pending profile should not include shared groups");
-  assert((pendingProfile.recentExpenses as unknown[]).length === 0, "pending profile should not include expenses");
-  assert((pendingProfile.recentPayments as unknown[]).length === 0, "pending profile should not include payments");
-  assert(Object.keys(pendingProfile.netByCurrency as Json).length === 0, "pending profile should not include balances");
+  const pendingProfile = jsonObject((await request(`/api/people/${pending.id}`, { cookie: viewer.cookie })).json.profile, "pending profile");
+  assert(jsonArray(pendingProfile.sharedGroups, "pending sharedGroups").length === 0, "pending profile should not include shared groups");
+  assert(jsonArray(pendingProfile.recentExpenses, "pending recentExpenses").length === 0, "pending profile should not include expenses");
+  assert(jsonArray(pendingProfile.recentPayments, "pending recentPayments").length === 0, "pending profile should not include payments");
+  assert(Object.keys(jsonObject(pendingProfile.netByCurrency, "pending netByCurrency")).length === 0, "pending profile should not include balances");
 
   const unauth = await request(`/api/people/${friend.id}`);
   assert(unauth.res.status === 401, `unauth profile returned ${unauth.res.status}`);
@@ -142,7 +145,7 @@ async function main() {
     body: { userId: shared.id },
   });
   assert(sharedFriendRequest.res.status === 200, `shared-group friend request failed: ${sharedFriendRequest.res.status}`);
-  assert((sharedFriendRequest.json as Json).status === "requested", "friend request should be pending");
+  assert(sharedFriendRequest.json.status === "requested", "friend request should be pending");
 
   console.log(`private profile QA passed for group ${groupId}`);
 }

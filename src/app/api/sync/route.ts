@@ -15,9 +15,15 @@ export const GET = handler(async () => {
            OR (a.group_id IS NULL AND a.actor_id = ${user.id})) AS act,
       (SELECT COALESCE(MAX(m.id),0) FROM messages m
         WHERE m.group_id IN (SELECT group_id FROM group_members WHERE user_id = ${user.id})
-           OR m.dm_a = ${user.id} OR m.dm_b = ${user.id}) AS msg`;
+           OR m.dm_a = ${user.id} OR m.dm_b = ${user.id}) AS msg,
+      (SELECT COALESCE(MAX(n.id),0) FROM nudges n
+        WHERE n.to_id = ${user.id} AND n.seen_at IS NULL) AS nudge,
+      (SELECT COALESCE(MAX(fr.id),0) FROM friend_requests fr
+        WHERE fr.to_id = ${user.id}) AS req`;
   const activityCursor = Number(rows[0].act);
   const messageCursor = Number(rows[0].msg);
+  const nudgeCursor = Number(rows[0].nudge);
+  const requestCursor = Number(rows[0].req);
 
   // Unread messages: count conversations whose newest message (from someone
   // else) is past this user's read marker for that conversation.
@@ -48,6 +54,8 @@ export const GET = handler(async () => {
   return NextResponse.json({
     activityCursor,
     messageCursor,
+    nudgeCursor,
+    requestCursor,
     unread: {
       messages: Number(unread[0].messages),
       activity: Number(unread[0].activity),
