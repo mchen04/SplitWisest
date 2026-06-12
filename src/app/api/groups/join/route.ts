@@ -23,6 +23,6 @@ export const POST = handler(async (req: NextRequest) => {
     const other = Number(m.user_id);
     await createFriendship(other, user.id);
   }
-  await logActivity(groupId, user.id, "group.joined", `${user.displayName} joined the group`);
+  await logActivity(groupId, user.id, "group.joined", `${user.displayName} joined the group`, {}, "joined the group");
   return NextResponse.json({ id: groupId });
 });

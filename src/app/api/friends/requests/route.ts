@@ -39,6 +39,6 @@ export const POST = handler(async (req: NextRequest) => {
     badRequest("You are already friends");
   }
   await createFriendship(fromId, toId);
-  await logActivity(null, user.id, "friend.added", `${user.displayName} accepted a friend request`);
+  await logActivity(null, user.id, "friend.added", `${user.displayName} accepted a friend request`, {}, "accepted a friend request");
   return NextResponse.json({ ok: true });
 });

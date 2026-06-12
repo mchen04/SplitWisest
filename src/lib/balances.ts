@@ -85,9 +85,12 @@ async function accumulatePairBalances(userId: number, onlyFriendId?: number): Pr
     ${groupFilter}`;
   const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
 
-  for (const g of groups) {
-    const balances = await groupBalances(Number(g.id));
-    for (const t of simplifyDebts(new Map(balances.map((b) => [b.userId, b.netCents])))) {
+  const groupBalancesList = await Promise.all(groups.map(async (g) => ({
+    currency: g.currency,
+    balances: await groupBalances(Number(g.id)),
+  })));
+  for (const g of groupBalancesList) {
+    for (const t of simplifyDebts(new Map(g.balances.map((b) => [b.userId, b.netCents])))) {
       if (t.from === userId && (!onlyFriendId || t.to === onlyFriendId)) {
         const key = `${t.to}:${g.currency}`;
         pairTotals.set(key, (pairTotals.get(key) ?? 0) - t.amountCents);

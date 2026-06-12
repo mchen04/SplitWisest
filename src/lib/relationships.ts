@@ -1,4 +1,5 @@
 import { sql } from "./db";
+import { forbidden } from "./api";
 import { pairwiseFriendBalance } from "./balances";
 
 export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
@@ -22,8 +23,16 @@ export async function friendshipExists(userId: number, friendId: number): Promis
 
 export async function createFriendship(userId: number, friendId: number) {
   const [a, b] = orderedPair(userId, friendId);
-  await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
-  await sql`DELETE FROM friend_requests WHERE (from_id = ${userId} AND to_id = ${friendId}) OR (from_id = ${friendId} AND to_id = ${userId})`;
+  await sql`
+    WITH inserted AS (
+      INSERT INTO friendships (user_a, user_b)
+      VALUES (${a}, ${b})
+      ON CONFLICT DO NOTHING
+      RETURNING 1
+    )
+    DELETE FROM friend_requests
+    WHERE (from_id = ${userId} AND to_id = ${friendId})
+       OR (from_id = ${friendId} AND to_id = ${userId})`;
 }
 
 export async function removeFriendship(userId: number, friendId: number) {
@@ -123,6 +132,14 @@ export async function canRequestFriendById(userId: number, friendId: number): Pr
 
 export async function canSettleDirectly(userId: number, friendId: number): Promise<boolean> {
   return userId !== friendId && await friendshipExists(userId, friendId);
+}
+
+export async function requireFriendship(userId: number, friendId: number): Promise<[number, number]> {
+  const [a, b] = orderedPair(userId, friendId);
+  if (!(await friendshipExists(userId, friendId))) {
+    forbidden("You are not friends with this user");
+  }
+  return [a, b];
 }
 
 export async function canRemoveFriend(userId: number, friendId: number): Promise<boolean> {

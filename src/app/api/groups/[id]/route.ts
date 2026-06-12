@@ -51,7 +51,7 @@ export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
   const { name } = PatchBody.parse(await req.json());
   const rows = await sql`UPDATE groups SET name = ${name} WHERE id = ${groupId} RETURNING id`;
   if (rows.length === 0) notFound();
-  await logActivity(groupId, user.id, "group.renamed", `${user.displayName} renamed the group to "${name}"`);
+  await logActivity(groupId, user.id, "group.renamed", `${user.displayName} renamed the group to "${name}"`, {}, `renamed the group to "${name}"`);
   return NextResponse.json({ ok: true });
 });
 

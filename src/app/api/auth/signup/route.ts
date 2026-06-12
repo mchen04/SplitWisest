@@ -55,9 +55,9 @@ export const POST = handler(async (req: NextRequest) => {
       const other = Number(m.user_id);
       await createFriendship(other, userId);
     }
-    await logActivity(joinGroupId, userId, "group.joined", `${displayName} joined the group`);
+    await logActivity(joinGroupId, userId, "group.joined", `${displayName} joined the group`, {}, "joined the group");
   }
-  await logActivity(null, userId, "user.joined", `${displayName} joined SplitWisest`);
+  await logActivity(null, userId, "user.joined", `${displayName} joined SplitWisest`, {}, "joined SplitWisest");
 
   const token = await createSession(userId);
   await setSessionCookie(token);

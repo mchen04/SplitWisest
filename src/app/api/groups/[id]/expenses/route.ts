@@ -83,6 +83,7 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   const expenseId = await insertExpense(groupId, group[0].currency, user.id, input);
   await logActivity(groupId, user.id, "expense.added",
     `${user.displayName} added "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`,
-    { expenseId });
+    { expenseId },
+    `added "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`);
   return NextResponse.json({ id: expenseId });
 });

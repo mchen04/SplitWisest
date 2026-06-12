@@ -59,6 +59,7 @@ export const POST = handler(async (req: NextRequest) => {
     RETURNING id`;
   await logActivity(null, user.id, "settlement.recorded",
     await settlementSummary(payerId, recipientId, body.amountCents, body.currency),
-    { settlementId: Number(rows[0].id) });
+    { settlementId: Number(rows[0].id) },
+    await settlementSummary(payerId, recipientId, body.amountCents, body.currency));
   return NextResponse.json({ id: Number(rows[0].id) });
 });

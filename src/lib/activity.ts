@@ -5,10 +5,12 @@ export async function logActivity(
   actorId: number,
   type: string,
   summary: string,
-  data: Record<string, unknown> = {}
+  data: Record<string, unknown> = {},
+  actionText?: string
 ) {
+  const payload = actionText ? { ...data, actionText } : data;
   await sql`INSERT INTO activity (group_id, actor_id, type, summary, data)
-            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify(data)})`;
+            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify(payload)})`;
 }
 
 export function activityActionText(row: { summary: string; actorName: string; data?: unknown }): string {

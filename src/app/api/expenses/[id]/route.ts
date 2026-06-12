@@ -72,7 +72,8 @@ export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
   });
   await logActivity(Number(e.group_id), user.id, "expense.edited",
     `${user.displayName} edited "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`,
-    { expenseId: id });
+    { expenseId: id },
+    `edited "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`);
   return NextResponse.json({ ok: true });
 });
 
@@ -83,6 +84,8 @@ export const DELETE = handler(async (_req: NextRequest, { params }: Ctx) => {
   const e = await loadExpense(id, user.id);
   await sql`DELETE FROM expenses WHERE id = ${id}`;
   await logActivity(Number(e.group_id), user.id, "expense.deleted",
-    `${user.displayName} deleted "${e.title}" (${fmtMoney(Number(e.amount_cents), e.currency)})`);
+    `${user.displayName} deleted "${e.title}" (${fmtMoney(Number(e.amount_cents), e.currency)})`,
+    {},
+    `deleted "${e.title}" (${fmtMoney(Number(e.amount_cents), e.currency)})`);
   return NextResponse.json({ ok: true });
 });

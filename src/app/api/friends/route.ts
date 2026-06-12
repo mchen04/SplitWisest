@@ -89,7 +89,7 @@ export const POST = handler(async (req: NextRequest) => {
     SELECT id FROM friend_requests WHERE from_id = ${friendId} AND to_id = ${user.id}`;
   if (reciprocal.length > 0) {
     await createFriendship(user.id, friendId);
-    await logActivity(null, user.id, "friend.added", `${user.displayName} and ${rows[0].display_name} are now friends`);
+    await logActivity(null, user.id, "friend.added", `${user.displayName} and ${rows[0].display_name} are now friends`, {}, `and ${rows[0].display_name} are now friends`);
     return NextResponse.json({ status: "accepted", id: friendId, displayName: rows[0].display_name });
   }
 
@@ -109,6 +109,6 @@ export const DELETE = handler(async (req: NextRequest) => {
   if (!(await canRemoveFriend(user.id, friendId))) badRequest("Settle up with this friend before removing them");
 
   await removeFriendship(user.id, friendId);
-  await logActivity(null, user.id, "friend.removed", `${user.displayName} removed a friend`);
+  await logActivity(null, user.id, "friend.removed", `${user.displayName} removed a friend`, {}, "removed a friend");
   return NextResponse.json({ ok: true });
 });

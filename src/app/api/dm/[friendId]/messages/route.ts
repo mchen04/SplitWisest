@@ -1,24 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden } from "@/lib/api";
+import { handler, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { mapMessages } from "@/lib/messages";
+import { requireFriendship } from "@/lib/relationships";
 
 type Ctx = { params: Promise<{ friendId: string }> };
-
-async function requireFriend(userId: number, friendId: number) {
-  const [a, b] = userId < friendId ? [userId, friendId] : [friendId, userId];
-  const rows = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
-  if (rows.length === 0) forbidden("You are not friends with this user");
-  return [a, b] as const;
-}
 
 export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const friendId = Number((await params).friendId);
   if (!Number.isInteger(friendId)) notFound();
-  const [a, b] = await requireFriend(user.id, friendId);
+  const [a, b] = await requireFriendship(user.id, friendId);
   const since = Number(req.nextUrl.searchParams.get("since") ?? 0);
   const before = Number(req.nextUrl.searchParams.get("before") ?? 0);
   const q = req.nextUrl.searchParams.get("q") || null;
@@ -60,7 +54,7 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const friendId = Number((await params).friendId);
   if (!Number.isInteger(friendId)) notFound();
-  const [a, b] = await requireFriend(user.id, friendId);
+  const [a, b] = await requireFriendship(user.id, friendId);
   const { body } = Body.parse(await req.json());
   const rows = await sql`
     INSERT INTO messages (channel, dm_a, dm_b, sender_id, body)

@@ -66,6 +66,7 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
     RETURNING id`;
   await logActivity(groupId, user.id, "settlement.recorded",
     await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency),
-    { settlementId: Number(rows[0].id) });
+    { settlementId: Number(rows[0].id) },
+    await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency));
   return NextResponse.json({ id: Number(rows[0].id) });
 });

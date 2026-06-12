@@ -52,6 +52,6 @@ export const POST = handler(async (req: NextRequest) => {
     VALUES (${name}, ${currency}, ${newInviteCode()}, ${user.id}) RETURNING id, invite_code`;
   const groupId = Number(rows[0].id);
   await sql`INSERT INTO group_members (group_id, user_id) VALUES (${groupId}, ${user.id})`;
-  await logActivity(groupId, user.id, "group.created", `${user.displayName} created the group "${name}"`);
+  await logActivity(groupId, user.id, "group.created", `${user.displayName} created the group "${name}"`, {}, `created the group "${name}"`);
   return NextResponse.json({ id: groupId, inviteCode: rows[0].invite_code });
 });
