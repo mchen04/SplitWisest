@@ -22,7 +22,7 @@ export function Button({
   }[variant];
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none min-h-[42px] ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:opacity-50 disabled:pointer-events-none min-h-[42px] ${styles} ${className}`}
       disabled={disabled || busy}
       {...rest}
     >

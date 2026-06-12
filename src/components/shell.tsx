@@ -66,7 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-3.5 pb-2.5">
           <Link
             href={addExpenseHref}
-            className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-[11px] bg-accent px-2.5 py-2.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark"
+            className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-[10px] bg-accent px-2.5 py-2.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
           >
             <Plus className="h-4.5 w-4.5" /> Add expense
           </Link>
