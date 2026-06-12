@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { canNudgeUser } from "@/lib/balances";
+import { canNudgeUser } from "@/lib/relationships";
 
 // Reminders the caller has received (newest first). Drives the "settle up"
 // nudge notifications.

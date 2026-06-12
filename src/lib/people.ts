@@ -1,5 +1,6 @@
 import { sql } from "./db";
-import { canRemoveFriend, canRequestFriendById, canSettleDirectly, pairwiseFriendBalance } from "./balances";
+import { pairwiseFriendBalance } from "./balances";
+import { canRemoveFriend, canRequestFriendById, canSettleDirectly } from "./relationships";
 
 export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
 

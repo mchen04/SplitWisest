@@ -15,30 +15,34 @@ export function DirectSettleModal({
   friend,
   onClose,
   onSaved,
+  existing,
 }: {
   friend: DirectSettleFriend | null;
   onClose: () => void;
   onSaved: () => void;
+  existing?: { id: number; amountCents: number; currency: string; date: string; note: string } | null;
 }) {
   if (!friend) return null;
-  return <DirectSettleForm key={friend.id} friend={friend} onClose={onClose} onSaved={onSaved} />;
+  return <DirectSettleForm key={`${friend.id}:${existing?.id ?? "new"}`} friend={friend} onClose={onClose} onSaved={onSaved} existing={existing} />;
 }
 
 function DirectSettleForm({
   friend,
   onClose,
   onSaved,
+  existing,
 }: {
   friend: DirectSettleFriend;
   onClose: () => void;
   onSaved: () => void;
+  existing?: { id: number; amountCents: number; currency: string; date: string; note: string } | null;
 }) {
   const [initialCurrency, initialAmount] = Object.entries(friend.netByCurrency)[0] ?? ["USD", 0];
   const [direction, setDirection] = useState<"i-paid" | "they-paid">(initialAmount < 0 ? "i-paid" : "they-paid");
-  const [amount, setAmount] = useState(initialAmount !== 0 ? (Math.abs(initialAmount) / 100).toFixed(2) : "");
-  const [currency, setCurrency] = useState(initialCurrency);
-  const [date, setDate] = useState(todayStr());
-  const [note, setNote] = useState("");
+  const [amount, setAmount] = useState(existing ? (existing.amountCents / 100).toFixed(2) : initialAmount !== 0 ? (Math.abs(initialAmount) / 100).toFixed(2) : "");
+  const [currency, setCurrency] = useState(existing?.currency ?? initialCurrency);
+  const [date, setDate] = useState(existing ? String(existing.date).slice(0, 10) : todayStr());
+  const [note, setNote] = useState(existing?.note ?? "");
   const { error, setError, busy, run } = useFormState();
 
   function submit(e: React.FormEvent) {
@@ -46,26 +50,32 @@ function DirectSettleForm({
     const amountCents = Math.round(parseFloat(amount || "0") * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
     run(async () => {
-      await api("/api/settlements", {
-        body: { friendId: friend.id, direction, amountCents, currency, date, note },
-      });
+      if (existing) {
+        await api(`/api/settlements/${existing.id}`, { method: "PATCH", body: { amountCents, currency, date, note } });
+      } else {
+        await api("/api/settlements", {
+          body: { friendId: friend.id, direction, amountCents, currency, date, note },
+        });
+      }
       onSaved();
       onClose();
-    }, "Could not record settlement");
+    }, existing ? "Could not update settlement" : "Could not record settlement");
   }
 
   return (
-    <Modal open onClose={onClose} title={`Settle with ${friend.displayName}`}>
+    <Modal open onClose={onClose} title={existing ? `Edit payment with ${friend.displayName}` : `Settle with ${friend.displayName}`}>
       <p className="mb-4 rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
         Records an offline payment between just the two of you. SplitWisest never moves money.
       </p>
       <form onSubmit={submit} className="space-y-4">
-        <Field label="Direction">
-          <Select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)}>
-            <option value="i-paid">I paid {friend.displayName}</option>
-            <option value="they-paid">{friend.displayName} paid me</option>
-          </Select>
-        </Field>
+        {!existing && (
+          <Field label="Direction">
+            <Select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)}>
+              <option value="i-paid">I paid {friend.displayName}</option>
+              <option value="they-paid">{friend.displayName} paid me</option>
+            </Select>
+          </Field>
+        )}
         <SettleFields
           amount={amount}
           setAmount={setAmount}
@@ -81,7 +91,7 @@ function DirectSettleForm({
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
           <Button type="submit" busy={busy}>
-            {amount ? `Record ${fmtMoney(Math.round(parseFloat(amount || "0") * 100) || 0, currency)}` : "Record payment"}
+            {existing ? "Save changes" : amount ? `Record ${fmtMoney(Math.round(parseFloat(amount || "0") * 100) || 0, currency)}` : "Record payment"}
           </Button>
         </div>
       </form>

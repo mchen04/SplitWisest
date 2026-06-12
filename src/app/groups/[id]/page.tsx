@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState, use } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check,
 } from "lucide-react";
-import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useSync, useFilters } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
-import { ExpenseForm, Member } from "@/components/expense-form";
+import { ExpenseForm } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
 import { RecurringModal, ExistingRecurring } from "@/components/recurring-modal";
 import { GroupSettingsModal } from "@/components/group-settings-modal";
@@ -18,54 +18,7 @@ import { ExpenseDetailModal } from "@/components/expense-detail";
 import { ChatPane } from "@/components/chat";
 import { SpendCharts } from "@/components/spend-charts";
 import { ActivitySummary } from "@/components/activity-summary";
-
-interface GroupDetail {
-  group: { id: number; name: string; currency: string; inviteCode: string; createdBy: number };
-  members: (Member & { username: string })[];
-  balances: { userId: number; displayName: string; netCents: number }[];
-  suggestions: { from: number; to: number; amountCents: number }[];
-}
-
-interface Expense {
-  id: number;
-  title: string;
-  amountCents: number;
-  currency: string;
-  convertedCents: number;
-  date: string;
-  payerId: number;
-  payerName: string;
-  categoryId: number | null;
-  categoryName: string | null;
-  notes: string;
-  splitMethod: string;
-  attachmentCount: number;
-  shares: { userId: number; shareCents: number; convertedShareCents: number }[];
-}
-
-interface Recurring {
-  id: number;
-  title: string;
-  amountCents: number;
-  currency: string;
-  payerId: number;
-  payerName: string;
-  cadence: string;
-  nextDate: string;
-  active: boolean;
-}
-
-interface Settlement {
-  id: number;
-  payerId: number;
-  recipientId: number;
-  payerName: string;
-  recipientName: string;
-  amountCents: number;
-  currency: string;
-  date: string;
-  note: string;
-}
+import { Expense, Settlement, useGroupPageData } from "./use-group-page-data";
 
 type Tab = "expenses" | "balances" | "insights" | "chat" | "activity";
 
@@ -75,23 +28,18 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const router = useRouter();
   const searchParams = useSearchParams();
   const me = useMe();
-  const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const [expenses, setExpenses] = useState<Expense[] | null>(null);
   const [expenseLimit, setExpenseLimit] = useState(50);
-  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
-  const [recurring, setRecurring] = useState<Recurring[]>([]);
-  const [settlements, setSettlements] = useState<Settlement[] | null>(null);
   const [settlementLimit, setSettlementLimit] = useState(50);
-  const [hasMoreSettlements, setHasMoreSettlements] = useState(false);
-  const [activity, setActivity] = useState<{ id: number; actorId: number; actorName: string; actionText: string; summary: string; createdAt: string }[] | null>(null);
   const [tab, setTab] = useState<Tab>("expenses");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
 
   // filters
   const { filters, setFilter, reset: resetFilters, active: filtersActive } =
     useFilters({ q: "", cat: "", payer: "", from: "", to: "" });
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const {
+    detail, expenses, hasMoreExpenses, recurring, settlements, hasMoreSettlements,
+    activity, refreshKey, loadError, loadDetail, refreshAll,
+  } = useGroupPageData({ groupId, filters, expenseLimit, settlementLimit });
 
   // modals
   const [expenseOpen, setExpenseOpen] = useState(false);
@@ -108,45 +56,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [codeCopied, setCodeCopied] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
 
-  const loadDetail = useCallback(() => {
-    api<GroupDetail>(`/api/groups/${groupId}`)
-      .then(setDetail)
-      .catch((e) => setLoadError(e instanceof ApiClientError ? e.message : "Could not load group"));
-    api<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`)
-      .then((r) => setRecurring(r.recurring.filter((x) => x.active)))
-      .catch(() => {});
-    api<{ activity: { id: number; actorId: number; actorName: string; actionText: string; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
-      .then((r) => setActivity(r.activity))
-      .catch(() => {});
-    api<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${settlementLimit}`)
-      .then((r) => { setSettlements(r.settlements); setHasMoreSettlements(r.hasMore); })
-      .catch(() => {});
-  }, [groupId, settlementLimit]);
-
-  const loadExpenses = useCallback(() => {
-    const p = new URLSearchParams();
-    if (filters.q.trim()) p.set("q", filters.q.trim());
-    if (filters.cat) p.set("categoryId", filters.cat);
-    if (filters.payer) p.set("payerId", filters.payer);
-    if (filters.from) p.set("from", filters.from);
-    if (filters.to) p.set("to", filters.to);
-    p.set("limit", String(expenseLimit));
-    api<{ expenses: Expense[]; hasMore: boolean }>(`/api/groups/${groupId}/expenses?${p}`)
-      .then((r) => { setExpenses(r.expenses); setHasMoreExpenses(r.hasMore); })
-      .catch(() => {});
-  }, [groupId, filters, expenseLimit]);
-
   // Reset to the first page whenever the filters change.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setExpenseLimit(50);
   }, [filters]);
 
-  useEffect(loadDetail, [loadDetail]);
-  useEffect(() => {
-    const t = setTimeout(loadExpenses, filters.q ? 250 : 0);
-    return () => clearTimeout(t);
-  }, [loadExpenses, filters.q]);
   useEffect(() => {
     if (searchParams.get("add") === "1") {
       // Deep links may request the add-expense modal.
@@ -173,17 +88,6 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       .then((r) => setCategories(r.categories))
       .catch(() => {});
   }, []);
-
-  useSync(() => {
-    loadDetail();
-    loadExpenses();
-    setRefreshKey((k) => k + 1);
-  });
-
-  const refreshAll = () => {
-    loadDetail();
-    loadExpenses();
-  };
 
   async function openEdit(expenseId: number) {
     try {

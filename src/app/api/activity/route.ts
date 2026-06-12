@@ -12,7 +12,7 @@ export const GET = handler(async (req: NextRequest) => {
   const offset = Math.max(Number(q.get("offset")) || 0, 0);
   const rows = await sql`
     SELECT a.id, a.group_id, g.name AS group_name, a.actor_id, u.display_name AS actor_name,
-      a.type, a.summary, a.created_at
+      a.type, a.summary, a.data, a.created_at
     FROM activity a
     JOIN users u ON u.id = a.actor_id
     LEFT JOIN groups g ON g.id = a.group_id
@@ -31,7 +31,7 @@ export const GET = handler(async (req: NextRequest) => {
       groupName: a.group_name,
       actorId: Number(a.actor_id),
       actorName: a.actor_name,
-      actionText: activityActionText(a.summary, a.actor_name),
+      actionText: activityActionText({ summary: a.summary, actorName: a.actor_name, data: a.data }),
       type: a.type,
       summary: a.summary,
       createdAt: a.created_at,

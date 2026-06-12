@@ -8,9 +8,11 @@ export async function logActivity(
   data: Record<string, unknown> = {}
 ) {
   await sql`INSERT INTO activity (group_id, actor_id, type, summary, data)
-            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify(data)})`;
+            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify({ actionText: summary.replace(/^.+?\\s/, ""), ...data })})`;
 }
 
-export function activityActionText(summary: string, actorName: string): string {
-  return summary.startsWith(actorName) ? summary.slice(actorName.length).trimStart() : summary;
+export function activityActionText(row: { summary: string; actorName: string; data?: unknown }): string {
+  const data = row.data && typeof row.data === "object" ? row.data as Record<string, unknown> : {};
+  if (typeof data.actionText === "string") return data.actionText;
+  return row.summary.startsWith(row.actorName) ? row.summary.slice(row.actorName.length).trimStart() : row.summary;
 }

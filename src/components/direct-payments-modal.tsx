@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { HandCoins, Pencil, Trash2 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate } from "@/lib/client";
 import { Modal, Button } from "./ui";
-import { SettleModal } from "./settle-modal";
+import { DirectSettleModal } from "./direct-settle-modal";
 
 interface DirectSettlement {
   id: number;
@@ -23,13 +23,11 @@ interface DirectSettlement {
 export function DirectPaymentsModal({
   friend,
   meId,
-  meName,
   onClose,
   onChanged,
 }: {
   friend: { id: number; displayName: string } | null;
   meId: number;
-  meName: string;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -118,14 +116,10 @@ export function DirectPaymentsModal({
         </div>
       </Modal>
 
-      <SettleModal
-        open={!!editing}
+      <DirectSettleModal
+        friend={editing ? { id: friend.id, displayName: friend.displayName, netByCurrency: {} } : null}
         onClose={() => setEditing(null)}
         onSaved={() => { reload(); onChanged(); }}
-        groupId={0}
-        members={[{ id: meId, displayName: meName }, { id: friend.id, displayName: friend.displayName }]}
-        meId={meId}
-        defaultCurrency={editing?.currency ?? "USD"}
         existing={editing}
       />
     </>

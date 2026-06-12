@@ -308,7 +308,6 @@ export default function BalancesPage() {
         <DirectPaymentsModal
           friend={historyFriend}
           meId={me.id}
-          meName={me.displayName}
           onClose={() => setHistoryFriend(null)}
           onChanged={reload}
         />

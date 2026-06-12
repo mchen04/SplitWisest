@@ -3,7 +3,8 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { canRemoveFriend, canRequestFriendById, friendBalances, friendshipExists } from "@/lib/balances";
+import { friendBalances } from "@/lib/balances";
+import { canRemoveFriend, canRequestFriendById, friendshipExists } from "@/lib/relationships";
 import { logActivity } from "@/lib/activity";
 
 export const GET = handler(async () => {

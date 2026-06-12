@@ -201,7 +201,6 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
             <DirectPaymentsModal
               friend={paymentsOpen ? { id: profile.person.id, displayName: profile.person.displayName } : null}
               meId={me.id}
-              meName={me.displayName}
               onClose={() => setPaymentsOpen(false)}
               onChanged={reload}
             />

@@ -5,7 +5,7 @@ import { handler, badRequest, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
 import { settlementFields, settlementSummary } from "@/lib/settlements";
-import { canSettleDirectly } from "@/lib/balances";
+import { canSettleDirectly } from "@/lib/relationships";
 
 // History of direct (group-less) settlements involving the caller, optionally
 // narrowed to a single friend. Group settlements are listed per-group instead.

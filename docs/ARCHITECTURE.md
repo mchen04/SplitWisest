@@ -18,7 +18,7 @@
 - Each expense stores `amount_cents` in its own currency plus `converted_cents` in the group currency, converted at entry time (`fx_rate` snapshot). Later rate changes never alter recorded balances.
 - Group balance per member = paid − owed + settlements paid − settlements received, all in group currency. Share conversion rounding drift (a few cents at most) is absorbed into the largest balance so nets always sum to zero.
 - Debt simplification (`simplifyDebts`) greedily matches largest debtor to largest creditor, yielding ≤ n−1 transfers.
-- Friend balances are pairwise (debtor→creditor per expense share + direct settlements), reported per currency without cross-currency netting.
+- Friend balances mirror the app's simplified settle-up suggestions across shared groups, plus direct settlements, reported per currency without cross-currency netting.
 
 ## Settlements
 
