@@ -57,9 +57,11 @@ function ChatPageInner() {
   const [pins, setPins] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const groupId = params.get("g");
-  const dmId = params.get("dm");
-  const selectedKey = groupId ? `group:${groupId}` : dmId ? `dm:${dmId}` : null;
+  const groupId = Number(params.get("g"));
+  const dmId = Number(params.get("dm"));
+  const selectedKey =
+    Number.isInteger(groupId) && groupId > 0 ? `group:${groupId}` :
+    Number.isInteger(dmId) && dmId > 0 ? `dm:${dmId}` : null;
 
   function load() {
     setError(null);
@@ -115,7 +117,8 @@ function ChatPageInner() {
   }, [conversations, query, pins]);
 
   function open(c: Conversation) {
-    router.replace(c.kind === "group" ? `/chat?g=${c.id}` : `/chat?dm=${c.id}`, { scroll: false });
+    // push (not replace) so hardware/browser back returns to the chat list
+    router.push(c.kind === "group" ? `/chat?g=${c.id}` : `/chat?dm=${c.id}`, { scroll: false });
   }
 
   const listPane = (
@@ -159,7 +162,7 @@ function ChatPageInner() {
                   <button
                     onClick={() => open(c)}
                     aria-current={active ? "true" : undefined}
-                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                    className={`flex w-full items-center gap-3 py-2.5 pl-3 pr-10 text-left transition-colors md:pr-3 ${
                       active ? "bg-accent-soft" : "hover:bg-paper"
                     }`}
                   >
@@ -194,7 +197,7 @@ function ChatPageInner() {
                     onClick={() => togglePin(c)}
                     aria-label={pinned ? `Unpin ${c.name}` : `Pin ${c.name}`}
                     title={pinned ? "Unpin" : "Pin"}
-                    className="absolute right-2 top-1.5 hidden rounded-md p-1 text-ink-faint hover:bg-card hover:text-ink group-hover/row:block"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-ink-faint hover:bg-card hover:text-ink md:top-1.5 md:hidden md:translate-y-0 md:p-1 md:group-hover/row:block md:focus-visible:block"
                   >
                     {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                   </button>
