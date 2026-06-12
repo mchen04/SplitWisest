@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus, Users, ScrollText } from "lucide-react";
-import { api, fmtTime, useMe, useSync } from "@/lib/client";
+import { apiCached, cacheGet, fmtTime, useMe, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
 
@@ -32,14 +32,14 @@ interface Activity {
 
 export default function Dashboard() {
   const me = useMe();
-  const [groups, setGroups] = useState<Group[] | null>(null);
-  const [friends, setFriends] = useState<Friend[] | null>(null);
-  const [activity, setActivity] = useState<Activity[] | null>(null);
+  const [groups, setGroups] = useState<Group[] | null>(() => cacheGet<{ groups: Group[] }>("/api/groups")?.groups ?? null);
+  const [friends, setFriends] = useState<Friend[] | null>(() => cacheGet<{ friends: Friend[] }>("/api/friends")?.friends ?? null);
+  const [activity, setActivity] = useState<Activity[] | null>(() => cacheGet<{ activity: Activity[] }>("/api/activity")?.activity ?? null);
 
   const load = useCallback(() => {
-    api<{ groups: Group[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
-    api<{ friends: Friend[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
-    api<{ activity: Activity[] }>("/api/activity").then((r) => setActivity(r.activity)).catch(() => {});
+    apiCached<{ groups: Group[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
+    apiCached<{ friends: Friend[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
+    apiCached<{ activity: Activity[] }>("/api/activity").then((r) => setActivity(r.activity)).catch(() => {});
   }, []);
 
   useEffect(load, [load]);

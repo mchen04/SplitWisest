@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
-import { api, apiCached, fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
+import { apiCached, fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Input, Select, Button } from "@/components/ui";
 
@@ -48,8 +48,8 @@ export default function ExpensesPage() {
   const hasMore = data?.hasMore ?? false;
 
   useEffect(() => {
-    api<{ groups: { id: number; name: string }[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
-    api<{ friends: { id: number; displayName: string }[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
+    apiCached<{ groups: { id: number; name: string }[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
+    apiCached<{ friends: { id: number; displayName: string }[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
     apiCached<{ categories: { id: number; name: string }[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
   }, []);
 

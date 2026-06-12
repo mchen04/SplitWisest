@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, MessageSquare, Pin, PinOff, Search, Users } from "lucide-react";
-import { api, ApiClientError, useMe, useSync } from "@/lib/client";
+import { apiCached, cacheGet, ApiClientError, useMe, useSync } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, EmptyState, Avatar, Button, Input } from "@/components/ui";
 import { ChatPane } from "@/components/chat";
@@ -51,7 +51,9 @@ function ChatPageInner() {
   const me = useMe();
   const router = useRouter();
   const params = useSearchParams();
-  const [conversations, setConversations] = useState<Conversation[] | null>(null);
+  const [conversations, setConversations] = useState<Conversation[] | null>(
+    () => cacheGet<{ conversations: Conversation[] }>("/api/conversations")?.conversations ?? null
+  );
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [pins, setPins] = useState<string[]>([]);
@@ -65,7 +67,7 @@ function ChatPageInner() {
 
   function load() {
     setError(null);
-    api<{ conversations: Conversation[] }>("/api/conversations")
+    apiCached<{ conversations: Conversation[] }>("/api/conversations")
       .then((r) => setConversations(r.conversations))
       .catch((err) => {
         setError(err instanceof ApiClientError ? err.message : "Could not load conversations");

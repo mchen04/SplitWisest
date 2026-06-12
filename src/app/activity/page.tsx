@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
-import { api, fmtTime, markRead, useSync } from "@/lib/client";
+import { apiCached, cacheGet, fmtTime, markRead, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Button } from "@/components/ui";
 import { ActivitySummary } from "@/components/activity-summary";
@@ -19,12 +19,14 @@ interface Activity {
 }
 
 export default function ActivityPage() {
-  const [activity, setActivity] = useState<Activity[] | null>(null);
+  const [activity, setActivity] = useState<Activity[] | null>(
+    () => cacheGet<{ activity: Activity[] }>("/api/activity?limit=50")?.activity ?? null
+  );
   const [limit, setLimit] = useState(50);
   const [hasMore, setHasMore] = useState(false);
 
   const load = useCallback(() => {
-    api<{ activity: Activity[]; hasMore: boolean }>(`/api/activity?limit=${limit}`)
+    apiCached<{ activity: Activity[]; hasMore: boolean }>(`/api/activity?limit=${limit}`)
       .then((r) => {
         setActivity(r.activity);
         setHasMore(r.hasMore);

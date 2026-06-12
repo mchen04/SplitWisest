@@ -472,7 +472,9 @@ export function ExpenseForm({
         </Field>
 
         <ErrorNote message={error} />
-        <div className="flex justify-end gap-2 pb-1">
+        {/* Sticky so Cancel/Submit stay reachable while the long form scrolls
+            (on short screens they used to scroll out of the viewport). */}
+        <div className="sticky -bottom-3 -mx-4 -mb-3 flex justify-end gap-2 rounded-b-2xl border-t border-line bg-card px-4 py-2.5">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>

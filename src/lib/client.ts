@@ -42,6 +42,13 @@ export async function api<T = unknown>(
 const dataCache = new Map<string, unknown>();
 const inflight = new Map<string, Promise<unknown>>();
 
+// Synchronous read of the last cached payload for a path (or null). Pages that
+// manage their own fetch state use this to seed useState so a revisit renders
+// the previous data instantly instead of flashing a skeleton.
+export function cacheGet<T>(path: string): T | null {
+  return (dataCache.get(path) as T | undefined) ?? null;
+}
+
 export function apiCached<T>(path: string): Promise<T> {
   const pending = inflight.get(path);
   if (pending) return pending as Promise<T>;
@@ -154,7 +161,14 @@ export function useUnread(): Unread {
     () => lastSync?.unread ?? { messages: 0, activity: 0, nudges: 0, requests: 0, balances: 0 }
   );
   useEffect(() => subscribeSync((c) => {
-    if (c.unread) setUnread(c.unread);
+    if (!c.unread) return;
+    const u = c.unread;
+    // Keep the previous object when counts are unchanged so the shell doesn't
+    // re-render (and repaint) on every poll tick.
+    setUnread((prev) =>
+      prev.messages === u.messages && prev.activity === u.activity && prev.nudges === u.nudges &&
+      prev.requests === u.requests && prev.balances === u.balances ? prev : u
+    );
   }), []);
   return unread;
 }
@@ -204,7 +218,14 @@ export function useApiData<T>(
     const requestedPath = path;
     apiCached<T>(path)
       .then((next) => {
-        setState({ path: requestedPath, data: next, error: null, status: 200 });
+        // Skip the state update when the payload is byte-identical to what we
+        // already render — background refreshes shouldn't repaint anything.
+        setState((prev) =>
+          prev.path === requestedPath && prev.error === null && prev.data !== null &&
+          JSON.stringify(prev.data) === JSON.stringify(next)
+            ? prev
+            : { path: requestedPath, data: next, error: null, status: 200 }
+        );
       })
       .catch((err) => {
         setState({
