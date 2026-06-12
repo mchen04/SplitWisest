@@ -4,6 +4,7 @@ import { sql } from "@/lib/db";
 import { handler, badRequest } from "@/lib/api";
 import { hashPassword, createSession, setSessionCookie, newInviteCode } from "@/lib/auth";
 import { logActivity } from "@/lib/activity";
+import { createFriendship } from "@/lib/relationships";
 
 const Body = z.object({
   username: z
@@ -45,16 +46,14 @@ export const POST = handler(async (req: NextRequest) => {
   const userId = Number(rows[0].id);
 
   if (inviterId) {
-    const [a, b] = inviterId < userId ? [inviterId, userId] : [userId, inviterId];
-    await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
+    await createFriendship(inviterId, userId);
   }
   if (joinGroupId) {
     await sql`INSERT INTO group_members (group_id, user_id) VALUES (${joinGroupId}, ${userId}) ON CONFLICT DO NOTHING`;
     const members = await sql`SELECT user_id FROM group_members WHERE group_id = ${joinGroupId} AND user_id <> ${userId}`;
     for (const m of members) {
       const other = Number(m.user_id);
-      const [a, b] = other < userId ? [other, userId] : [userId, other];
-      await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
+      await createFriendship(other, userId);
     }
     await logActivity(joinGroupId, userId, "group.joined", `${displayName} joined the group`);
   }

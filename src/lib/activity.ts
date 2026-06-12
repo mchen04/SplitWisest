@@ -8,7 +8,7 @@ export async function logActivity(
   data: Record<string, unknown> = {}
 ) {
   await sql`INSERT INTO activity (group_id, actor_id, type, summary, data)
-            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify({ actionText: summary.replace(/^.+?\\s/, ""), ...data })})`;
+            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify(data)})`;
 }
 
 export function activityActionText(row: { summary: string; actorName: string; data?: unknown }): string {

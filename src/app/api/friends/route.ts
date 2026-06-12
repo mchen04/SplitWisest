@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 import { handler, badRequest, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { friendBalances } from "@/lib/balances";
-import { canRemoveFriend, canRequestFriendById, friendshipExists } from "@/lib/relationships";
+import { canRemoveFriend, canRequestFriendById, createFriendRequest, createFriendship, friendshipExists, removeFriendship } from "@/lib/relationships";
 import { logActivity } from "@/lib/activity";
 
 export const GET = handler(async () => {
@@ -82,22 +82,18 @@ export const POST = handler(async (req: NextRequest) => {
 
   if (userId && !(await canRequestFriendById(user.id, friendId))) badRequest("Use an invite code to add this person");
 
-  const [a, b] = friendId < user.id ? [friendId, user.id] : [user.id, friendId];
   if (await friendshipExists(user.id, friendId)) badRequest("You are already friends");
 
   // Reciprocal request waiting? Accept it.
   const reciprocal = await sql`
     SELECT id FROM friend_requests WHERE from_id = ${friendId} AND to_id = ${user.id}`;
   if (reciprocal.length > 0) {
-    await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
-    await sql`DELETE FROM friend_requests WHERE (from_id = ${friendId} AND to_id = ${user.id}) OR (from_id = ${user.id} AND to_id = ${friendId})`;
+    await createFriendship(user.id, friendId);
     await logActivity(null, user.id, "friend.added", `${user.displayName} and ${rows[0].display_name} are now friends`);
     return NextResponse.json({ status: "accepted", id: friendId, displayName: rows[0].display_name });
   }
 
-  await sql`
-    INSERT INTO friend_requests (from_id, to_id) VALUES (${user.id}, ${friendId})
-    ON CONFLICT (from_id, to_id) DO NOTHING`;
+  await createFriendRequest(user.id, friendId);
   return NextResponse.json({ status: "requested", id: friendId, displayName: rows[0].display_name });
 });
 
@@ -108,13 +104,11 @@ const DeleteBody = z.object({ friendId: z.number().int().positive() });
 export const DELETE = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const { friendId } = DeleteBody.parse(await req.json());
-  const [a, b] = friendId < user.id ? [friendId, user.id] : [user.id, friendId];
-  const existing = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
-  if (existing.length === 0) notFound("You are not friends with this user");
+  if (!(await friendshipExists(user.id, friendId))) notFound("You are not friends with this user");
 
   if (!(await canRemoveFriend(user.id, friendId))) badRequest("Settle up with this friend before removing them");
 
-  await sql`DELETE FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
+  await removeFriendship(user.id, friendId);
   await logActivity(null, user.id, "friend.removed", `${user.displayName} removed a friend`);
   return NextResponse.json({ ok: true });
 });

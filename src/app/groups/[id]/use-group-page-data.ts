@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, ApiClientError, useSync } from "@/lib/client";
+import { api, useApiData, useSync } from "@/lib/client";
 import type { Member } from "@/components/expense-form";
 
 export interface GroupDetail {
@@ -61,6 +61,37 @@ export interface GroupActivity {
   createdAt: string;
 }
 
+function expenseQuery(filters: { q: string; cat: string; payer: string; from: string; to: string }, limit: number) {
+  const p = new URLSearchParams();
+  if (filters.q.trim()) p.set("q", filters.q.trim());
+  if (filters.cat) p.set("categoryId", filters.cat);
+  if (filters.payer) p.set("payerId", filters.payer);
+  if (filters.from) p.set("from", filters.from);
+  if (filters.to) p.set("to", filters.to);
+  p.set("limit", String(limit));
+  return p;
+}
+
+function useExpenses(groupId: number, filters: { q: string; cat: string; payer: string; from: string; to: string }, limit: number) {
+  const [expenses, setExpenses] = useState<Expense[] | null>(null);
+  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
+  const reload = useCallback(() => {
+    api<{ expenses: Expense[]; hasMore: boolean }>(`/api/groups/${groupId}/expenses?${expenseQuery(filters, limit)}`)
+      .then((r) => { setExpenses(r.expenses); setHasMoreExpenses(r.hasMore); })
+      .catch(() => {});
+  }, [groupId, filters, limit]);
+  useEffect(() => {
+    const t = setTimeout(reload, filters.q ? 250 : 0);
+    return () => clearTimeout(t);
+  }, [reload, filters.q]);
+  return { expenses, hasMoreExpenses, reloadExpenses: reload };
+}
+
+function useSettlements(groupId: number, limit: number) {
+  const { data, reload } = useApiData<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${limit}`);
+  return { settlements: data?.settlements ?? null, hasMoreSettlements: data?.hasMore ?? false, reloadSettlements: reload };
+}
+
 export function useGroupPageData({
   groupId,
   filters,
@@ -72,71 +103,44 @@ export function useGroupPageData({
   expenseLimit: number;
   settlementLimit: number;
 }) {
-  const [detail, setDetail] = useState<GroupDetail | null>(null);
-  const [expenses, setExpenses] = useState<Expense[] | null>(null);
-  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
-  const [recurring, setRecurring] = useState<Recurring[]>([]);
-  const [settlements, setSettlements] = useState<Settlement[] | null>(null);
-  const [hasMoreSettlements, setHasMoreSettlements] = useState(false);
-  const [activity, setActivity] = useState<GroupActivity[] | null>(null);
+  const detailState = useApiData<GroupDetail>(`/api/groups/${groupId}`);
+  const recurringState = useApiData<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`);
+  const activityState = useApiData<{ activity: GroupActivity[] }>(`/api/groups/${groupId}/activity`);
+  const { expenses, hasMoreExpenses, reloadExpenses } = useExpenses(groupId, filters, expenseLimit);
+  const { settlements, hasMoreSettlements, reloadSettlements } = useSettlements(groupId, settlementLimit);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadError = detailState.error
+    ? detailState.error
+    : recurringState.error || activityState.error ? "Some group data could not be refreshed" : null;
 
-  const loadDetail = useCallback(() => {
-    api<GroupDetail>(`/api/groups/${groupId}`)
-      .then(setDetail)
-      .catch((e) => setLoadError(e instanceof ApiClientError ? e.message : "Could not load group"));
-    api<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`)
-      .then((r) => setRecurring(r.recurring.filter((x) => x.active)))
-      .catch(() => {});
-    api<{ activity: GroupActivity[] }>(`/api/groups/${groupId}/activity`)
-      .then((r) => setActivity(r.activity))
-      .catch(() => {});
-    api<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${settlementLimit}`)
-      .then((r) => { setSettlements(r.settlements); setHasMoreSettlements(r.hasMore); })
-      .catch(() => {});
-  }, [groupId, settlementLimit]);
+  const reloadOverview = useCallback(() => {
+    detailState.reload();
+    recurringState.reload();
+    activityState.reload();
+    reloadSettlements();
+  }, [detailState, recurringState, activityState, reloadSettlements]);
 
-  const loadExpenses = useCallback(() => {
-    const p = new URLSearchParams();
-    if (filters.q.trim()) p.set("q", filters.q.trim());
-    if (filters.cat) p.set("categoryId", filters.cat);
-    if (filters.payer) p.set("payerId", filters.payer);
-    if (filters.from) p.set("from", filters.from);
-    if (filters.to) p.set("to", filters.to);
-    p.set("limit", String(expenseLimit));
-    api<{ expenses: Expense[]; hasMore: boolean }>(`/api/groups/${groupId}/expenses?${p}`)
-      .then((r) => { setExpenses(r.expenses); setHasMoreExpenses(r.hasMore); })
-      .catch(() => {});
-  }, [groupId, filters, expenseLimit]);
-
-  useEffect(loadDetail, [loadDetail]);
-  useEffect(() => {
-    const t = setTimeout(loadExpenses, filters.q ? 250 : 0);
-    return () => clearTimeout(t);
-  }, [loadExpenses, filters.q]);
+  const refreshAll = useCallback(() => {
+    reloadOverview();
+    reloadExpenses();
+  }, [reloadOverview, reloadExpenses]);
 
   useSync(() => {
-    loadDetail();
-    loadExpenses();
+    refreshAll();
     setRefreshKey((k) => k + 1);
   });
 
   return {
-    detail,
+    detail: detailState.data,
     expenses,
     hasMoreExpenses,
-    recurring,
+    recurring: recurringState.data?.recurring.filter((x) => x.active) ?? [],
     settlements,
     hasMoreSettlements,
-    activity,
+    activity: activityState.data?.activity ?? null,
     refreshKey,
     loadError,
-    loadDetail,
-    loadExpenses,
-    refreshAll: () => {
-      loadDetail();
-      loadExpenses();
-    },
+    loadDetail: reloadOverview,
+    refreshAll,
   };
 }

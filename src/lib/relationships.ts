@@ -1,10 +1,83 @@
 import { sql } from "./db";
 import { pairwiseFriendBalance } from "./balances";
 
+export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
+
+export function orderedPair(userId: number, otherId: number): [number, number] {
+  return otherId < userId ? [otherId, userId] : [userId, otherId];
+}
+
 export async function friendshipExists(userId: number, friendId: number): Promise<boolean> {
-  const [a, b] = friendId < userId ? [friendId, userId] : [userId, friendId];
+  const [a, b] = orderedPair(userId, friendId);
   const rows = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
   return rows.length > 0;
+}
+
+export async function createFriendship(userId: number, friendId: number) {
+  const [a, b] = orderedPair(userId, friendId);
+  await sql`INSERT INTO friendships (user_a, user_b) VALUES (${a}, ${b}) ON CONFLICT DO NOTHING`;
+  await sql`DELETE FROM friend_requests WHERE (from_id = ${userId} AND to_id = ${friendId}) OR (from_id = ${friendId} AND to_id = ${userId})`;
+}
+
+export async function removeFriendship(userId: number, friendId: number) {
+  const [a, b] = orderedPair(userId, friendId);
+  await sql`DELETE FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
+}
+
+export async function createFriendRequest(fromId: number, toId: number) {
+  await sql`
+    INSERT INTO friend_requests (from_id, to_id) VALUES (${fromId}, ${toId})
+    ON CONFLICT (from_id, to_id) DO NOTHING`;
+}
+
+export async function cancelFriendRequest(requestId: number) {
+  await sql`DELETE FROM friend_requests WHERE id = ${requestId}`;
+}
+
+export async function loadRelationship(viewerId: number, personId: number): Promise<{
+  relationship: RelationshipState;
+  isSelf: boolean;
+  isFriend: boolean;
+  hasSharedGroup: boolean;
+  hasPendingRequest: boolean;
+  request: null | { id: number; direction: "incoming" | "outgoing"; createdAt: string };
+}> {
+  const isSelf = viewerId === personId;
+  const [friendship, sharedGroups, requestRows] = await Promise.all([
+    isSelf ? Promise.resolve([{ ok: 1 }]) : friendshipExists(viewerId, personId).then((ok) => ok ? [{ ok: 1 }] : []),
+    isSelf ? Promise.resolve([]) : sql`
+      SELECT 1
+      FROM group_members me
+      JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${personId}
+      WHERE me.user_id = ${viewerId}
+      LIMIT 1`,
+    isSelf ? Promise.resolve([]) : sql`
+      SELECT id, from_id, to_id, created_at
+      FROM friend_requests
+      WHERE (from_id = ${viewerId} AND to_id = ${personId})
+         OR (from_id = ${personId} AND to_id = ${viewerId})
+      ORDER BY id DESC LIMIT 1`,
+  ]);
+  const isFriend = !isSelf && friendship.length > 0;
+  const hasSharedGroup = sharedGroups.length > 0;
+  const hasPendingRequest = requestRows.length > 0;
+  let relationship: RelationshipState = "none";
+  if (isSelf) relationship = "self";
+  else if (isFriend) relationship = "friend";
+  else if (hasSharedGroup) relationship = "shared-group";
+  else if (hasPendingRequest) relationship = "pending";
+  return {
+    relationship,
+    isSelf,
+    isFriend,
+    hasSharedGroup,
+    hasPendingRequest,
+    request: hasPendingRequest ? {
+      id: Number(requestRows[0].id),
+      direction: Number(requestRows[0].from_id) === viewerId ? "outgoing" : "incoming",
+      createdAt: requestRows[0].created_at,
+    } : null,
+  };
 }
 
 export async function shareAnyGroup(userId: number, otherId: number): Promise<boolean> {

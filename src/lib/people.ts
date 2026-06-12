@@ -1,8 +1,6 @@
 import { sql } from "./db";
 import { pairwiseFriendBalance } from "./balances";
-import { canRemoveFriend, canRequestFriendById, canSettleDirectly } from "./relationships";
-
-export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
+import { canRemoveFriend, canRequestFriendById, canSettleDirectly, loadRelationship, RelationshipState } from "./relationships";
 
 export interface PersonProfile {
   person: {
@@ -71,34 +69,9 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     JOIN group_members them ON them.group_id = g.id AND them.user_id = ${personId}
     ORDER BY g.name`;
 
-  const [a, b] = viewerId < personId ? [viewerId, personId] : [personId, viewerId];
-  const friendship = viewerId === personId ? [{ ok: 1 }] : await sql`
-    SELECT 1 AS ok FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;
-  const requestRows = viewerId === personId ? [] : await sql`
-    SELECT id, from_id, to_id, created_at
-    FROM friend_requests
-    WHERE (from_id = ${viewerId} AND to_id = ${personId})
-       OR (from_id = ${personId} AND to_id = ${viewerId})
-    ORDER BY id DESC LIMIT 1`;
-
-  const isSelf = viewerId === personId;
-  const isFriend = !isSelf && friendship.length > 0;
-  const hasSharedGroup = sharedGroups.length > 0;
-  const hasPendingRequest = requestRows.length > 0;
-
-  let relationship: RelationshipState = "none";
-  if (isSelf) relationship = "self";
-  else if (isFriend) relationship = "friend";
-  else if (hasSharedGroup) relationship = "shared-group";
-  else if (hasPendingRequest) relationship = "pending";
+  const { relationship, isSelf, isFriend, hasSharedGroup, request } = await loadRelationship(viewerId, personId);
 
   if (relationship === "none") return null;
-
-  const request = hasPendingRequest ? {
-    id: Number(requestRows[0].id),
-    direction: Number(requestRows[0].from_id) === viewerId ? "outgoing" as const : "incoming" as const,
-    createdAt: requestRows[0].created_at,
-  } : null;
 
   if (relationship === "pending") {
     return {
