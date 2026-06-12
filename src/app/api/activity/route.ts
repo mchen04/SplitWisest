@@ -19,6 +19,7 @@ export const GET = handler(async (req: NextRequest) => {
     WHERE a.id > ${since} AND (
       a.group_id IN (SELECT group_id FROM group_members WHERE user_id = ${user.id})
       OR (a.group_id IS NULL AND a.actor_id = ${user.id})
+      OR (a.group_id IS NULL AND a.data->'visibleUserIds' ? ${String(user.id)})
     )
     ORDER BY a.id DESC LIMIT ${limit + 1} OFFSET ${offset}`;
   const hasMore = rows.length > limit;

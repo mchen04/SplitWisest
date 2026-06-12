@@ -48,23 +48,29 @@ export async function createFriendRequest(fromId: number, toId: number) {
 
 export async function joinGroupAndFriendMembers(groupId: number, userId: number) {
   await sql`
-    WITH added_member AS (
+    WITH existing_members AS (
+      SELECT user_id
+      FROM group_members
+      WHERE group_id = ${groupId} AND user_id <> ${userId}
+    ),
+    added_member AS (
       INSERT INTO group_members (group_id, user_id)
       VALUES (${groupId}, ${userId})
       ON CONFLICT DO NOTHING
       RETURNING user_id
     ),
-    existing_members AS (
-      SELECT user_id
-      FROM group_members
-      WHERE group_id = ${groupId} AND user_id <> ${userId}
+    inserted_friendships AS (
+      INSERT INTO friendships (user_a, user_b)
+      SELECT LEAST(${userId}, user_id), GREATEST(${userId}, user_id)
+      FROM existing_members
+      ON CONFLICT DO NOTHING
+      RETURNING user_a, user_b
     )
-    INSERT INTO friendships (user_a, user_b)
-    SELECT LEAST(${userId}, user_id), GREATEST(${userId}, user_id)
-    FROM existing_members
-    ON CONFLICT DO NOTHING`;
+    DELETE FROM friend_requests fr
+    USING existing_members em
+    WHERE (fr.from_id = ${userId} AND fr.to_id = em.user_id)
+       OR (fr.from_id = em.user_id AND fr.to_id = ${userId})`;
 }
-
 export async function cancelFriendRequest(requestId: number) {
   await sql`DELETE FROM friend_requests WHERE id = ${requestId}`;
 }
@@ -74,6 +80,7 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
   isSelf: boolean;
   isFriend: boolean;
   hasSharedGroup: boolean;
+  sharedGroups: { id: number; name: string; currency: string }[];
   hasPendingRequest: boolean;
   request: null | { id: number; direction: "incoming" | "outgoing"; createdAt: string };
   capabilities: (netByCurrency: Record<string, number>) => RelationshipCapabilities;
@@ -82,11 +89,12 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
   const [friendship, sharedGroups, requestRows] = await Promise.all([
     isSelf ? Promise.resolve([{ ok: 1 }]) : friendshipExists(viewerId, personId).then((ok) => ok ? [{ ok: 1 }] : []),
     isSelf ? Promise.resolve([]) : sql`
-      SELECT 1
+      SELECT g.id, g.name, g.currency
       FROM group_members me
       JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${personId}
+      JOIN groups g ON g.id = me.group_id
       WHERE me.user_id = ${viewerId}
-      LIMIT 1`,
+      ORDER BY g.name`,
     isSelf ? Promise.resolve([]) : sql`
       SELECT id, from_id, to_id, created_at
       FROM friend_requests
@@ -107,6 +115,7 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
     isSelf,
     isFriend,
     hasSharedGroup,
+    sharedGroups: sharedGroups.map((g) => ({ id: Number(g.id), name: g.name, currency: g.currency })),
     hasPendingRequest,
     request: hasPendingRequest ? {
       id: Number(requestRows[0].id),
