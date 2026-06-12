@@ -242,7 +242,7 @@ function ProfileActions({
   return (
     <div className="flex flex-wrap gap-2">
       {profile.canChat && (
-        <Link href={`/chat/${profile.person.id}`}>
+        <Link href={`/chat?dm=${profile.person.id}`}>
           <Button variant="secondary"><MessageSquare className="h-4 w-4" /> Chat</Button>
         </Link>
       )}

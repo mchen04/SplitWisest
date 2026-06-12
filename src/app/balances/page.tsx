@@ -400,7 +400,7 @@ function FriendSection({
                     >
                       <Receipt className="h-4 w-4" />
                     </Button>
-                    <Link href={`/chat/${f.id}`}>
+                    <Link href={`/chat?dm=${f.id}`}>
                       <Button variant="secondary" className="!min-h-9 !px-2.5" title={`Chat with ${f.displayName}`}>
                         <MessageSquare className="h-4 w-4" />
                         <span className="hidden sm:inline">Chat</span>
