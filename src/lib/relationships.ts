@@ -46,6 +46,25 @@ export async function createFriendRequest(fromId: number, toId: number) {
     ON CONFLICT (from_id, to_id) DO NOTHING`;
 }
 
+export async function joinGroupAndFriendMembers(groupId: number, userId: number) {
+  await sql`
+    WITH added_member AS (
+      INSERT INTO group_members (group_id, user_id)
+      VALUES (${groupId}, ${userId})
+      ON CONFLICT DO NOTHING
+      RETURNING user_id
+    ),
+    existing_members AS (
+      SELECT user_id
+      FROM group_members
+      WHERE group_id = ${groupId} AND user_id <> ${userId}
+    )
+    INSERT INTO friendships (user_a, user_b)
+    SELECT LEAST(${userId}, user_id), GREATEST(${userId}, user_id)
+    FROM existing_members
+    ON CONFLICT DO NOTHING`;
+}
+
 export async function cancelFriendRequest(requestId: number) {
   await sql`DELETE FROM friend_requests WHERE id = ${requestId}`;
 }

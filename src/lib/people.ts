@@ -121,7 +121,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     WHERE s.payer_id = ${viewerId} OR s.recipient_id = ${viewerId}
     ORDER BY s.settled_date DESC, s.id DESC
     LIMIT 20`
-    : groupIds.length === 0 && !isFriend ? [] : await sql`
+    : groupIds.length === 0 ? [] : isFriend ? await sql`
     SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
       s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
       s.settled_date, s.note
@@ -132,6 +132,19 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     WHERE ((s.payer_id = ${viewerId} AND s.recipient_id = ${personId})
        OR (s.payer_id = ${personId} AND s.recipient_id = ${viewerId}))
       AND (s.group_id IS NULL OR s.group_id = ANY(${groupIds}))
+    ORDER BY s.settled_date DESC, s.id DESC
+    LIMIT 20`
+    : await sql`
+    SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
+      s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
+      s.settled_date, s.note
+    FROM settlements s
+    JOIN groups g ON g.id = s.group_id
+    JOIN users p ON p.id = s.payer_id
+    JOIN users r ON r.id = s.recipient_id
+    WHERE ((s.payer_id = ${viewerId} AND s.recipient_id = ${personId})
+       OR (s.payer_id = ${personId} AND s.recipient_id = ${viewerId}))
+      AND s.group_id = ANY(${groupIds})
     ORDER BY s.settled_date DESC, s.id DESC
     LIMIT 20`;
 

@@ -24,15 +24,22 @@ async function loadAuthorized(id: number, userId: number): Promise<SettlementRow
   if (!Number.isInteger(id)) notFound();
   const rows = await sql`SELECT id, group_id, payer_id, recipient_id, created_by FROM settlements WHERE id = ${id}`;
   if (rows.length === 0) notFound();
-  const s = rows[0] as unknown as SettlementRow;
-  const groupId = s.group_id === null ? null : Number(s.group_id);
+  const raw = rows[0];
+  const groupId = raw.group_id === null ? null : Number(raw.group_id);
+  const s: SettlementRow = {
+    id: Number(raw.id),
+    group_id: groupId,
+    payer_id: Number(raw.payer_id),
+    recipient_id: Number(raw.recipient_id),
+    created_by: Number(raw.created_by),
+  };
   const allowed =
-    Number(s.created_by) === userId ||
-    Number(s.payer_id) === userId ||
-    Number(s.recipient_id) === userId ||
+    s.created_by === userId ||
+    s.payer_id === userId ||
+    s.recipient_id === userId ||
     (groupId !== null && (await isGroupMember(groupId, userId)));
   if (!allowed) forbidden("You can't edit this settlement");
-  return { ...s, group_id: groupId, payer_id: Number(s.payer_id), recipient_id: Number(s.recipient_id), id: Number(s.id) };
+  return s;
 }
 
 const PatchBody = z.object(settlementFields);

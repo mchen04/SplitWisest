@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { api, useApiData, useSync } from "@/lib/client";
+import { useCallback, useState } from "react";
+import { useApiData, useSync } from "@/lib/client";
 import type { Member } from "@/components/expense-form";
 
 export interface GroupDetail {
@@ -73,18 +73,12 @@ function expenseQuery(filters: { q: string; cat: string; payer: string; from: st
 }
 
 function useExpenses(groupId: number, filters: { q: string; cat: string; payer: string; from: string; to: string }, limit: number) {
-  const [expenses, setExpenses] = useState<Expense[] | null>(null);
-  const [hasMoreExpenses, setHasMoreExpenses] = useState(false);
-  const reload = useCallback(() => {
-    api<{ expenses: Expense[]; hasMore: boolean }>(`/api/groups/${groupId}/expenses?${expenseQuery(filters, limit)}`)
-      .then((r) => { setExpenses(r.expenses); setHasMoreExpenses(r.hasMore); })
-      .catch(() => {});
-  }, [groupId, filters, limit]);
-  useEffect(() => {
-    const t = setTimeout(reload, filters.q ? 250 : 0);
-    return () => clearTimeout(t);
-  }, [reload, filters.q]);
-  return { expenses, hasMoreExpenses, reloadExpenses: reload };
+  const { data, reload } = useApiData<{ expenses: Expense[]; hasMore: boolean }>(
+    `/api/groups/${groupId}/expenses?${expenseQuery(filters, limit)}`,
+    filters.q ? 250 : 0,
+    { sync: false }
+  );
+  return { expenses: data?.expenses ?? null, hasMoreExpenses: data?.hasMore ?? false, reloadExpenses: reload };
 }
 
 function useSettlements(groupId: number, limit: number) {
