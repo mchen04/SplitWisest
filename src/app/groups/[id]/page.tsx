@@ -5,9 +5,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
-  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check,
+  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check, ChevronDown, Users,
 } from "lucide-react";
-import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
 import { ExpenseForm } from "@/components/expense-form";
@@ -145,7 +145,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         <div className="min-w-0 flex-1">
           {detail ? (
             <>
-              <h1 className="truncate font-display text-2xl font-bold tracking-tight">{detail.group.name}</h1>
+              <GroupSwitcher currentId={groupId} currentName={detail.group.name} />
               <p className="flex items-center gap-1.5 text-xs text-ink-faint">
                 {detail.members.length} members · {detail.group.currency} · invite code
                 <button
@@ -665,5 +665,70 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Modal>
     </AppShell>
+  );
+}
+
+// Inline dropdown so users can jump between groups without going back to the
+// index — groups behave like switchable workspaces.
+function GroupSwitcher({ currentId, currentName }: { currentId: number; currentName: string }) {
+  const [open, setOpen] = useState(false);
+  const { data } = useApiData<{ groups: { id: number; name: string; unreadMessages?: number }[] }>("/api/groups");
+  const others = (data?.groups ?? []).filter((g) => g.id !== currentId);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onClick = () => setOpen(false);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("click", onClick);
+    };
+  }, [open]);
+
+  return (
+    <div className="relative inline-block max-w-full">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Switch group (current: ${currentName})`}
+        className="flex max-w-full items-center gap-1.5 rounded-lg text-left hover:text-accent-dark"
+      >
+        <span className="truncate font-display text-2xl font-bold tracking-tight">{currentName}</span>
+        <ChevronDown className={`h-4.5 w-4.5 shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Your groups"
+          className="absolute left-0 top-full z-50 mt-1.5 max-h-72 w-64 overflow-y-auto rounded-xl border border-line bg-card py-1 shadow-pop"
+        >
+          {others.length === 0 ? (
+            <p className="px-3 py-2.5 text-sm text-ink-faint">No other groups yet.</p>
+          ) : (
+            others.map((g) => (
+              <Link
+                key={g.id}
+                href={`/groups/${g.id}`}
+                role="option"
+                aria-selected={false}
+                className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium hover:bg-paper"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                  <Users className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                {!!g.unreadMessages && <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
+              </Link>
+            ))
+          )}
+          <Link href="/groups" className="mt-1 block border-t border-line px-3 py-2 text-sm font-medium text-accent hover:bg-paper">
+            All groups
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }

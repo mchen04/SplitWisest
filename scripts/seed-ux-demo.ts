@@ -33,25 +33,25 @@ async function main() {
     await request(`/api/groups/${g.id}/expenses`, {
       cookie: demo.cookie,
       body: {
-        description: g.name === "Apartment 4B" ? "Groceries" : "Cabin rental",
+        title: g.name === "Apartment 4B" ? "Groceries" : "Cabin rental",
         amountCents: 12450,
         currency: "USD",
-        paidBy: demo.id,
+        payerId: demo.id,
         date: "2026-06-10",
         splitMethod: "equal",
-        participants: [demo.id, pal.id, roomie.id],
+        participants: [demo.id, pal.id, roomie.id].map((userId) => ({ userId })),
       },
     });
     await request(`/api/groups/${g.id}/expenses`, {
       cookie: pal.cookie,
       body: {
-        description: "Gas and snacks",
+        title: "Gas and snacks",
         amountCents: 6300,
         currency: "USD",
-        paidBy: pal.id,
+        payerId: pal.id,
         date: "2026-06-11",
         splitMethod: "equal",
-        participants: [demo.id, pal.id],
+        participants: [demo.id, pal.id].map((userId) => ({ userId })),
       },
     });
   }
