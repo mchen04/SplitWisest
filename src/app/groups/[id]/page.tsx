@@ -17,6 +17,7 @@ import { GroupSettingsModal } from "@/components/group-settings-modal";
 import { ExpenseDetailModal } from "@/components/expense-detail";
 import { ChatPane } from "@/components/chat";
 import { SpendCharts } from "@/components/spend-charts";
+import { ActivitySummary } from "@/components/activity-summary";
 
 interface GroupDetail {
   group: { id: number; name: string; currency: string; inviteCode: string; createdBy: number };
@@ -668,7 +669,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <ul className="divide-y divide-line">
               {activity.map((a) => (
                 <li key={a.id} className="px-4 py-2.5">
-                  <GroupActivitySummary activity={a} />
+                  <ActivitySummary activity={a} />
                   <p className="mt-0.5 text-xs text-ink-faint">{fmtTime(a.createdAt)}</p>
                 </li>
               ))}
@@ -760,23 +761,5 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Modal>
     </AppShell>
-  );
-}
-
-function GroupActivitySummary({
-  activity,
-}: {
-  activity: { actorId: number; actorName: string; summary: string };
-}) {
-  const rest = activity.summary.startsWith(activity.actorName)
-    ? activity.summary.slice(activity.actorName.length).trimStart()
-    : `· ${activity.summary}`;
-  return (
-    <p className="text-sm leading-snug">
-      <Link href={`/people/${activity.actorId}`} className="font-medium hover:text-accent-dark hover:underline">
-        {activity.actorName}
-      </Link>
-      <span className="text-ink-soft"> {rest}</span>
-    </p>
   );
 }

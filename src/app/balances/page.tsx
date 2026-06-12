@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt, Bell, X, Search, UserRound } from "lucide-react";
-import { api, ApiClientError, fmtMoney, fmtTime, todayStr, useApiData, useFormState, useMe } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, fmtTime, useApiData, useFormState, useMe } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
-import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
-import { SettleFields } from "@/components/settle-fields";
+import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, ErrorNote } from "@/components/ui";
 import { DirectPaymentsModal } from "@/components/direct-payments-modal";
+import { DirectSettleModal } from "@/components/direct-settle-modal";
 
 interface Friend {
   id: number;
@@ -421,75 +421,5 @@ function FriendSection({
             })}
           </ul>
     </section>
-  );
-}
-
-function DirectSettleModal({
-  friend, onClose, onSaved,
-}: {
-  friend: Friend | null; onClose: () => void; onSaved: () => void;
-}) {
-  const [direction, setDirection] = useState<"i-paid" | "they-paid">("i-paid");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("USD");
-  const [date, setDate] = useState(todayStr());
-  const [note, setNote] = useState("");
-  const { error, setError, busy, run } = useFormState();
-
-  useEffect(() => {
-    if (!friend) return;
-    const entries = Object.entries(friend.netByCurrency);
-    const [cur, amt] = entries[0] ?? ["USD", 0];
-    // Reset the modal form whenever a different friend is selected.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCurrency(cur);
-    setAmount(amt !== 0 ? (Math.abs(amt) / 100).toFixed(2) : "");
-    setDirection(amt < 0 ? "i-paid" : "they-paid");
-    setDate(todayStr()); setNote("");
-    setError(null);
-    // setError is stable; reset only when the target friend changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [friend]);
-
-  if (!friend) return null;
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const amountCents = Math.round(parseFloat(amount || "0") * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
-    run(async () => {
-      await api("/api/settlements", {
-        body: { friendId: friend!.id, direction, amountCents, currency, date, note },
-      });
-      onSaved(); onClose();
-    }, "Could not record settlement");
-  }
-
-  return (
-    <Modal open onClose={onClose} title={`Settle with ${friend.displayName}`}>
-      <p className="mb-4 rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
-        Records an offline payment between just the two of you (outside any group).
-      </p>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Direction">
-          <Select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)}>
-            <option value="i-paid">I paid {friend.displayName}</option>
-            <option value="they-paid">{friend.displayName} paid me</option>
-          </Select>
-        </Field>
-        <SettleFields
-          amount={amount} setAmount={setAmount}
-          currency={currency} setCurrency={setCurrency}
-          date={date} setDate={setDate}
-          note={note} setNote={setNote}
-          notePlaceholder="Venmo'd you back"
-        />
-        <ErrorNote message={error} />
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" busy={busy}>Record payment</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }

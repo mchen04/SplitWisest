@@ -5,15 +5,11 @@ import Link from "next/link";
 import {
   ArrowLeft, Bell, HandCoins, MessageSquare, Receipt, Search, UserMinus, UserPlus, Users, X,
 } from "lucide-react";
-import {
-  api, ApiClientError, fmtDate, fmtMoney, todayStr, useApiData, useFormState, useMe,
-} from "@/lib/client";
+import { api, ApiClientError, fmtDate, fmtMoney, useApiData, useMe } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
-import {
-  Avatar, Button, Card, CardHeader, EmptyState, ErrorNote, Field, Input, Modal, Select,
-} from "@/components/ui";
-import { SettleFields } from "@/components/settle-fields";
+import { Avatar, Button, Card, CardHeader, EmptyState, Input } from "@/components/ui";
 import { DirectPaymentsModal } from "@/components/direct-payments-modal";
+import { DirectSettleModal } from "@/components/direct-settle-modal";
 import type { PersonProfile } from "@/lib/people";
 
 const relationshipLabel: Record<PersonProfile["relationship"], string> = {
@@ -192,7 +188,15 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
             </aside>
           </div>
 
-          <DirectSettleModal profile={profile} open={settleOpen} onClose={() => setSettleOpen(false)} onSaved={reload} />
+          <DirectSettleModal
+            friend={settleOpen ? {
+              id: profile.person.id,
+              displayName: profile.person.displayName,
+              netByCurrency: profile.netByCurrency,
+            } : null}
+            onClose={() => setSettleOpen(false)}
+            onSaved={reload}
+          />
           {me && (
             <DirectPaymentsModal
               friend={paymentsOpen ? { id: profile.person.id, displayName: profile.person.displayName } : null}
@@ -307,71 +311,5 @@ function HistoryList({ profile, meId, query }: { profile: PersonProfile; meId: n
         </li>
       ))}
     </ul>
-  );
-}
-
-function DirectSettleModal({
-  profile, open, onClose, onSaved,
-}: {
-  profile: PersonProfile;
-  open: boolean;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  if (!open) return null;
-  return <DirectSettleForm profile={profile} onClose={onClose} onSaved={onSaved} />;
-}
-
-function DirectSettleForm({
-  profile, onClose, onSaved,
-}: {
-  profile: PersonProfile;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const [initialCurrency, initialAmount] = Object.entries(profile.netByCurrency)[0] ?? ["USD", 0];
-  const [direction, setDirection] = useState<"i-paid" | "they-paid">(initialAmount < 0 ? "i-paid" : "they-paid");
-  const [amount, setAmount] = useState(initialAmount !== 0 ? (Math.abs(initialAmount) / 100).toFixed(2) : "");
-  const [currency, setCurrency] = useState(initialCurrency);
-  const [date, setDate] = useState(todayStr());
-  const [note, setNote] = useState("");
-  const { error, setError, busy, run } = useFormState();
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const amountCents = Math.round(parseFloat(amount || "0") * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
-    run(async () => {
-      await api("/api/settlements", {
-        body: { friendId: profile.person.id, direction, amountCents, currency, date, note },
-      });
-      onSaved();
-      onClose();
-    }, "Could not record settlement");
-  }
-
-  return (
-    <Modal open onClose={onClose} title={`Settle with ${profile.person.displayName}`}>
-      <form onSubmit={submit} className="space-y-4">
-        <Field label="Direction">
-          <Select value={direction} onChange={(e) => setDirection(e.target.value as typeof direction)}>
-            <option value="i-paid">I paid {profile.person.displayName}</option>
-            <option value="they-paid">{profile.person.displayName} paid me</option>
-          </Select>
-        </Field>
-        <SettleFields
-          amount={amount} setAmount={setAmount}
-          currency={currency} setCurrency={setCurrency}
-          date={date} setDate={setDate}
-          note={note} setNote={setNote}
-          notePlaceholder="Paid offline"
-        />
-        <ErrorNote message={error} />
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" busy={busy}>Record payment</Button>
-        </div>
-      </form>
-    </Modal>
   );
 }

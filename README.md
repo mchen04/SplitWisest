@@ -6,7 +6,7 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 
 ## Features
 
-- Username/password auth (scrypt-hashed, session cookies), invite-code-gated signup
+- Username/password auth (scrypt-hashed, session cookies), optional invite-code onboarding
 - Groups (trips, apartments, dinners, bills) with per-group currency
 - Expenses with equal / exact / percentage / shares / itemized splits, categories (incl. custom), notes, receipt attachments
 - Multi-currency with automatic conversion (rates snapshotted per expense)
@@ -37,7 +37,7 @@ pnpm dev
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | Neon Postgres connection string (pooler URL, `sslmode=require`) |
-| `SIGNUP_CODE` | Bootstrap invite code for the first account(s). After that, users invite each other with personal codes. |
+| `SIGNUP_CODE` | Optional bootstrap invite code. Friend and group invite codes also work during signup. |
 
 ## Testing
 

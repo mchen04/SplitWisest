@@ -135,6 +135,40 @@ export async function friendBalances(userId: number): Promise<FriendBalance[]> {
   return [...map.values()];
 }
 
+export async function pairwiseFriendBalance(userId: number, friendId: number): Promise<Record<string, number>> {
+  const pairTotals = new Map<string, number>();
+  const groups = await sql`
+    SELECT g.id, g.currency
+    FROM groups g
+    JOIN group_members me ON me.group_id = g.id AND me.user_id = ${userId}
+    JOIN group_members them ON them.group_id = g.id AND them.user_id = ${friendId}`;
+
+  for (const g of groups) {
+    const balances = await groupBalances(Number(g.id));
+    for (const t of simplifyDebts(new Map(balances.map((b) => [b.userId, b.netCents])))) {
+      if (t.from === userId && t.to === friendId) {
+        pairTotals.set(g.currency, (pairTotals.get(g.currency) ?? 0) - t.amountCents);
+      } else if (t.from === friendId && t.to === userId) {
+        pairTotals.set(g.currency, (pairTotals.get(g.currency) ?? 0) + t.amountCents);
+      }
+    }
+  }
+
+  const direct = await sql`
+    SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
+    FROM settlements
+    WHERE group_id IS NULL
+      AND ((payer_id = ${userId} AND recipient_id = ${friendId})
+        OR (payer_id = ${friendId} AND recipient_id = ${userId}))
+    GROUP BY payer_id, recipient_id, currency`;
+  for (const s of direct) {
+    const signed = Number(s.payer_id) === userId ? Number(s.amt) : -Number(s.amt);
+    pairTotals.set(s.currency, (pairTotals.get(s.currency) ?? 0) + signed);
+  }
+
+  return Object.fromEntries([...pairTotals].filter(([, amount]) => amount !== 0));
+}
+
 export async function isGroupMember(groupId: number, userId: number): Promise<boolean> {
   const rows = await sql`SELECT 1 FROM group_members WHERE group_id = ${groupId} AND user_id = ${userId}`;
   return rows.length > 0;

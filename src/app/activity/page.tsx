@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { ScrollText } from "lucide-react";
 import { api, fmtTime, markRead, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Button } from "@/components/ui";
+import { ActivitySummary } from "@/components/activity-summary";
 
 interface Activity {
   id: number;
@@ -66,19 +66,5 @@ export default function ActivityPage() {
         </div>
       </Card>
     </AppShell>
-  );
-}
-
-function ActivitySummary({ activity }: { activity: Activity }) {
-  const rest = activity.summary.startsWith(activity.actorName)
-    ? activity.summary.slice(activity.actorName.length).trimStart()
-    : `· ${activity.summary}`;
-  return (
-    <p className="text-sm leading-snug">
-      <Link href={`/people/${activity.actorId}`} className="font-medium hover:text-accent-dark hover:underline">
-        {activity.actorName}
-      </Link>
-      <span className="text-ink-soft"> {rest}</span>
-    </p>
   );
 }

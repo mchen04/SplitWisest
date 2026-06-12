@@ -10,7 +10,7 @@
 
 - Passwords hashed with Node `scrypt` (16-byte random salt, 64-byte key), stored as `scrypt:<salt>:<hash>`. Verification uses `timingSafeEqual`.
 - Sessions: 32-byte random token in an httpOnly, SameSite=Lax cookie, stored server-side in `sessions` with 30-day expiry. Logout deletes the row.
-- Signup requires an invite code: either the app `SIGNUP_CODE` or another user's personal code (which also creates the friendship). Joining a group auto-friends its members.
+- Signup is open by default. If an invite code is supplied, it must match `SIGNUP_CODE`, another user's personal code, or a group invite code; personal and group codes also connect the new user to the inviter or group.
 
 ## Money
 

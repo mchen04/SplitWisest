@@ -1,5 +1,5 @@
 import { sql } from "./db";
-import { friendBalances } from "./balances";
+import { pairwiseFriendBalance } from "./balances";
 
 export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
 
@@ -88,8 +88,8 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
   let relationship: RelationshipState = "none";
   if (isSelf) relationship = "self";
   else if (isFriend) relationship = "friend";
-  else if (hasPendingRequest) relationship = "pending";
   else if (hasSharedGroup) relationship = "shared-group";
+  else if (hasPendingRequest) relationship = "pending";
 
   if (relationship === "none") return null;
 
@@ -116,8 +116,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     };
   }
 
-  const balances = await friendBalances(viewerId);
-  const netByCurrency = balances.find((fb) => fb.friendId === personId)?.netByCurrency ?? {};
+  const netByCurrency = isSelf ? {} : await pairwiseFriendBalance(viewerId, personId);
   const groupIds = sharedGroups.map((g) => Number(g.id));
 
   const recentExpenses = groupIds.length === 0 ? [] : await sql`
@@ -139,7 +138,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
 
   const recentPayments = isSelf ? await sql`
     SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
-      s.recipient_id, r.display_name AS recipient_name, s.converted_cents, s.currency,
+      s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
       s.settled_date, s.note
     FROM settlements s
     LEFT JOIN groups g ON g.id = s.group_id
@@ -150,7 +149,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     LIMIT 20`
     : groupIds.length === 0 && !isFriend ? [] : await sql`
     SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
-      s.recipient_id, r.display_name AS recipient_name, s.converted_cents, s.currency,
+      s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
       s.settled_date, s.note
     FROM settlements s
     LEFT JOIN groups g ON g.id = s.group_id
@@ -191,7 +190,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       payerName: s.payer_name,
       recipientId: Number(s.recipient_id),
       recipientName: s.recipient_name,
-      amountCents: Number(s.converted_cents),
+      amountCents: Number(s.amount_cents),
       currency: s.currency,
       date: s.settled_date,
       note: s.note,
