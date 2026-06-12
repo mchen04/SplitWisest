@@ -100,13 +100,14 @@ export function useUnread(intervalMs = 5000): Unread {
 
 // Polls /api/sync and invokes onChange whenever a cursor advances. This is the
 // realtime backbone: cheap, serverless-friendly, no websockets to break.
-export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
+export function useSync(onChange: ((c: SyncCursors) => void) | undefined, intervalMs = 4000) {
   const last = useRef<SyncCursors | null>(null);
   const cb = useRef(onChange);
   useEffect(() => {
     cb.current = onChange;
   }, [onChange]);
   useEffect(() => {
+    if (!onChange) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     async function tick() {
@@ -116,7 +117,7 @@ export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
         const prev = last.current;
         last.current = c;
         if (prev && (c.activityCursor !== prev.activityCursor || c.messageCursor !== prev.messageCursor)) {
-          cb.current(c);
+          cb.current?.(c);
         }
       } catch {
         // offline or logged out; keep trying quietly
@@ -128,7 +129,7 @@ export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [intervalMs]);
+  }, [intervalMs, onChange]);
 }
 
 // Fetches `path`, refreshes on every sync tick, and exposes a manual reload.
@@ -137,7 +138,8 @@ export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
 // the returned error instead of looking like they are loading forever.
 export function useApiData<T>(
   path: string,
-  debounceMs = 0
+  debounceMs = 0,
+  opts: { sync?: boolean } = {}
 ): { data: T | null; error: string | null; status: number | null; reload: () => void } {
   const [state, setState] = useState<{ path: string; data: T | null; error: string | null; status: number | null }>({
     path,
@@ -164,7 +166,7 @@ export function useApiData<T>(
     const t = setTimeout(reload, debounceMs);
     return () => clearTimeout(t);
   }, [reload, debounceMs]);
-  useSync(reload);
+  useSync(opts.sync === false ? undefined : reload);
   return {
     data: state.path === path ? state.data : null,
     error: state.path === path ? state.error : null,

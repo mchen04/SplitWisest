@@ -68,16 +68,17 @@ export async function login(username: string, password: string) {
 }
 
 export async function cleanupQaUsers(suffix: string, prefix = "qa") {
-  const users = await sql`SELECT id FROM users WHERE username LIKE ${`${prefix}\\_%\\_${suffix}`} ESCAPE '\\'`;
+  const escapedSuffix = suffix.replace(/[\\_%]/g, "\\$&");
+  const users = await sql`SELECT id FROM users WHERE username LIKE ${`${prefix}\\_%\\_${escapedSuffix}`} ESCAPE '\\'`;
   const userIds = users.map((u) => Number(u.id));
   if (userIds.length === 0) return;
+  const groupNamePrefix = prefix === "core" ? "Core Flow " : "QA ";
   const groups = await sql`
-    SELECT DISTINCT g.id
-    FROM groups g
-    LEFT JOIN group_members gm ON gm.group_id = g.id
-    WHERE g.created_by = ANY(${userIds}) OR gm.user_id = ANY(${userIds})`;
+    SELECT id FROM groups
+    WHERE created_by = ANY(${userIds}) AND name LIKE ${`${groupNamePrefix}%${escapedSuffix}`} ESCAPE '\\'`;
   const groupIds = groups.map((g) => Number(g.id));
   if (groupIds.length > 0) await sql`DELETE FROM groups WHERE id = ANY(${groupIds})`;
+  await sql`DELETE FROM group_members WHERE user_id = ANY(${userIds})`;
   await sql`DELETE FROM activity WHERE actor_id = ANY(${userIds})`;
   await sql`DELETE FROM messages WHERE sender_id = ANY(${userIds}) OR dm_a = ANY(${userIds}) OR dm_b = ANY(${userIds})`;
   await sql`DELETE FROM settlements WHERE payer_id = ANY(${userIds}) OR recipient_id = ANY(${userIds}) OR created_by = ANY(${userIds})`;

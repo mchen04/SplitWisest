@@ -88,7 +88,11 @@ function useExpenses(groupId: number, filters: { q: string; cat: string; payer: 
 }
 
 function useSettlements(groupId: number, limit: number) {
-  const { data, reload } = useApiData<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${limit}`);
+  const { data, reload } = useApiData<{ settlements: Settlement[]; hasMore: boolean }>(
+    `/api/groups/${groupId}/settlements?limit=${limit}`,
+    0,
+    { sync: false }
+  );
   return { settlements: data?.settlements ?? null, hasMoreSettlements: data?.hasMore ?? false, reloadSettlements: reload };
 }
 
@@ -103,9 +107,9 @@ export function useGroupPageData({
   expenseLimit: number;
   settlementLimit: number;
 }) {
-  const detailState = useApiData<GroupDetail>(`/api/groups/${groupId}`);
-  const recurringState = useApiData<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`);
-  const activityState = useApiData<{ activity: GroupActivity[] }>(`/api/groups/${groupId}/activity`);
+  const detailState = useApiData<GroupDetail>(`/api/groups/${groupId}`, 0, { sync: false });
+  const recurringState = useApiData<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`, 0, { sync: false });
+  const activityState = useApiData<{ activity: GroupActivity[] }>(`/api/groups/${groupId}/activity`, 0, { sync: false });
   const { expenses, hasMoreExpenses, reloadExpenses } = useExpenses(groupId, filters, expenseLimit);
   const { settlements, hasMoreSettlements, reloadSettlements } = useSettlements(groupId, settlementLimit);
   const [refreshKey, setRefreshKey] = useState(0);

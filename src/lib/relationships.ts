@@ -114,3 +114,23 @@ export async function canRemoveFriend(userId: number, friendId: number): Promise
   return await friendshipExists(userId, friendId)
     && Object.keys(await pairwiseFriendBalance(userId, friendId)).length === 0;
 }
+
+export function relationshipCapabilities({
+  isFriend,
+  hasSharedGroup,
+  hasRequest,
+  netByCurrency,
+}: {
+  isFriend: boolean;
+  hasSharedGroup: boolean;
+  hasRequest: boolean;
+  netByCurrency: Record<string, number>;
+}) {
+  return {
+    canChat: isFriend,
+    canSettleDirectly: isFriend,
+    canNudge: isFriend || hasSharedGroup,
+    canRequestFriend: hasSharedGroup && !isFriend && !hasRequest,
+    canRemoveFriend: isFriend && Object.keys(netByCurrency).length === 0,
+  };
+}

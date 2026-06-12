@@ -1,6 +1,6 @@
 import { sql } from "./db";
 import { pairwiseFriendBalance } from "./balances";
-import { canRemoveFriend, canRequestFriendById, canSettleDirectly, loadRelationship, RelationshipState } from "./relationships";
+import { loadRelationship, relationshipCapabilities, RelationshipState } from "./relationships";
 
 export interface PersonProfile {
   person: {
@@ -135,6 +135,13 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     ORDER BY s.settled_date DESC, s.id DESC
     LIMIT 20`;
 
+  const capabilities = relationshipCapabilities({
+    isFriend,
+    hasSharedGroup,
+    hasRequest: !!request,
+    netByCurrency,
+  });
+
   return {
     person,
     relationship,
@@ -169,10 +176,6 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       date: s.settled_date,
       note: s.note,
     })),
-    canChat: await canSettleDirectly(viewerId, personId),
-    canSettleDirectly: await canSettleDirectly(viewerId, personId),
-    canNudge: isFriend || hasSharedGroup,
-    canRequestFriend: !request && await canRequestFriendById(viewerId, personId),
-    canRemoveFriend: await canRemoveFriend(viewerId, personId),
+    ...capabilities,
   };
 }
