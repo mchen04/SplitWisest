@@ -2,7 +2,7 @@
 
 ## Automated
 
-- [x] `pnpm vitest run` — 21 money-math tests (split sums, remainder distribution, debt simplification, parsing)
+- [x] `pnpm vitest run` — 24 tests covering money math and attachment filename/header safety
 - [x] `pnpm tsc --noEmit`
 - [x] `pnpm next build`
 - [x] `pnpm verify:core` — API-level signup, groups, expenses, settlements, chat, nudges, recovery, auth boundaries
@@ -15,7 +15,7 @@ Round 1 agents: money math, auth/security, DB integrity + realtime + chat, UX/fr
 - Security: SQL injection — none (all tagged-template params); access control verified on every route; sessions/password handling clean.
 - DB/realtime: atomicity of expense writes, recurring-expense races, chat pagination/dedup, sync cursor scope — found and fixed (see git history).
 - Round 2: re-review found 1 blocking (CTE sibling-visibility breaking expense edits) + 2 important (recurrence anchor drift, over-eager deactivation) — all fixed and re-verified live against the API. Converged.
-- 2026-06-11 criticality loop: structural audit cycles tightened profile privacy, direct settlements, relationship policy, QA harnesses, and group-page data loading. Current branch remains under active convergence until two consecutive fresh audits approve.
+- 2026-06-11 criticality loop: structural audit cycles tightened profile privacy, direct settlements, settlement mutation authorization, relationship policy, activity visibility, account recovery atomicity, attachment header safety, QA harnesses, and group-page/balance data loading. Cycles 17 and 18 both returned APPROVE, satisfying the requested two-audit convergence gate.
 
 ## Browser verification (agent-browser)
 

@@ -2,7 +2,7 @@
 
 ## Layers
 
-- `src/lib/` — pure logic and data access: `money.ts` (split math, debt simplification), `balances.ts` (balance queries), `expenses.ts` (expense write paths + recurring materialization), `auth.ts` (passwords, sessions), `fx.ts` (currency rates), `api.ts` (route error handling), `activity.ts` (log writes), `db.ts` (Neon client), `client.ts` (browser fetch + polling hooks).
+- `src/lib/` — pure logic and data access: `money.ts` (split math, debt simplification), `balances.ts` (balance queries), `settlements.ts` (settlement validation, visibility, authorization), `expenses.ts` (expense write paths + recurring materialization), `auth.ts` (passwords, sessions), `attachments.ts` (safe upload/download filenames), `fx.ts` (currency rates), `api.ts` (route error handling), `activity.ts` (log writes), `db.ts` (Neon client), `client.ts` (browser fetch + polling hooks).
 - `src/app/api/` — REST route handlers. Every handler authenticates via session cookie and authorizes via group membership / friendship checks before touching data.
 - `src/app/` + `src/components/` — client-rendered UI. Pages fetch JSON from the API; no server components touch the DB directly.
 
@@ -11,6 +11,7 @@
 - Passwords hashed with Node `scrypt` (16-byte random salt, 64-byte key), stored as `scrypt:<salt>:<hash>`. Verification uses `timingSafeEqual`.
 - Sessions: 32-byte random token in an httpOnly, SameSite=Lax cookie, stored server-side in `sessions` with 30-day expiry. Logout deletes the row.
 - Signup is open by default. If an invite code is supplied, it must match `SIGNUP_CODE`, another user's personal code, or a group invite code; personal and group codes also connect the new user to the inviter or group.
+- Password recovery consumes the one-time recovery code, updates the password hash, and invalidates existing sessions in one CTE-backed database statement; the replacement login session is created only after that atomic reset succeeds.
 
 ## Money
 
@@ -18,11 +19,19 @@
 - Each expense stores `amount_cents` in its own currency plus `converted_cents` in the group currency, converted at entry time (`fx_rate` snapshot). Later rate changes never alter recorded balances.
 - Group balance per member = paid − owed + settlements paid − settlements received, all in group currency. Share conversion rounding drift (a few cents at most) is absorbed into the largest balance so nets always sum to zero.
 - Debt simplification (`simplifyDebts`) greedily matches largest debtor to largest creditor, yielding ≤ n−1 transfers.
-- Friend balances mirror the app's simplified settle-up suggestions across shared groups, plus direct settlements, reported per currency without cross-currency netting.
+- Friend balances mirror the app's simplified settle-up suggestions across shared groups, plus direct settlements, reported per currency without cross-currency netting. Pair balances are aggregated across all relevant groups in one set-based query before per-group debt simplification, avoiding one full balance query per shared group.
 
 ## Settlements
 
-Settlements are ledger rows only (payer, recipient, amount, date, note) — no money movement. Group settlements convert to group currency; direct friend settlements stay in their own currency.
+Settlements are ledger rows only (payer, recipient, amount, date, note) — no money movement. Group settlements convert to group currency; direct friend settlements stay in their own currency. Mutating a direct settlement requires being a payer or recipient; mutating a group settlement requires current group membership plus being the payer, recipient, or creator.
+
+## Activity visibility
+
+Group activity is visible through group membership. User-scoped activity, such as friend acceptance/removal and direct settlements, is logged with explicit `visibleUserIds` so both affected users get feed visibility and sync cursor updates.
+
+## Attachments
+
+Receipt uploads are limited to images/PDFs under 4 MB. Stored filenames are canonicalized to remove path separators, quotes, and control characters; downloads emit a safe `Content-Disposition` header with both `filename` and `filename*`.
 
 ## Realtime
 
@@ -38,4 +47,4 @@ Settlements are ledger rows only (payer, recipient, amount, date, note) — no m
 
 ## Deployment
 
-Vercel serverless. Neon over HTTP (`@neondatabase/serverless`), which means no multi-statement transactions; write paths are ordered so a mid-sequence failure leaves either a complete record or a cleanly absent one (expense row first, then shares; reads tolerate orphans by joining through shares).
+Vercel serverless. Neon over HTTP (`@neondatabase/serverless`), so write paths prefer single-statement CTEs where atomicity matters and otherwise order writes so a mid-sequence failure leaves either a complete record or a cleanly absent one.

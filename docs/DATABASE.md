@@ -39,3 +39,4 @@ DATABASE_URL=... pnpm tsx scripts/migrate.ts
 - Dates are `DATE` for business dates, `TIMESTAMPTZ` for event times.
 - Cascading deletes: removing an expense removes its shares/items/attachments; removing a group removes its expenses, members, messages, activity.
 - The Neon HTTP driver returns `BIGINT` as strings and `bytea` as `\x`-hex; API routes normalize with `Number(...)` / hex decode.
+- Attachment filenames are stored only after header/path sanitization; download responses still sanitize again before emitting `Content-Disposition`.
