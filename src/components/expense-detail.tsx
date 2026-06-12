@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Pencil, Trash2, Paperclip, FileText, SendHorizonal, MessageSquare } from "lucide-react";
 import { api, fmtDate, fmtMoney, fmtTime } from "@/lib/client";
 import { Modal, Button, Avatar, Input } from "./ui";
@@ -58,6 +59,8 @@ export function ExpenseDetailModal({
 
   useEffect(() => {
     if (!open || expenseId === null) return;
+    // Clear stale detail before loading the selected expense.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDetail(null);
     setComments(null);
     setDraft("");
@@ -96,8 +99,10 @@ export function ExpenseDetailModal({
           </div>
           <p className="text-sm text-ink-soft">
             Paid by{" "}
-            <strong>{detail.shares.find((s) => s.userId === detail.payerId)?.displayName
-              ?? (detail.payerId === meId ? "you" : "a member")}</strong>
+            <Link href={`/people/${detail.payerId}`} className="font-semibold hover:text-accent-dark hover:underline">
+              {detail.shares.find((s) => s.userId === detail.payerId)?.displayName
+                ?? (detail.payerId === meId ? "you" : "a member")}
+            </Link>
           </p>
 
           {/* Split breakdown */}
@@ -106,9 +111,13 @@ export function ExpenseDetailModal({
             <ul className="divide-y divide-line rounded-lg border border-line">
               {detail.shares.map((s) => (
                 <li key={s.userId} className="flex items-center gap-2.5 px-3 py-2 text-sm">
-                  <Avatar name={s.displayName} size="sm" />
+                  <Link href={`/people/${s.userId}`} aria-label={`Open ${s.displayName}'s profile`}>
+                    <Avatar name={s.displayName} size="sm" />
+                  </Link>
                   <span className="min-w-0 flex-1 truncate">
-                    {s.displayName}{s.userId === meId ? " (you)" : ""}
+                    <Link href={`/people/${s.userId}`} className="hover:text-accent-dark hover:underline">
+                      {s.displayName}{s.userId === meId ? " (you)" : ""}
+                    </Link>
                   </span>
                   <span className="tnum font-medium">{fmtMoney(s.shareCents, detail.currency)}</span>
                 </li>
@@ -188,10 +197,14 @@ export function ExpenseDetailModal({
               <ul className="space-y-2.5">
                 {comments.map((c) => (
                   <li key={c.id} className="flex items-start gap-2.5">
-                    <Avatar name={c.authorName} size="sm" />
+                    <Link href={`/people/${c.authorId}`} aria-label={`Open ${c.authorName}'s profile`}>
+                      <Avatar name={c.authorName} size="sm" />
+                    </Link>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm">
-                        <span className="font-medium">{c.authorId === meId ? "You" : c.authorName}</span>{" "}
+                        <Link href={`/people/${c.authorId}`} className="font-medium hover:text-accent-dark hover:underline">
+                          {c.authorId === meId ? "You" : c.authorName}
+                        </Link>{" "}
                         <span className="text-xs text-ink-faint">{fmtTime(c.createdAt)}</span>
                       </p>
                       <p className="whitespace-pre-wrap break-words text-sm text-ink-soft">{c.body}</p>

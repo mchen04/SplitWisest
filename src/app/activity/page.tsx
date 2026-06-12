@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { ScrollText } from "lucide-react";
 import { api, fmtTime, markRead, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
@@ -10,6 +11,8 @@ interface Activity {
   id: number;
   groupId: number | null;
   groupName: string | null;
+  actorId: number;
+  actorName: string;
   summary: string;
   createdAt: string;
 }
@@ -46,7 +49,7 @@ export default function ActivityPage() {
             <ul className="divide-y divide-line">
               {activity.map((a) => (
                 <li key={a.id} className="px-4 py-2.5">
-                  <p className="text-sm leading-snug">{a.summary}</p>
+                  <ActivitySummary activity={a} />
                   <p className="mt-0.5 text-xs text-ink-faint">
                     {a.groupName ? `${a.groupName} · ` : ""}
                     {fmtTime(a.createdAt)}
@@ -63,5 +66,19 @@ export default function ActivityPage() {
         </div>
       </Card>
     </AppShell>
+  );
+}
+
+function ActivitySummary({ activity }: { activity: Activity }) {
+  const rest = activity.summary.startsWith(activity.actorName)
+    ? activity.summary.slice(activity.actorName.length).trimStart()
+    : `· ${activity.summary}`;
+  return (
+    <p className="text-sm leading-snug">
+      <Link href={`/people/${activity.actorId}`} className="font-medium hover:text-accent-dark hover:underline">
+        {activity.actorName}
+      </Link>
+      <span className="text-ink-soft"> {rest}</span>
+    </p>
   );
 }

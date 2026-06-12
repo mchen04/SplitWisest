@@ -15,7 +15,7 @@ type BadgeKey = keyof Unread;
 const NAV: { href: string; label: string; icon: typeof LayoutDashboard; badge?: BadgeKey }[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/groups", label: "Groups", icon: Users },
-  { href: "/balances", label: "Balances", icon: Scale, badge: "nudges" },
+  { href: "/balances", label: "Balances", icon: Scale, badge: "balances" },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/chat", label: "Chat", icon: MessageSquare, badge: "messages" },
   { href: "/activity", label: "Activity", icon: ScrollText, badge: "activity" },

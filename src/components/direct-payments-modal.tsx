@@ -46,6 +46,8 @@ export function DirectPaymentsModal({
 
   useEffect(() => {
     if (!friend) return;
+    // Clear stale history while loading the newly selected friend's payments.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setList(null);
     setError(null);
     reload();

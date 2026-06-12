@@ -33,6 +33,8 @@ export function RecurringModal({
     if (!open) return;
     setError(null);
     if (existing) {
+      // Reset the recurring rule form when opening or switching the edited rule.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(existing.title);
       setAmount((existing.amountCents / 100).toFixed(2));
       setPayerId(existing.payerId);

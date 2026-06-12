@@ -9,7 +9,14 @@ import { logActivity } from "@/lib/activity";
 export const GET = handler(async () => {
   const user = await requireUser();
   const rows = await sql`
-    SELECT u.id, u.display_name, u.username
+    SELECT u.id, u.display_name, u.username,
+      (SELECT COALESCE(MAX(m.id), 0) FROM messages m
+        WHERE m.channel = 'dm'
+          AND m.sender_id <> ${user.id}
+          AND m.dm_a = LEAST(u.id, ${user.id})
+          AND m.dm_b = GREATEST(u.id, ${user.id})) AS last_message_id,
+      COALESCE((SELECT rs.last_id FROM read_state rs
+        WHERE rs.user_id = ${user.id} AND rs.scope = 'msg:dm:' || u.id), 0) AS read_message_id
     FROM friendships f
     JOIN users u ON u.id = CASE WHEN f.user_a = ${user.id} THEN f.user_b ELSE f.user_a END
     WHERE f.user_a = ${user.id} OR f.user_b = ${user.id}
@@ -34,6 +41,7 @@ export const GET = handler(async () => {
       displayName: f.display_name,
       username: f.username,
       netByCurrency: balanceByFriend.get(Number(f.id)) ?? {},
+      unreadMessages: Number(f.last_message_id) > Number(f.read_message_id) ? 1 : 0,
     })),
     incomingRequests: incoming.map((r) => ({
       id: Number(r.id),
@@ -53,18 +61,33 @@ export const GET = handler(async () => {
   });
 });
 
-const Body = z.object({ code: z.string().trim().min(1, "Invite code is required") });
+const Body = z.object({
+  code: z.string().trim().optional(),
+  userId: z.number().int().positive().optional(),
+}).refine((v) => !!v.code || !!v.userId, "Invite code or user is required");
 
 // Adding a friend by code sends a pending request the recipient must accept,
 // rather than creating an instant friendship. If the other person already has a
 // pending request out to you, this accepts it (mutual intent → friends).
 export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
-  const { code } = Body.parse(await req.json());
-  const rows = await sql`SELECT id, display_name FROM users WHERE invite_code = ${code}`;
+  const { code, userId } = Body.parse(await req.json());
+  const rows = userId
+    ? await sql`SELECT id, display_name FROM users WHERE id = ${userId}`
+    : await sql`SELECT id, display_name FROM users WHERE invite_code = ${code}`;
   if (rows.length === 0) badRequest("No user found for that invite code");
   const friendId = Number(rows[0].id);
   if (friendId === user.id) badRequest("That is your own invite code");
+
+  if (userId) {
+    const shared = await sql`
+      SELECT 1
+      FROM group_members me
+      JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${friendId}
+      WHERE me.user_id = ${user.id}
+      LIMIT 1`;
+    if (shared.length === 0) badRequest("Use an invite code to add this person");
+  }
 
   const [a, b] = friendId < user.id ? [friendId, user.id] : [user.id, friendId];
   const already = await sql`SELECT 1 FROM friendships WHERE user_a = ${a} AND user_b = ${b}`;

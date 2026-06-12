@@ -10,8 +10,11 @@ export const GET = handler(async (req: NextRequest) => {
   const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 1000);
   const offset = Math.max(Number(q.get("offset")) || 0, 0);
   const rows = await sql`
-    SELECT a.id, a.group_id, g.name AS group_name, a.type, a.summary, a.created_at
-    FROM activity a LEFT JOIN groups g ON g.id = a.group_id
+    SELECT a.id, a.group_id, g.name AS group_name, a.actor_id, u.display_name AS actor_name,
+      a.type, a.summary, a.created_at
+    FROM activity a
+    JOIN users u ON u.id = a.actor_id
+    LEFT JOIN groups g ON g.id = a.group_id
     WHERE a.id > ${since} AND (
       a.group_id IN (SELECT group_id FROM group_members WHERE user_id = ${user.id})
       OR (a.group_id IS NULL AND a.actor_id = ${user.id})
@@ -25,6 +28,8 @@ export const GET = handler(async (req: NextRequest) => {
       id: Number(a.id),
       groupId: a.group_id ? Number(a.group_id) : null,
       groupName: a.group_name,
+      actorId: Number(a.actor_id),
+      actorName: a.actor_name,
       type: a.type,
       summary: a.summary,
       createdAt: a.created_at,

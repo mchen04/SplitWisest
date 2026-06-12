@@ -40,6 +40,8 @@ export function SettleModal({
     if (!open) return;
     setError(null);
     if (existing) {
+      // Reset the settlement form when opening or switching the edited payment.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPayerId(existing.payerId);
       setRecipientId(existing.recipientId);
       setAmount((existing.amountCents / 100).toFixed(2));

@@ -57,6 +57,8 @@ export interface Unread {
   messages: number;
   activity: number;
   nudges: number;
+  requests: number;
+  balances: number;
 }
 
 export interface SyncCursors {
@@ -74,7 +76,7 @@ export function markRead(scope: string, lastId: number) {
 
 // Polls /api/sync and exposes the latest unread counts for nav badges.
 export function useUnread(intervalMs = 5000): Unread {
-  const [unread, setUnread] = useState<Unread>({ messages: 0, activity: 0, nudges: 0 });
+  const [unread, setUnread] = useState<Unread>({ messages: 0, activity: 0, nudges: 0, requests: 0, balances: 0 });
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -101,7 +103,9 @@ export function useUnread(intervalMs = 5000): Unread {
 export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
   const last = useRef<SyncCursors | null>(null);
   const cb = useRef(onChange);
-  cb.current = onChange;
+  useEffect(() => {
+    cb.current = onChange;
+  }, [onChange]);
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -128,21 +132,34 @@ export function useSync(onChange: (c: SyncCursors) => void, intervalMs = 4000) {
 }
 
 // Fetches `path`, refreshes on every sync tick, and exposes a manual reload.
-// `debounceMs` delays the fetch (used for search-as-you-type). Errors are
-// swallowed to a null/stale value — pages render skeletons off `data === null`.
-export function useApiData<T>(path: string, debounceMs = 0): { data: T | null; reload: () => void } {
+// `debounceMs` delays the fetch (used for search-as-you-type). Existing pages
+// can keep rendering skeletons off `data === null`, while newer flows can show
+// the returned error instead of looking like they are loading forever.
+export function useApiData<T>(
+  path: string,
+  debounceMs = 0
+): { data: T | null; error: string | null; status: number | null; reload: () => void } {
   const [data, setData] = useState<T | null>(null);
-  const pathRef = useRef(path);
-  pathRef.current = path;
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<number | null>(null);
   const reload = useCallback(() => {
-    api<T>(pathRef.current).then(setData).catch(() => {});
-  }, []);
+    api<T>(path)
+      .then((next) => {
+        setData(next);
+        setError(null);
+        setStatus(200);
+      })
+      .catch((err) => {
+        setError(err instanceof ApiClientError ? err.message : "Could not load data");
+        setStatus(err instanceof ApiClientError ? err.status : null);
+      });
+  }, [path]);
   useEffect(() => {
     const t = setTimeout(reload, debounceMs);
     return () => clearTimeout(t);
   }, [path, reload, debounceMs]);
   useSync(reload);
-  return { data, reload };
+  return { data, error, status, reload };
 }
 
 // Form submission state for modals: tracks error + busy and wraps a submit in

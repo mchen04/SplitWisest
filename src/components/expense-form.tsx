@@ -72,6 +72,8 @@ export function ExpenseForm({
   useEffect(() => {
     if (!open) return;
     api<{ categories: Category[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
+    // Reset the form when opening or switching the edited expense.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
     setBusy(false);
     setFiles([]);
@@ -298,7 +300,13 @@ export function ExpenseForm({
           <Field label="New custom category" hint="Optional — adds to your list">
             <div className="flex gap-2">
               <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="e.g. Ski trip" />
-              <Button type="button" variant="secondary" onClick={addCategory} disabled={!newCategory.trim()}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={addCategory}
+                disabled={!newCategory.trim()}
+                aria-label="Add custom category"
+              >
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
@@ -414,7 +422,7 @@ export function ExpenseForm({
             Cancel
           </Button>
           <Button type="submit" busy={busy} disabled={splitStatus ? !splitStatus.ok : false}>
-            {existing ? "Save changes" : "Add expense"}
+            {existing ? "Save expense changes" : "Create expense"}
           </Button>
         </div>
       </form>

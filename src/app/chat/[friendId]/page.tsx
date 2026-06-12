@@ -53,7 +53,9 @@ export default function DmPage({ params }: { params: Promise<{ friendId: string 
           <>
             <Avatar name={friend.displayName} />
             <div>
-              <h1 className="font-display text-xl font-bold">{friend.displayName}</h1>
+              <Link href={`/people/${friend.id}`} className="font-display text-xl font-bold hover:text-accent-dark hover:underline">
+                {friend.displayName}
+              </Link>
               <p className="text-xs text-ink-faint">@{friend.username} · direct chat</p>
             </div>
           </>

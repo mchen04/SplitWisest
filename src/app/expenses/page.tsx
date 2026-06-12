@@ -30,7 +30,10 @@ export default function ExpensesPage() {
   const [limit, setLimit] = useState(50);
 
   // Reset to the first page whenever the filters change.
-  useEffect(() => { setLimit(50); }, [filters]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLimit(50);
+  }, [filters]);
 
   const params = new URLSearchParams();
   if (filters.q.trim()) params.set("q", filters.q.trim());

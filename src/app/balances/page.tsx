@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt, Bell, X } from "lucide-react";
+import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt, Bell, X, Search, UserRound } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtTime, todayStr, useApiData, useFormState, useMe } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
@@ -34,7 +34,7 @@ interface Nudge {
 }
 
 export default function BalancesPage() {
-  const { data, reload } = useApiData<{
+  const { data, error: friendsError, reload } = useApiData<{
     friends: Friend[];
     incomingRequests: FriendRequest[];
     outgoingRequests: FriendRequest[];
@@ -51,12 +51,19 @@ export default function BalancesPage() {
   const [settleFriend, setSettleFriend] = useState<Friend | null>(null);
   const [historyFriend, setHistoryFriend] = useState<Friend | null>(null);
   const [nudgedId, setNudgedId] = useState<number | null>(null);
+  const [query, setQuery] = useState("");
   const me = useMe();
   const { error, setError, busy, run } = useFormState();
 
   const { data: nudgeData, reload: reloadNudges } =
     useApiData<{ nudges: Nudge[] }>("/api/nudges");
   const reminders = (nudgeData?.nudges ?? []).filter((n) => !n.seen);
+  const filteredFriends = (friends ?? []).filter((f) => {
+    const q = query.trim().toLowerCase();
+    return !q || f.displayName.toLowerCase().includes(q) || f.username.toLowerCase().includes(q);
+  });
+  const activeFriends = filteredFriends.filter((f) => Object.keys(f.netByCurrency).length > 0);
+  const settledFriends = filteredFriends.filter((f) => Object.keys(f.netByCurrency).length === 0);
 
   async function nudge(f: Friend) {
     try {
@@ -155,9 +162,14 @@ export default function BalancesPage() {
           <ul className="divide-y divide-line">
             {incomingRequests.map((r) => (
               <li key={`in-${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                <Avatar name={r.displayName} size="sm" />
+                <Link href={`/people/${r.userId}`} aria-label={`Open ${r.displayName}'s profile`}>
+                  <Avatar name={r.displayName} size="sm" />
+                </Link>
                 <span className="min-w-0 flex-1 text-sm">
-                  <strong>{r.displayName}</strong> <span className="text-ink-faint">@{r.username}</span> wants to be friends
+                  <Link href={`/people/${r.userId}`} className="font-semibold hover:text-accent-dark hover:underline">
+                    {r.displayName}
+                  </Link>{" "}
+                  <span className="text-ink-faint">@{r.username}</span> wants to be friends
                 </span>
                 <div className="flex gap-1.5">
                   <Button className="!min-h-9 !px-3" onClick={() => respondRequest(r.id, "accept")}>Accept</Button>
@@ -167,9 +179,15 @@ export default function BalancesPage() {
             ))}
             {outgoingRequests.map((r) => (
               <li key={`out-${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                <Avatar name={r.displayName} size="sm" />
+                <Link href={`/people/${r.userId}`} aria-label={`Open ${r.displayName}'s profile`}>
+                  <Avatar name={r.displayName} size="sm" />
+                </Link>
                 <span className="min-w-0 flex-1 text-sm">
-                  Request sent to <strong>{r.displayName}</strong> <span className="text-ink-faint">@{r.username}</span>
+                  Request sent to{" "}
+                  <Link href={`/people/${r.userId}`} className="font-semibold hover:text-accent-dark hover:underline">
+                    {r.displayName}
+                  </Link>{" "}
+                  <span className="text-ink-faint">@{r.username}</span>
                 </span>
                 <Button variant="secondary" className="!min-h-9 !px-3" onClick={() => respondRequest(r.id, "cancel")}>Cancel</Button>
               </li>
@@ -207,8 +225,27 @@ export default function BalancesPage() {
 
       <Card className="flex flex-col md:min-h-0 md:flex-1">
         <CardHeader title="Friends" />
+        <div className="border-b border-line p-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search friends"
+              aria-label="Search friends"
+              className="pl-8"
+            />
+          </div>
+        </div>
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
-        {friends === null ? (
+        {friendsError && friends === null ? (
+          <EmptyState
+            icon={<Scale className="h-8 w-8" />}
+            title="Could not load friends"
+            hint={friendsError}
+            action={<Button variant="secondary" onClick={reload}>Retry</Button>}
+          />
+        ) : friends === null ? (
           <div className="space-y-3 p-4">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}</div>
         ) : friends.length === 0 ? (
           <EmptyState
@@ -217,77 +254,33 @@ export default function BalancesPage() {
             hint="Share your invite code, or add a friend with theirs."
             action={<Button variant="secondary" onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add friend</Button>}
           />
+        ) : filteredFriends.length === 0 ? (
+          <EmptyState
+            icon={<Search className="h-8 w-8" />}
+            title="No matching friends"
+            hint="Try a different name or username."
+          />
         ) : (
-          <ul className="divide-y divide-line">
-            {friends.map((f) => {
-              const entries = Object.entries(f.netByCurrency);
-              return (
-                <li key={f.id} className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
-                  <Avatar name={f.displayName} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{f.displayName}</p>
-                    <p className="text-xs text-ink-faint">@{f.username}</p>
-                  </div>
-                  <div className="text-right text-sm">
-                    {entries.length === 0 ? (
-                      <span className="text-ink-faint">settled up</span>
-                    ) : (
-                      entries.map(([cur, amt]) => (
-                        <p key={cur} className={amt > 0 ? "text-owed" : "text-owe"}>
-                          {amt > 0 ? "owes you" : "you owe"}{" "}
-                          <span className="tnum font-semibold">{fmtMoney(Math.abs(amt), cur)}</span>
-                        </p>
-                      ))
-                    )}
-                  </div>
-                  <div className="flex gap-1.5">
-                    {entries.length > 0 && (
-                      <Button variant="secondary" className="!min-h-9 !px-2.5" onClick={() => setSettleFriend(f)} title="Record offline payment">
-                        <HandCoins className="h-4 w-4" />
-                        <span className="hidden sm:inline">Settle</span>
-                      </Button>
-                    )}
-                    {entries.some(([, amt]) => amt > 0) && (
-                      <Button
-                        variant="secondary"
-                        className="!min-h-9 !px-2.5"
-                        onClick={() => nudge(f)}
-                        title={`Nudge ${f.displayName} to settle up`}
-                        aria-label={`Nudge ${f.displayName}`}
-                      >
-                        {nudgedId === f.id ? <Check className="h-4 w-4 text-owed" /> : <Bell className="h-4 w-4" />}
-                        <span className="hidden sm:inline">{nudgedId === f.id ? "Nudged" : "Nudge"}</span>
-                      </Button>
-                    )}
-                    <Button
-                      variant="secondary"
-                      className="!min-h-9 !px-2.5"
-                      onClick={() => setHistoryFriend(f)}
-                      title={`Recorded payments with ${f.displayName}`}
-                      aria-label={`Payments with ${f.displayName}`}
-                    >
-                      <Receipt className="h-4 w-4" />
-                    </Button>
-                    <Link href={`/chat/${f.id}`}>
-                      <Button variant="secondary" className="!min-h-9 !px-2.5" title={`Chat with ${f.displayName}`}>
-                        <MessageSquare className="h-4 w-4" />
-                        <span className="hidden sm:inline">Chat</span>
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="secondary"
-                      className="!min-h-9 !px-2.5"
-                      onClick={() => removeFriend(f)}
-                      title={`Remove ${f.displayName}`}
-                      aria-label={`Remove ${f.displayName}`}
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          <div>
+            <FriendSection
+              title="Active balances"
+              friends={activeFriends}
+              nudgedId={nudgedId}
+              onSettle={setSettleFriend}
+              onHistory={setHistoryFriend}
+              onNudge={nudge}
+              onRemove={removeFriend}
+            />
+            <FriendSection
+              title="Settled friends"
+              friends={settledFriends}
+              nudgedId={nudgedId}
+              onSettle={setSettleFriend}
+              onHistory={setHistoryFriend}
+              onNudge={nudge}
+              onRemove={removeFriend}
+            />
+          </div>
         )}
         </div>
       </Card>
@@ -324,6 +317,113 @@ export default function BalancesPage() {
   );
 }
 
+function FriendSection({
+  title,
+  friends,
+  nudgedId,
+  onSettle,
+  onHistory,
+  onNudge,
+  onRemove,
+}: {
+  title: string;
+  friends: Friend[];
+  nudgedId: number | null;
+  onSettle: (friend: Friend) => void;
+  onHistory: (friend: Friend) => void;
+  onNudge: (friend: Friend) => void;
+  onRemove: (friend: Friend) => void;
+}) {
+  if (friends.length === 0) return null;
+  return (
+    <section>
+      <div className="border-b border-line bg-paper px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+        {title}
+      </div>
+      <ul className="divide-y divide-line">
+            {friends.map((f) => {
+              const entries = Object.entries(f.netByCurrency);
+              return (
+                <li key={f.id} className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
+                  <Link href={`/people/${f.id}`} aria-label={`Open ${f.displayName}'s profile`}>
+                    <Avatar name={f.displayName} />
+                  </Link>
+                  <div className="min-w-0 flex-1">
+                    <Link href={`/people/${f.id}`} className="block truncate font-medium hover:text-accent-dark hover:underline">
+                      {f.displayName}
+                    </Link>
+                    <p className="text-xs text-ink-faint">@{f.username}</p>
+                  </div>
+                  <div className="text-right text-sm">
+                    {entries.length === 0 ? (
+                      <span className="text-ink-faint">settled up</span>
+                    ) : (
+                      entries.map(([cur, amt]) => (
+                        <p key={cur} className={amt > 0 ? "text-owed" : "text-owe"}>
+                          {amt > 0 ? "owes you" : "you owe"}{" "}
+                          <span className="tnum font-semibold">{fmtMoney(Math.abs(amt), cur)}</span>
+                        </p>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Link href={`/people/${f.id}`}>
+                      <Button variant="secondary" className="!min-h-9 !px-2.5" title={`Open ${f.displayName}'s profile`}>
+                        <UserRound className="h-4 w-4" />
+                        <span className="hidden sm:inline">Profile</span>
+                      </Button>
+                    </Link>
+                    {entries.length > 0 && (
+                      <Button variant="secondary" className="!min-h-9 !px-2.5" onClick={() => onSettle(f)} title="Record offline payment">
+                        <HandCoins className="h-4 w-4" />
+                        <span className="hidden sm:inline">Settle</span>
+                      </Button>
+                    )}
+                    {entries.some(([, amt]) => amt > 0) && (
+                      <Button
+                        variant="secondary"
+                        className="!min-h-9 !px-2.5"
+                        onClick={() => onNudge(f)}
+                        title={`Nudge ${f.displayName} to settle up`}
+                        aria-label={`Nudge ${f.displayName}`}
+                      >
+                        {nudgedId === f.id ? <Check className="h-4 w-4 text-owed" /> : <Bell className="h-4 w-4" />}
+                        <span className="hidden sm:inline">{nudgedId === f.id ? "Nudged" : "Nudge"}</span>
+                      </Button>
+                    )}
+                    <Button
+                      variant="secondary"
+                      className="!min-h-9 !px-2.5"
+                      onClick={() => onHistory(f)}
+                      title={`Recorded payments with ${f.displayName}`}
+                      aria-label={`Payments with ${f.displayName}`}
+                    >
+                      <Receipt className="h-4 w-4" />
+                    </Button>
+                    <Link href={`/chat/${f.id}`}>
+                      <Button variant="secondary" className="!min-h-9 !px-2.5" title={`Chat with ${f.displayName}`}>
+                        <MessageSquare className="h-4 w-4" />
+                        <span className="hidden sm:inline">Chat</span>
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="secondary"
+                      className="!min-h-9 !px-2.5"
+                      onClick={() => onRemove(f)}
+                      title={`Remove ${f.displayName}`}
+                      aria-label={`Remove ${f.displayName}`}
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+    </section>
+  );
+}
+
 function DirectSettleModal({
   friend, onClose, onSaved,
 }: {
@@ -340,6 +440,8 @@ function DirectSettleModal({
     if (!friend) return;
     const entries = Object.entries(friend.netByCurrency);
     const [cur, amt] = entries[0] ?? ["USD", 0];
+    // Reset the modal form whenever a different friend is selected.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrency(cur);
     setAmount(amt !== 0 ? (Math.abs(amt) / 100).toFixed(2) : "");
     setDirection(amt < 0 ? "i-paid" : "they-paid");

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check,
@@ -72,6 +72,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const { id } = use(params);
   const groupId = Number(id);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const me = useMe();
   const [detail, setDetail] = useState<GroupDetail | null>(null);
   const [expenses, setExpenses] = useState<Expense[] | null>(null);
@@ -81,7 +82,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [settlements, setSettlements] = useState<Settlement[] | null>(null);
   const [settlementLimit, setSettlementLimit] = useState(50);
   const [hasMoreSettlements, setHasMoreSettlements] = useState(false);
-  const [activity, setActivity] = useState<{ id: number; summary: string; createdAt: string }[] | null>(null);
+  const [activity, setActivity] = useState<{ id: number; actorId: number; actorName: string; summary: string; createdAt: string }[] | null>(null);
   const [tab, setTab] = useState<Tab>("expenses");
   const [refreshKey, setRefreshKey] = useState(0);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -104,6 +105,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
 
   const loadDetail = useCallback(() => {
     api<GroupDetail>(`/api/groups/${groupId}`)
@@ -112,7 +114,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     api<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`)
       .then((r) => setRecurring(r.recurring.filter((x) => x.active)))
       .catch(() => {});
-    api<{ activity: { id: number; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
+    api<{ activity: { id: number; actorId: number; actorName: string; summary: string; createdAt: string }[] }>(`/api/groups/${groupId}/activity`)
       .then((r) => setActivity(r.activity))
       .catch(() => {});
     api<{ settlements: Settlement[]; hasMore: boolean }>(`/api/groups/${groupId}/settlements?limit=${settlementLimit}`)
@@ -134,7 +136,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   }, [groupId, filters, expenseLimit]);
 
   // Reset to the first page whenever the filters change.
-  useEffect(() => { setExpenseLimit(50); }, [filters]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpenseLimit(50);
+  }, [filters]);
 
   useEffect(loadDetail, [loadDetail]);
   useEffect(() => {
@@ -142,19 +147,25 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     return () => clearTimeout(t);
   }, [loadExpenses, filters.q]);
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("add") === "1") {
+    if (searchParams.get("add") === "1") {
+      // Deep links may request the add-expense modal.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEditing(null);
       setExpenseOpen(true);
     }
-    const t = params.get("tab");
+    const t = searchParams.get("tab");
     if (t && ["expenses", "balances", "insights", "chat", "activity"].includes(t)) {
       setTab(t as Tab);
     }
-    if (params.get("add") === "1" || t) {
+    const expenseId = Number(searchParams.get("expense"));
+    if (Number.isInteger(expenseId) && expenseId > 0) {
+      setTab("expenses");
+      setDetailId(expenseId);
+    }
+    if (searchParams.get("add") === "1" || t || expenseId > 0) {
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     api<{ categories: { id: number; name: string }[] }>("/api/categories")
@@ -207,6 +218,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   }
 
   const memberName = (uid: number) => detail?.members.find((m) => m.id === uid)?.displayName ?? "Someone";
+  const visibleBalances = detail?.balances.filter((b) => {
+    const q = memberQuery.trim().toLowerCase();
+    return !q || b.displayName.toLowerCase().includes(q);
+  }) ?? [];
 
   const TABS: { key: Tab; label: string; icon: typeof Receipt }[] = [
     { key: "expenses", label: "Expenses", icon: Receipt },
@@ -253,7 +268,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
         <div className="flex gap-2">
           <a href={`/api/groups/${groupId}/export`} download>
-            <Button variant="secondary" title="Export CSV">
+            <Button variant="secondary" title="Export CSV" aria-label="Export CSV">
               <Download className="h-4 w-4" /> <span className="hidden sm:inline">CSV</span>
             </Button>
           </a>
@@ -261,11 +276,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             variant="secondary"
             disabled={(detail?.members.length ?? 0) < 2}
             title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
+            aria-label="Settle up"
             onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
           >
             <HandCoins className="h-4 w-4" /> <span className="hidden sm:inline">Settle up</span>
           </Button>
-          <Button onClick={() => { setEditing(null); setExpenseOpen(true); }}>
+          <Button aria-label="Add expense" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
             <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add expense</span>
           </Button>
           <Button
@@ -281,15 +297,32 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       {/* Balance strip */}
-      <Card className="mb-4 overflow-x-auto md:shrink-0">
+      <Card className="mb-4 md:shrink-0">
+        {detail && detail.balances.length > 3 && (
+          <div className="border-b border-line p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+              <Input
+                value={memberQuery}
+                onChange={(e) => setMemberQuery(e.target.value)}
+                placeholder="Search group members"
+                aria-label="Search group members"
+                className="!min-h-9 !py-1.5 pl-8"
+              />
+            </div>
+          </div>
+        )}
+        <div className="overflow-x-auto">
         <div className="flex min-h-20 items-stretch divide-x divide-line">
           {detail === null ? (
             <div className="flex flex-1 items-center gap-4 px-4">
               {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-10 w-32" />)}
             </div>
+          ) : visibleBalances.length === 0 ? (
+            <div className="flex flex-1 items-center px-4 py-5 text-sm text-ink-faint">No members match.</div>
           ) : (
-            detail.balances.map((b) => (
-              <div key={b.userId} className="flex min-w-36 flex-1 flex-col justify-center gap-0.5 px-4 py-3">
+            visibleBalances.map((b) => (
+              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-36 flex-1 flex-col justify-center gap-0.5 px-4 py-3 hover:bg-paper">
                 <span className="flex items-center gap-1.5 text-xs text-ink-soft">
                   <Avatar name={b.displayName} size="sm" /> {b.displayName}
                 </span>
@@ -300,9 +333,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     <Money cents={b.netCents} currency={detail.group.currency} signed />
                   )}
                 </span>
-              </div>
+              </Link>
             ))
           )}
+        </div>
         </div>
       </Card>
 
@@ -525,8 +559,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <ul className="divide-y divide-line">
               {detail.suggestions.map((s, i) => (
                 <li key={i} className="flex min-h-14 flex-wrap items-center gap-3 px-4 py-3">
-                  <Avatar name={memberName(s.from)} size="sm" />
-                  <span className="text-sm"><strong>{memberName(s.from)}</strong> should pay <strong>{memberName(s.to)}</strong></span>
+                  <Link href={`/people/${s.from}`} aria-label={`Open ${memberName(s.from)}'s profile`}>
+                    <Avatar name={memberName(s.from)} size="sm" />
+                  </Link>
+                  <span className="text-sm">
+                    <Link href={`/people/${s.from}`} className="font-semibold hover:text-accent-dark hover:underline">{memberName(s.from)}</Link>{" "}
+                    should pay{" "}
+                    <Link href={`/people/${s.to}`} className="font-semibold hover:text-accent-dark hover:underline">{memberName(s.to)}</Link>
+                  </span>
                   <span className="tnum ml-auto font-display text-lg font-semibold">{fmtMoney(s.amountCents, detail.group.currency)}</span>
                   <Button
                     variant="secondary"
@@ -556,7 +596,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   <HandCoins className="h-4 w-4 shrink-0 text-owed" />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="block">
-                      <strong>{s.payerName}</strong> paid <strong>{s.recipientName}</strong>
+                      <Link href={`/people/${s.payerId}`} className="font-semibold hover:text-accent-dark hover:underline">{s.payerName}</Link>{" "}
+                      paid{" "}
+                      <Link href={`/people/${s.recipientId}`} className="font-semibold hover:text-accent-dark hover:underline">{s.recipientName}</Link>
                     </span>
                     <span className="block text-xs text-ink-faint">
                       {fmtDate(s.date)}
@@ -626,7 +668,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <ul className="divide-y divide-line">
               {activity.map((a) => (
                 <li key={a.id} className="px-4 py-2.5">
-                  <p className="text-sm leading-snug">{a.summary}</p>
+                  <GroupActivitySummary activity={a} />
                   <p className="mt-0.5 text-xs text-ink-faint">{fmtTime(a.createdAt)}</p>
                 </li>
               ))}
@@ -718,5 +760,23 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Modal>
     </AppShell>
+  );
+}
+
+function GroupActivitySummary({
+  activity,
+}: {
+  activity: { actorId: number; actorName: string; summary: string };
+}) {
+  const rest = activity.summary.startsWith(activity.actorName)
+    ? activity.summary.slice(activity.actorName.length).trimStart()
+    : `· ${activity.summary}`;
+  return (
+    <p className="text-sm leading-snug">
+      <Link href={`/people/${activity.actorId}`} className="font-medium hover:text-accent-dark hover:underline">
+        {activity.actorName}
+      </Link>
+      <span className="text-ink-soft"> {rest}</span>
+    </p>
   );
 }

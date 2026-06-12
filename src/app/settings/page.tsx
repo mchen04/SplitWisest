@@ -56,6 +56,8 @@ function ProfileCard({ me, onSaved }: { me: Me | null; onSaved: (m: Me) => void 
 
   useEffect(() => {
     if (me) {
+      // Seed the editable account form once the current user is loaded.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDisplayName(me.displayName);
       setUsername(me.username);
     }

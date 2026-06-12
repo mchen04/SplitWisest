@@ -31,6 +31,8 @@ export function GroupSettingsModal({
 
   useEffect(() => {
     if (!open) return;
+    // Seed the settings form from the selected group when the modal opens.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setName(group.name);
     setError(null);
     setActionError(null);

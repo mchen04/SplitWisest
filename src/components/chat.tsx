@@ -125,9 +125,10 @@ export function ChatPane({
 
   // Scroll to the newest message only when the last id advances (a new message
   // arrived or was sent) — not when older history is prepended.
+  const newestMessageId = messages?.at(-1)?.id;
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [messages?.at(-1)?.id]);
+  }, [newestMessageId]);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 

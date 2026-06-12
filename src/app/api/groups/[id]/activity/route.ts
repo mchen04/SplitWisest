@@ -13,7 +13,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   if (!(await isGroupMember(groupId, user.id))) forbidden();
   const since = Number(req.nextUrl.searchParams.get("since") ?? 0);
   const rows = await sql`
-    SELECT a.id, a.type, a.summary, a.created_at, u.display_name
+    SELECT a.id, a.type, a.summary, a.created_at, a.actor_id, u.display_name
     FROM activity a JOIN users u ON u.id = a.actor_id
     WHERE a.group_id = ${groupId} AND a.id > ${since}
     ORDER BY a.id DESC LIMIT 100`;
@@ -22,6 +22,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       id: Number(a.id),
       type: a.type,
       summary: a.summary,
+      actorId: Number(a.actor_id),
       actorName: a.display_name,
       createdAt: a.created_at,
     })),

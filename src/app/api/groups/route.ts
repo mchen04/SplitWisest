@@ -12,7 +12,11 @@ export const GET = handler(async () => {
   const groups = await sql`
     SELECT g.id, g.name, g.currency, g.invite_code,
       (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count,
-      (SELECT COUNT(*) FROM expenses e WHERE e.group_id = g.id) AS expense_count
+      (SELECT COUNT(*) FROM expenses e WHERE e.group_id = g.id) AS expense_count,
+      (SELECT COALESCE(MAX(m.id), 0) FROM messages m
+        WHERE m.channel = 'group' AND m.group_id = g.id AND m.sender_id <> ${user.id}) AS last_message_id,
+      COALESCE((SELECT rs.last_id FROM read_state rs
+        WHERE rs.user_id = ${user.id} AND rs.scope = 'msg:group:' || g.id), 0) AS read_message_id
     FROM groups g JOIN group_members gm ON gm.group_id = g.id
     WHERE gm.user_id = ${user.id}
     ORDER BY g.created_at DESC`;
@@ -28,6 +32,7 @@ export const GET = handler(async () => {
         memberCount: Number(g.member_count),
         expenseCount: Number(g.expense_count),
         myNetCents: mine?.netCents ?? 0,
+        unreadMessages: Number(g.last_message_id) > Number(g.read_message_id) ? 1 : 0,
       };
     })
   );

@@ -42,7 +42,8 @@ export const GET = handler(async () => {
       (CASE WHEN ${activityCursor} >
         COALESCE((SELECT last_id FROM read_state WHERE user_id = ${user.id} AND scope = 'activity'), 0)
         THEN 1 ELSE 0 END) AS activity,
-      (SELECT COUNT(*) FROM nudges WHERE to_id = ${user.id} AND seen_at IS NULL)::int AS nudges`;
+      (SELECT COUNT(*) FROM nudges WHERE to_id = ${user.id} AND seen_at IS NULL)::int AS nudges,
+      (SELECT COUNT(*) FROM friend_requests WHERE to_id = ${user.id})::int AS requests`;
 
   return NextResponse.json({
     activityCursor,
@@ -51,6 +52,8 @@ export const GET = handler(async () => {
       messages: Number(unread[0].messages),
       activity: Number(unread[0].activity),
       nudges: Number(unread[0].nudges),
+      requests: Number(unread[0].requests),
+      balances: Number(unread[0].nudges) + Number(unread[0].requests),
     },
   });
 });

@@ -19,6 +19,9 @@ export function handler<T extends unknown[]>(
           { status: 400 }
         );
       }
+      if (e instanceof SyntaxError && /JSON/i.test(e.message)) {
+        return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+      }
       if (e instanceof ApiError) {
         return NextResponse.json({ error: e.message }, { status: e.status });
       }
