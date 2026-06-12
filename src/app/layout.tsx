@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Instrument_Sans } from "next/font/google";
 import "./globals.css";
+import { themeInitScript } from "@/lib/theme";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -35,7 +36,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${fraunces.variable} ${instrument.variable}`}>
+    <html lang="en" className={`${fraunces.variable} ${instrument.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

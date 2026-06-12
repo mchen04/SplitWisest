@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode } from "react";
 import {
   LayoutDashboard, Users, Scale, Receipt, LogOut, Wallet,
-  MessageSquare, ScrollText, Settings,
+  MessageSquare, ScrollText, Settings, Moon, Sun,
 } from "lucide-react";
 import { api, useMe, useUnread, type Unread } from "@/lib/client";
+import { useTheme } from "@/lib/theme";
 import { Avatar } from "./ui";
 
 type BadgeKey = keyof Unread;
@@ -24,7 +25,7 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; badge?: 
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-white">
+    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-on-accent">
       {count > 9 ? "9+" : count}
     </span>
   );
@@ -35,6 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const me = useMe();
   const unread = useUnread();
+  const { theme, toggle } = useTheme();
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
@@ -49,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop / tablet sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-line bg-card md:flex">
         <Link href="/" className="flex items-center gap-2 px-5 py-5">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4.5 w-4.5" />
           </span>
           <span className="font-display text-lg font-bold tracking-tight">SplitWisest</span>
@@ -72,6 +74,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
         <div className="border-t border-line p-3">
+          <button
+            onClick={toggle}
+            className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-ink-soft hover:bg-paper hover:text-ink"
+          >
+            {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+            <span className="flex-1 text-left">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          </button>
           {me && (
             <div className="flex items-center gap-2.5 px-2 py-1.5">
               <Link href="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:opacity-80">
@@ -105,12 +114,19 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Mobile top bar */}
       <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-card/95 px-4 py-3 backdrop-blur md:hidden">
         <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-white">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
           </span>
           <span className="font-display text-base font-bold">SplitWisest</span>
         </Link>
         <div className="flex items-center gap-1">
+          <button
+            onClick={toggle}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            className="rounded-lg p-2 text-ink-soft hover:bg-paper"
+          >
+            {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+          </button>
           <Link
             href="/settings"
             aria-label="Settings"
@@ -148,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="relative">
               <Icon className="h-5 w-5" />
               {badge && unread[badge] > 0 && (
-                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-white">
+                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-on-accent">
                   {unread[badge] > 9 ? "9+" : unread[badge]}
                 </span>
               )}

@@ -29,6 +29,10 @@ Round 1 agents: money math, auth/security, DB integrity + realtime + chat, UX/fr
 
 Flows exercised end-to-end (API + browser): signup ×2, login, create group, join via invite code, friend via personal code, equal/exact/percentage/shares/itemized expenses, multi-currency expense (EUR in USD group), edit expense, delete expense, balances zero-sum check, settlement suggestion math, record group settlement, direct friend settlement, group chat, DM chat, link rendering, realtime cross-user update (message appeared via polling without refresh), search/filter, CSV export, activity log, charts, custom category creation, attachment upload validation. No console errors.
 
+## Dark mode (2026-06-11)
+
+Implemented the Claude Design dark variant. Verified with agent-browser at desktop (1280×800) and mobile (390×844): toggling from the sidebar / mobile header / Settings → Appearance flips the whole shell, cards, summaries, inputs, and chat to the dim palette with correct accent/danger foreground contrast (dedicated `on-accent`/`on-danger` tokens). Choice persists across reload (`localStorage` + no-flash init script) and falls back to the OS `prefers-color-scheme`. No console errors; `tsc`, `vitest` (26), and `next build` all green.
+
 ## Production smoke test
 
 - [x] Deployed to Vercel: https://splitwisest-kappa.vercel.app (2026-06-11)

@@ -226,7 +226,7 @@ export function ExpenseDetailModal({
                 type="submit"
                 disabled={!draft.trim() || sending}
                 aria-label="Post comment"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-dark disabled:opacity-40"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors hover:bg-accent-dark disabled:opacity-40"
               >
                 <SendHorizonal className="h-4.5 w-4.5" />
               </button>

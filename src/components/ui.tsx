@@ -15,10 +15,10 @@ export function Button({
   busy?: boolean;
 }) {
   const styles = {
-    primary: "bg-accent text-white hover:bg-accent-dark shadow-sm",
+    primary: "bg-accent text-on-accent hover:bg-accent-dark shadow-sm",
     secondary: "bg-card border border-line text-ink hover:border-ink-faint",
     ghost: "text-ink-soft hover:bg-accent-soft hover:text-ink",
-    danger: "bg-danger-soft text-danger hover:bg-danger hover:text-white",
+    danger: "bg-danger-soft text-danger hover:bg-danger hover:text-on-danger",
   }[variant];
   return (
     <button

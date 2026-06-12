@@ -10,16 +10,42 @@
   --color-accent: #16735a;
   --color-accent-soft: #e3efe9;
   --color-accent-dark: #0e5443;
+  --color-on-accent: #ffffff;
   --color-owe: #b4540a;
   --color-owe-soft: #f9ede1;
   --color-owed: #16735a;
   --color-owed-soft: #e3efe9;
   --color-danger: #b3362b;
   --color-danger-soft: #f9e8e6;
+  --color-on-danger: #ffffff;
   --font-display: var(--font-fraunces), Georgia, serif;
   --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px rgba(33, 48, 42, 0.05), 0 4px 16px rgba(33, 48, 42, 0.05);
   --shadow-pop: 0 4px 12px rgba(33, 48, 42, 0.12), 0 16px 48px rgba(33, 48, 42, 0.14);
+}
+
+/* Dark mode — overrides the design tokens so every `bg-paper`, `text-ink`,
+   etc. utility flips automatically. Matches the Claude Design dark variant. */
+[data-theme="dark"] {
+  --color-paper: #131714;
+  --color-card: #1c211d;
+  --color-ink: #edf0e9;
+  --color-ink-soft: #a6b0a8;
+  --color-ink-faint: #6f7a72;
+  --color-line: #2a312b;
+  --color-accent: #5cb494;
+  --color-accent-soft: #1e342b;
+  --color-accent-dark: #82cbac;
+  --color-on-accent: #0f201a;
+  --color-owe: #e09462;
+  --color-owe-soft: #33271c;
+  --color-owed: #5cb494;
+  --color-owed-soft: #1e342b;
+  --color-danger: #e3877b;
+  --color-danger-soft: #342120;
+  --color-on-danger: #2a120f;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.28);
+  --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.4), 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 html {
@@ -27,6 +53,10 @@ html {
   color: var(--color-ink);
   font-family: var(--font-body);
   -webkit-text-size-adjust: 100%;
+}
+
+html, body {
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 body {
@@ -45,6 +75,15 @@ body {
 .paper-grain {
   background-image: radial-gradient(rgba(33, 48, 42, 0.025) 1px, transparent 1px);
   background-size: 22px 22px;
+}
+
+[data-theme="dark"] .paper-grain {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #232a25 25%, #2a312b 50%, #232a25 75%);
+  background-size: 800px 100%;
 }
 
 ::selection {

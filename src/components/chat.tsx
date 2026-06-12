@@ -205,7 +205,7 @@ export function ChatPane({
                 <div className={`max-w-[78%] ${mine ? "text-right" : ""}`}>
                   <div
                     className={`inline-block rounded-2xl px-3.5 py-2 text-left text-sm leading-relaxed ${
-                      mine ? "rounded-br-md bg-accent text-white" : "rounded-bl-md bg-paper text-ink"
+                      mine ? "rounded-br-md bg-accent text-on-accent" : "rounded-bl-md bg-paper text-ink"
                     }`}
                   >
                     <MessageBody text={m.body} />
@@ -232,7 +232,7 @@ export function ChatPane({
           type="submit"
           disabled={!draft.trim() || sending}
           aria-label="Send"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent-dark disabled:opacity-40"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors hover:bg-accent-dark disabled:opacity-40"
         >
           <SendHorizonal className="h-4.5 w-4.5" />
         </button>

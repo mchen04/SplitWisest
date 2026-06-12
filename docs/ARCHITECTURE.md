@@ -45,6 +45,10 @@ Receipt uploads are limited to images/PDFs under 4 MB. Stored filenames are cano
 
 `recurring_expenses` hold a template + `next_date`. When a group page is loaded, `materializeRecurring` creates concrete expenses for every elapsed period (capped) and advances `next_date` — no cron needed.
 
+## Theming
+
+The design system ships in two palettes. Light is the warm "ledger paper" default; dark is a dim variant defined in `src/app/globals.css` under `[data-theme="dark"]`, which overrides the `--color-*` design tokens (and `--shadow-*`, paper-grain, skeleton) so every `bg-paper`/`text-ink`/`bg-accent` utility flips automatically — no per-component dark variants. Accent and danger backgrounds use dedicated `--color-on-accent` / `--color-on-danger` foreground tokens so text stays legible in both themes. `src/lib/theme.tsx` exposes `useTheme()` (toggle wired into the sidebar, mobile header, and Settings → Appearance) and `themeInitScript`, an inline `<head>` script that applies the saved theme (or the OS `prefers-color-scheme`) before first paint to avoid a flash. The choice persists in `localStorage`.
+
 ## Deployment
 
 Vercel serverless. Neon over HTTP (`@neondatabase/serverless`), so write paths prefer single-statement CTEs where atomicity matters and otherwise order writes so a mid-sequence failure leaves either a complete record or a cleanly absent one.

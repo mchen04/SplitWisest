@@ -17,6 +17,7 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 - Activity log (calm timestamped rows), CSV export, SVG charts
 - Group chat + direct friend chat with link rendering and search
 - Realtime via lightweight polling sync cursor (serverless-friendly)
+- Light + dark theme (warm "ledger paper" / dim variant); toggle in the sidebar, mobile header, and Settings — persists and respects OS preference
 - PWA manifest, responsive from small phones to ultrawide
 
 ## Stack

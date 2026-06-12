@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, KeyRound, LogOut, ShieldCheck, UserCog } from "lucide-react";
+import { Copy, Check, KeyRound, LogOut, ShieldCheck, UserCog, Palette, Moon, Sun } from "lucide-react";
 import { api, useFormState } from "@/lib/client";
+import { useTheme } from "@/lib/theme";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, Button, Field, Input, ErrorNote } from "@/components/ui";
 
@@ -32,6 +33,7 @@ export default function SettingsPage() {
       <PageTitle title="Settings" subtitle="Manage your account, security, and recovery." />
       <div className="space-y-5 md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
         <ProfileCard me={me} onSaved={setMe} />
+        <AppearanceCard />
         <PasswordCard />
         <RecoveryCard />
         <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
@@ -45,6 +47,28 @@ export default function SettingsPage() {
         </Card>
       </div>
     </AppShell>
+  );
+}
+
+function AppearanceCard() {
+  const { theme, toggle } = useTheme();
+  const dark = theme === "dark";
+  return (
+    <Card>
+      <CardHeader title={<span className="flex items-center gap-2"><Palette className="h-4 w-4" /> Appearance</span>} />
+      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div>
+          <p className="font-medium">Dark mode</p>
+          <p className="text-sm text-ink-faint">
+            {dark ? "Using the dim ledger palette." : "Using the warm paper palette."}
+          </p>
+        </div>
+        <Button variant="secondary" onClick={toggle}>
+          {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {dark ? "Switch to light" : "Switch to dark"}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
