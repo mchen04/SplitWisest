@@ -26,11 +26,13 @@ export async function api<T = unknown>(
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiClientError(json.error ?? "Request failed", res.status);
-  // Any successful mutation invalidates the read cache so the next render
-  // refetches instead of serving pre-mutation data.
-  if (method !== "GET") {
+  // The read cache is only a stale-while-revalidate paint layer — apiCached
+  // always fetches fresh — so mutations don't need to clear it (doing so made
+  // remounting shells flash empty). Auth changes do clear it, so one account's
+  // data never paints for another.
+  if (method !== "GET" && (path.startsWith("/api/auth") || path.startsWith("/api/me"))) {
     dataCache.clear();
-    if (path.startsWith("/api/auth") || path.startsWith("/api/me")) meCache = null;
+    meCache = null;
   }
   return json as T;
 }
