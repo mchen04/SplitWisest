@@ -1,1 +1,26 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#16735a"/><path d="M20 22h24a4 4 0 0 1 4 4v14a4 4 0 0 1-4 4H20a4 4 0 0 1-4-4V26a4 4 0 0 1 4-4zm22 11a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" fill="#fff"/><path d="M18 22l3-6h20l3 6" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="10" x2="56" y1="8" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1fbf8f"/>
+      <stop offset=".58" stop-color="#117a61"/>
+      <stop offset="1" stop-color="#0b4f48"/>
+    </linearGradient>
+    <linearGradient id="coin" x1="20" x2="45" y1="16" y2="46" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffe9a6"/>
+      <stop offset="1" stop-color="#f4b83d"/>
+    </linearGradient>
+    <filter id="shadow" x="6" y="8" width="52" height="52" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#06352f" flood-opacity=".35"/>
+    </filter>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
+  <path d="M14 43c9-1 13-9 19-10 5-1 8 3 17 1" fill="none" stroke="#8ef3cf" stroke-linecap="round" stroke-width="3" opacity=".38"/>
+  <g filter="url(#shadow)">
+    <path d="M17 24h30a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H17a5 5 0 0 1-5-5V29a5 5 0 0 1 5-5Z" fill="#fffdf7"/>
+    <path d="m17 24 5-8h22l5 8" fill="none" stroke="#fffdf7" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+    <circle cx="42" cy="36" r="7" fill="url(#coin)"/>
+    <path d="M42 32v8M38 36h8" stroke="#7a4b00" stroke-linecap="round" stroke-width="2.4"/>
+    <path d="M22 32h10M22 38h7" stroke="#117a61" stroke-linecap="round" stroke-width="3"/>
+  </g>
+  <path d="M49 13 52 8l3 5 5 3-5 3-3 5-3-5-5-3 5-3Z" fill="#fff7cf"/>
+</svg>

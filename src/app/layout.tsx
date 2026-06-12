@@ -14,9 +14,17 @@ const instrument = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "SplitWisest",
+  title: {
+    default: "SplitWisest | Split smarter",
+    template: "%s | SplitWisest",
+  },
   description: "Track shared expenses with your friends — who paid, who owes, settled offline.",
   manifest: "/manifest.json",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    shortcut: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+  },
 };
 
 export const viewport: Viewport = {
