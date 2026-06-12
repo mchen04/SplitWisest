@@ -138,7 +138,7 @@ export default function BalancesPage() {
         }
       />
 
-      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:shrink-0">
+      <Card className="mb-2.5 flex flex-wrap items-center justify-between gap-2.5 px-3.5 py-2 md:shrink-0">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">Your invite code</p>
           <p className="text-sm text-ink-faint">Friends sign up or add you with this code.</p>
@@ -154,15 +154,15 @@ export default function BalancesPage() {
       </Card>
 
       {addNote && (
-        <div className="mb-4 rounded-lg bg-owed-soft px-3 py-2 text-sm text-owed md:shrink-0">{addNote}</div>
+        <div className="mb-2.5 rounded-lg bg-owed-soft px-3 py-2 text-sm text-owed md:shrink-0">{addNote}</div>
       )}
 
       {(incomingRequests.length > 0 || outgoingRequests.length > 0) && (
-        <Card className="mb-4 md:shrink-0">
+        <Card className="mb-2.5 md:shrink-0">
           <CardHeader title={<span className="flex items-center gap-2"><UserPlus className="h-4 w-4 text-accent" /> Friend requests</span>} />
           <ul className="divide-y divide-line">
             {incomingRequests.map((r) => (
-              <li key={`in-${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+              <li key={`in-${r.id}`} className="flex flex-wrap items-center gap-2.5 px-3.5 py-1.5">
                 <Link href={`/people/${r.userId}`} aria-label={`Open ${r.displayName}'s profile`}>
                   <Avatar name={r.displayName} size="sm" />
                 </Link>
@@ -179,7 +179,7 @@ export default function BalancesPage() {
               </li>
             ))}
             {outgoingRequests.map((r) => (
-              <li key={`out-${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+              <li key={`out-${r.id}`} className="flex flex-wrap items-center gap-2.5 px-3.5 py-1.5">
                 <Link href={`/people/${r.userId}`} aria-label={`Open ${r.displayName}'s profile`}>
                   <Avatar name={r.displayName} size="sm" />
                 </Link>
@@ -198,11 +198,11 @@ export default function BalancesPage() {
       )}
 
       {reminders.length > 0 && (
-        <Card className="mb-4 md:shrink-0">
+        <Card className="mb-2.5 md:shrink-0">
           <CardHeader title={<span className="flex items-center gap-2"><Bell className="h-4 w-4 text-accent" /> Reminders</span>} />
           <ul className="divide-y divide-line">
             {reminders.map((n) => (
-              <li key={n.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+              <li key={n.id} className="flex items-center gap-2.5 px-3.5 py-1.5 text-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block">
                     <strong>{n.fromName}</strong> nudged you to settle up
@@ -247,7 +247,7 @@ export default function BalancesPage() {
             action={<Button variant="secondary" onClick={reload}>Retry</Button>}
           />
         ) : friends === null ? (
-          <div className="space-y-3 p-4">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}</div>
+          <div className="space-y-2 p-3">{[...Array(3)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}</div>
         ) : friends.length === 0 ? (
           <EmptyState
             icon={<Scale className="h-8 w-8" />}
@@ -344,7 +344,7 @@ function FriendSection({
             {friends.map((f) => {
               const entries = Object.entries(f.netByCurrency);
               return (
-                <li key={f.id} className="flex min-h-16 flex-wrap items-center gap-3 px-4 py-3">
+                <li key={f.id} className="flex min-h-[var(--row-h)] flex-wrap items-center gap-2.5 px-3.5 py-1.5">
                   <Link href={`/people/${f.id}`} aria-label={`Open ${f.displayName}'s profile`}>
                     <Avatar name={f.displayName} />
                   </Link>

@@ -222,7 +222,7 @@ export function ChatPane({
           })
         )}
       </div>
-      <form onSubmit={send} className="flex items-center gap-2 border-t border-line px-3 py-2.5">
+      <form onSubmit={send} className="flex items-center gap-2 border-t border-line px-3 py-2">
         <Input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

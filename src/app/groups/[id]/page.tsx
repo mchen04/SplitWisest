@@ -138,7 +138,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <AppShell>
-      <div className="mb-4 flex flex-wrap items-center gap-3 md:shrink-0">
+      <div className="mb-3 flex flex-wrap items-center gap-2.5 md:shrink-0">
         <Link href="/groups" aria-label="Back to groups" className="rounded-lg p-2 text-ink-soft hover:bg-accent-soft">
           <ArrowLeft className="h-5 w-5" />
         </Link>
@@ -202,7 +202,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </div>
 
       {/* Balance strip */}
-      <Card className="mb-4 md:shrink-0">
+      <Card className="mb-2.5 md:shrink-0">
         {detail && detail.balances.length > 3 && (
           <div className="border-b border-line p-3">
             <div className="relative">
@@ -227,7 +227,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <div className="flex flex-1 items-center px-4 py-5 text-sm text-ink-faint">No members match.</div>
           ) : (
             visibleBalances.map((b) => (
-              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-36 flex-1 flex-col justify-center gap-0.5 px-4 py-3 hover:bg-paper">
+              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-32 flex-1 flex-col justify-center gap-0.5 px-3.5 py-2 hover:bg-paper">
                 <span className="flex items-center gap-1.5 text-xs text-ink-soft">
                   <Avatar name={b.displayName} size="sm" /> {b.displayName}
                 </span>
@@ -246,14 +246,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </Card>
 
       {/* Tabs */}
-      <div role="tablist" aria-label="Group sections" className="mb-4 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-1 md:shrink-0">
+      <div role="tablist" aria-label="Group sections" className="mb-2.5 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-0.5 md:shrink-0">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -265,7 +265,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       <div className="md:min-h-0 md:flex-1 md:overflow-hidden">
       {tab === "expenses" && (
         <div className="flex flex-col md:h-full md:min-h-0">
-          <Card className="mb-4 p-3 md:shrink-0">
+          <Card className="mb-2.5 p-2 md:shrink-0">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -305,7 +305,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             />
             <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
             {expenses === null ? (
-              <div className="space-y-3 p-4">
+              <div className="space-y-2 p-3">
                 {[...Array(4)].map((_, i) => <div key={i} className="skeleton h-12 w-full" />)}
               </div>
             ) : expenses.length === 0 ? (
@@ -326,7 +326,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 {expenses.map((e) => {
                   const myShare = me ? (e.shares.find((s) => s.userId === me.id)?.convertedShareCents ?? 0) : 0;
                   return (
-                    <li key={e.id} className="group flex min-h-16 items-center gap-3 px-4 py-2.5">
+                    <li key={e.id} className="group flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-1.5">
                       <button
                         onClick={() => setDetailId(e.id)}
                         className="flex min-w-0 flex-1 items-center gap-3 text-left"
@@ -400,11 +400,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               }
             />
             {recurring.length === 0 ? (
-              <p className="px-4 py-4 text-sm text-ink-faint">No recurring expenses. Rent, subscriptions, and bills can repeat weekly or monthly.</p>
+              <p className="px-3.5 py-3 text-sm text-ink-faint">No recurring expenses. Rent, subscriptions, and bills can repeat weekly or monthly.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {recurring.map((r) => (
-                  <li key={r.id} className="flex min-h-12 items-center gap-3 px-4 py-2 text-sm">
+                  <li key={r.id} className="flex min-h-10 items-center gap-2.5 px-3.5 py-1.5 text-sm">
                     <RefreshCcw className="h-4 w-4 shrink-0 text-ink-faint" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{r.title}</span>
@@ -463,7 +463,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           ) : (
             <ul className="divide-y divide-line">
               {detail.suggestions.map((s, i) => (
-                <li key={i} className="flex min-h-14 flex-wrap items-center gap-3 px-4 py-3">
+                <li key={i} className="flex min-h-[var(--row-h)] flex-wrap items-center gap-2.5 px-3.5 py-1.5">
                   <Link href={`/people/${s.from}`} aria-label={`Open ${memberName(s.from)}'s profile`}>
                     <Avatar name={memberName(s.from)} size="sm" />
                   </Link>
@@ -491,13 +491,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         <Card>
           <CardHeader title="Recorded payments" />
           {settlements === null ? (
-            <div className="space-y-3 p-4">{[...Array(2)].map((_, i) => <div key={i} className="skeleton h-10 w-full" />)}</div>
+            <div className="space-y-2 p-3">{[...Array(2)].map((_, i) => <div key={i} className="skeleton h-10 w-full" />)}</div>
           ) : settlements.length === 0 ? (
-            <p className="px-4 py-4 text-sm text-ink-faint">No payments recorded yet. When someone settles up offline, record it here so balances stay accurate.</p>
+            <p className="px-3.5 py-3 text-sm text-ink-faint">No payments recorded yet. When someone settles up offline, record it here so balances stay accurate.</p>
           ) : (
             <ul className="divide-y divide-line">
               {settlements.map((s) => (
-                <li key={s.id} className="flex min-h-14 flex-wrap items-center gap-3 px-4 py-3">
+                <li key={s.id} className="flex min-h-[var(--row-h)] flex-wrap items-center gap-2.5 px-3.5 py-1.5">
                   <HandCoins className="h-4 w-4 shrink-0 text-owed" />
                   <span className="min-w-0 flex-1 text-sm">
                     <span className="block">
@@ -566,13 +566,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           <CardHeader title="Activity log" />
           <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (
-            <div className="space-y-3 p-4">{[...Array(4)].map((_, i) => <div key={i} className="skeleton h-8 w-full" />)}</div>
+            <div className="space-y-2 p-3">{[...Array(4)].map((_, i) => <div key={i} className="skeleton h-8 w-full" />)}</div>
           ) : activity.length === 0 ? (
             <EmptyState icon={<ScrollText className="h-8 w-8" />} title="No activity yet" />
           ) : (
             <ul className="divide-y divide-line">
               {activity.map((a) => (
-                <li key={a.id} className="px-4 py-2.5">
+                <li key={a.id} className="px-3.5 py-1.5">
                   <ActivitySummary activity={a} />
                   <p className="mt-0.5 text-xs text-ink-faint">{fmtTime(a.createdAt)}</p>
                 </li>

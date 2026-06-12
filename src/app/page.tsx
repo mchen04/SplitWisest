@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Plus, Users, ScrollText } from "lucide-react";
 import { api, fmtTime, useMe, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
-import { Card, CardHeader, Money, EmptyState, Button } from "@/components/ui";
+import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
 
 interface Group {
   id: number;
@@ -72,13 +72,13 @@ export default function Dashboard() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3 md:shrink-0">
+      <div className="mb-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3 md:shrink-0">
         <SummaryCard label="You are owed" entries={owedToMe} tone="owed" loading={friends === null} />
         <SummaryCard label="You owe" entries={iOwe} tone="owe" loading={friends === null} />
         <SummaryCard label="Net balance" entries={netByCur} tone="net" loading={friends === null} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 md:min-h-0 md:flex-1">
+      <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3 md:min-h-0 md:flex-1">
         <Card className="flex flex-col md:min-h-0">
           <CardHeader
             title="Your groups"
@@ -106,12 +106,12 @@ export default function Dashboard() {
             <ul className="divide-y divide-line">
               {groups.map((g) => (
                 <li key={g.id}>
-                  <Link href={`/groups/${g.id}`} className="flex min-h-14 items-center gap-3 px-4 py-2.5 hover:bg-paper">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
-                      <Users className="h-4.5 w-4.5" />
+                  <Link href={`/groups/${g.id}`} className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-1.5 hover:bg-paper">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                      <Users className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{g.name}</span>
+                      <span className="block truncate text-sm font-medium">{g.name}</span>
                       <span className="block text-xs text-ink-faint">
                         {g.memberCount} {g.memberCount === 1 ? "member" : "members"} · {g.expenseCount}{" "}
                         {g.expenseCount === 1 ? "expense" : "expenses"}
@@ -133,6 +133,53 @@ export default function Dashboard() {
         </Card>
 
         <Card className="flex flex-col md:min-h-0">
+          <CardHeader
+            title="Friends"
+            action={
+              <Link href="/balances" className="flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+                Settle <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            }
+          />
+          <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
+          {friends === null ? (
+            <SkeletonRows n={3} />
+          ) : friends.length === 0 ? (
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No friends yet"
+              hint="Add friends from the Balances page to start splitting."
+            />
+          ) : (
+            <ul className="divide-y divide-line">
+              {friends.map((f) => {
+                const nets = Object.entries(f.netByCurrency).filter(([, v]) => v !== 0);
+                return (
+                  <li key={f.id}>
+                    <Link href="/balances" className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-1.5 hover:bg-paper">
+                      <Avatar name={f.displayName} size="sm" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{f.displayName}</span>
+                      <span className="text-right text-sm font-medium">
+                        {nets.length === 0 ? (
+                          <span className="text-ink-faint">settled</span>
+                        ) : (
+                          nets.map(([cur, amt]) => (
+                            <span key={cur} className="block">
+                              <Money cents={amt} currency={cur} signed />
+                            </span>
+                          ))
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          </div>
+        </Card>
+
+        <Card className="flex flex-col md:min-h-0">
           <CardHeader title="Recent activity" />
           <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (
@@ -146,9 +193,9 @@ export default function Dashboard() {
           ) : (
             <ul className="divide-y divide-line">
               {activity.slice(0, 50).map((a) => (
-                <li key={a.id} className="px-4 py-2.5">
+                <li key={a.id} className="px-3.5 py-1.5">
                   <p className="text-sm leading-snug">{a.summary}</p>
-                  <p className="mt-0.5 text-xs text-ink-faint">
+                  <p className="text-xs text-ink-faint">
                     {a.groupName ? `${a.groupName} · ` : ""}
                     {fmtTime(a.createdAt)}
                   </p>
@@ -177,16 +224,16 @@ function SummaryCard({
   const list = Object.entries(entries).filter(([, v]) => v !== 0);
   const color = tone === "owed" ? "text-owed" : tone === "owe" ? "text-owe" : "";
   return (
-    <Card className="px-4 py-3.5">
+    <Card className="px-3.5 py-2.5">
       <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</p>
-      <div className="mt-1 min-h-8">
+      <div className="mt-0.5 min-h-7">
         {loading ? (
-          <div className="skeleton h-7 w-24" />
+          <div className="skeleton h-6 w-24" />
         ) : list.length === 0 ? (
-          <p className="font-display text-2xl font-semibold text-ink-faint">All clear</p>
+          <p className="font-display text-xl font-semibold text-ink-faint">All clear</p>
         ) : (
           list.map(([cur, amt]) => (
-            <p key={cur} className={`font-display text-2xl font-semibold ${tone === "net" ? (amt > 0 ? "text-owed" : amt < 0 ? "text-owe" : "") : color}`}>
+            <p key={cur} className={`font-display text-xl font-semibold ${tone === "net" ? (amt > 0 ? "text-owed" : amt < 0 ? "text-owe" : "") : color}`}>
               <Money cents={tone === "net" ? amt : Math.abs(amt)} currency={cur} signed={tone === "net"} />
             </p>
           ))

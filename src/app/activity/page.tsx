@@ -43,13 +43,13 @@ export default function ActivityPage() {
       <Card className="flex flex-col md:min-h-0 md:flex-1">
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (
-            <div className="space-y-3 p-4">{[...Array(6)].map((_, i) => <div key={i} className="skeleton h-8 w-full" />)}</div>
+            <div className="space-y-2 p-3">{[...Array(6)].map((_, i) => <div key={i} className="skeleton h-8 w-full" />)}</div>
           ) : activity.length === 0 ? (
             <EmptyState icon={<ScrollText className="h-8 w-8" />} title="Nothing yet" hint="Expenses, settlements, and group changes will show up here." />
           ) : (
             <ul className="divide-y divide-line">
               {activity.map((a) => (
-                <li key={a.id} className="px-4 py-2.5">
+                <li key={a.id} className="px-3.5 py-1.5">
                   <ActivitySummary activity={a} />
                   <p className="mt-0.5 text-xs text-ink-faint">
                     {a.groupName ? `${a.groupName} · ` : ""}

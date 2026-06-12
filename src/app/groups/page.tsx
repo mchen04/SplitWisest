@@ -65,7 +65,7 @@ export default function GroupsPage() {
       <Card className="flex flex-col md:min-h-0 md:flex-1">
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {groups === null ? (
-          <div className="space-y-3 p-4">
+          <div className="space-y-2 p-3">
             {[...Array(3)].map((_, i) => (
               <div key={i} className="skeleton h-12 w-full" />
             ))}
@@ -85,7 +85,7 @@ export default function GroupsPage() {
           <ul className="divide-y divide-line">
             {groups.map((g) => (
               <li key={g.id}>
-                <Link href={`/groups/${g.id}`} className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-paper">
+                <Link href={`/groups/${g.id}`} className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-2 hover:bg-paper">
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-dark">
                     <Users className="h-5 w-5" />
                   </span>

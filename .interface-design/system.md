@@ -20,16 +20,24 @@ Consistency beats perfection; these decisions compound — follow them, don't re
 
 - Display: Fraunces (`font-display`) — page titles, card headers, money amounts.
 - Body: Instrument Sans — everything else.
-- Roles: page title `text-2xl/3xl font-bold`; card header `text-base font-semibold`;
+- Dense type ramp — the `text-*` utilities are overridden in `globals.css`:
+  `xs` 11px, `sm` 13px (body), `base` 14px, `lg` 16px, `xl` 18px, `2xl` 22px, `3xl` 26px.
+- Roles: page title `text-xl/2xl font-bold`; card header `text-base font-semibold`;
   row title `text-sm font-medium` (bold when unread); metadata `text-xs text-ink-faint`;
-  form label `text-[11.5px] font-semibold uppercase tracking-wider text-ink-soft`.
+  KPI money `text-xl font-display`; form label
+  `text-[11.5px] font-semibold uppercase tracking-wider text-ink-soft`.
 - Numbers in money contexts use `.tnum` (tabular-nums).
 
-## Spacing
+## Spacing & density
 
-4px base. Common roles: row padding `px-3/4 py-2.5`, card section padding `px-4`,
-modal padding `px-5 py-4`, page section gap `mb-4/5`, list rows divided by
-`divide-line` (no gaps between rows inside a card).
+4px base, dense-product scale. Control metrics live in `globals.css` as tokens:
+`--control-h` 34px (all buttons/inputs), `--control-h-sm` 28px (compact/inline),
+`--row-h` 44px (two-line list rows, `min-h-[var(--row-h)]`).
+Common roles: row padding `px-3.5 py-1.5`, card section padding `px-3.5`,
+modal padding `px-4 py-3`, page section gap `mb-2.5/3`, grid gaps `gap-2.5`,
+list rows divided by `divide-line` (no gaps between rows inside a card).
+Rule of thumb: 4–8px between related items, 8–12px between groups; never reintroduce
+the old 16–24px consumer paddings.
 
 ## Radius scale
 
@@ -43,16 +51,16 @@ uses `rounded-[18px]` per the design handoff.)
 
 ## Component patterns (`src/components/ui.tsx` is the source of truth)
 
-- **Button**: `min-h-[42px]`, `px-3.5 py-2`, `text-sm font-semibold`, variants
-  primary/secondary/ghost/danger. Destructive actions use the `danger` variant and are
-  never visually dominant.
-- **Input/Select/Textarea**: same 42px control height; focus = `border-accent` +
+- **Button**: `min-h-[var(--control-h)]` (34px), `px-3 py-1.5`, `text-sm font-semibold`,
+  variants primary/secondary/ghost/danger. Destructive actions use the `danger` variant
+  and are never visually dominant.
+- **Input/Select/Textarea**: same 34px control height; focus = `border-accent` +
   3px `ring-accent-soft`. Compact variant (search-in-pane) overrides with
   `!min-h-9 !py-1.5` and a leading `Search` icon at `left-2.5`.
-- **Card**: `border-line` + `shadow-card`, header `CardHeader` with `min-h-12`.
+- **Card**: `border-line` + `shadow-card`, header `CardHeader` with `min-h-10`.
 - **Modal**: bottom-sheet on mobile (`rounded-t-2xl items-end`), centered on `sm+`;
   focus-trapped; Escape closes.
-- **Avatar**: deterministic `hsl(hash 34% 42%)`, initials, sizes sm 28 / md 36 / lg 48.
+- **Avatar**: deterministic `hsl(hash 34% 42%)`, initials, sizes sm 24 / md 32 / lg 40.
 - **Unread**: `bg-accent` dot (or count badge in nav); bold row title. **Selected**:
   `bg-accent-soft` (+ `text-accent-dark` for nav). **Pinned**: small `Pin` glyph.
 - **Empty/loading/error**: `EmptyState`, `.skeleton` shimmer blocks, `ErrorNote`.
@@ -66,9 +74,12 @@ uses `rounded-[18px]` per the design handoff.)
 
 ## Layout shell
 
-- Desktop/tablet (`md+`): fixed 246px sidebar (logo, Add expense CTA, nav with unread
-  badges, theme toggle, profile) + `max-w-5xl` main column; main is `h-dvh` with panes
-  scrolling internally (no-scroll bias for summary screens).
+- Desktop/tablet (`md+`): fixed 208px sidebar (logo, Add expense CTA, nav with unread
+  badges, theme toggle, profile) + `max-w-6xl` main column; main is `h-dvh` with panes
+  scrolling internally (no-scroll bias: summary screens must fit 1366×768 with zero
+  document scroll — verify with a screenshot before shipping layout changes).
+- Home is a three-column glance surface (Groups / Friends / Activity) over a KPI strip;
+  friend balances are visible without navigating to Balances.
 - Mobile: sticky top bar + 6-item bottom nav with safe-area padding; full-page flows.
 - Master-detail surfaces (Messages) use a left list pane (`md:w-80`) + detail pane
   inside one Card; mobile shows list first, conversation full-screen with back arrow.

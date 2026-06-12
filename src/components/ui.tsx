@@ -22,7 +22,7 @@ export function Button({
   }[variant];
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:opacity-50 disabled:pointer-events-none min-h-[42px] ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:opacity-50 disabled:pointer-events-none min-h-[var(--control-h)] ${styles} ${className}`}
       disabled={disabled || busy}
       {...rest}
     >
@@ -43,7 +43,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 const inputCls =
-  "w-full rounded-[10px] border border-line bg-paper px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft min-h-[42px]";
+  "w-full rounded-[10px] border border-line bg-paper px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft min-h-[var(--control-h)]";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputCls} ${props.className ?? ""}`} />;
@@ -65,7 +65,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex min-h-12 items-center justify-between gap-2 border-b border-line px-4 py-2.5">
+    <div className="flex min-h-10 items-center justify-between gap-2 border-b border-line px-3.5 py-1.5">
       <h2 className="font-display text-base font-semibold">{title}</h2>
       {action}
     </div>
@@ -136,7 +136,7 @@ export function Modal({
         ref={panelRef}
         className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card shadow-pop sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
       >
-        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+        <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
           <h2 className="font-display text-lg font-semibold">{title}</h2>
           <button
             onClick={onClose}
@@ -146,7 +146,7 @@ export function Modal({
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="overflow-y-auto px-5 py-4">{children}</div>
+        <div className="overflow-y-auto px-4 py-3">{children}</div>
       </div>
     </div>
   );
@@ -161,7 +161,7 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md"
     .join("")
     .toUpperCase();
   const hue = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-  const cls = { sm: "h-7 w-7 text-[10px]", md: "h-9 w-9 text-xs", lg: "h-12 w-12 text-sm" }[size];
+  const cls = { sm: "h-6 w-6 text-[10px]", md: "h-8 w-8 text-xs", lg: "h-10 w-10 text-sm" }[size];
   // design uses hsl(h 34% 42%) for deterministic avatar colors
   return (
     <span
@@ -187,7 +187,7 @@ export function Money({ cents, currency, signed = false }: { cents: number; curr
 
 export function EmptyState({ icon, title, hint, action }: { icon?: ReactNode; title: string; hint?: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+    <div className="flex flex-col items-center justify-center gap-2 px-6 py-8 text-center">
       <span className="text-ink-faint">{icon ?? <Inbox className="h-8 w-8" />}</span>
       <p className="font-medium text-ink-soft">{title}</p>
       {hint && <p className="max-w-sm text-sm text-ink-faint">{hint}</p>}
@@ -207,7 +207,7 @@ export function ErrorNote({ message }: { message: string | null }) {
 
 export function Spinner({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-10 text-ink-faint">
+    <div className="flex items-center justify-center gap-2 py-6 text-ink-faint">
       <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
       <span className="text-sm">{label}</span>
     </div>

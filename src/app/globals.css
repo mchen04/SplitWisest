@@ -22,6 +22,29 @@
   --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --shadow-card: 0 1px 2px rgba(33, 48, 42, 0.05), 0 5px 18px rgba(33, 48, 42, 0.045);
   --shadow-pop: 0 6px 16px rgba(33, 48, 42, 0.14), 0 24px 60px rgba(33, 48, 42, 0.18);
+
+  /* Density scale — dense-product type ramp (13px body) instead of the
+     16px consumer default. Components reference these via standard
+     text-* utilities so the whole app shares one ramp. */
+  --text-xs: 0.6875rem; /* 11px metadata */
+  --text-xs--line-height: 1.35;
+  --text-sm: 0.8125rem; /* 13px body */
+  --text-sm--line-height: 1.4;
+  --text-base: 0.875rem; /* 14px emphasized body / card headers */
+  --text-base--line-height: 1.45;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.4;
+  --text-xl: 1.125rem;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 1.375rem; /* page titles */
+  --text-2xl--line-height: 1.2;
+  --text-3xl: 1.625rem;
+  --text-3xl--line-height: 1.2;
+
+  /* Control metrics — single source for interactive element height. */
+  --control-h: 2.125rem; /* 34px controls */
+  --control-h-sm: 1.75rem; /* 28px compact/inline controls */
+  --row-h: 2.75rem; /* 44px list rows with two lines */
 }
 
 /* Dark mode — overrides the design tokens so every `bg-paper`, `text-ink`,
@@ -119,4 +142,4 @@ body {
   .rise-in, .fade-in, .skeleton { animation: none; }
 }
 
-input[type="date"] { min-height: 2.5rem; }
+input[type="date"] { min-height: var(--control-h); }

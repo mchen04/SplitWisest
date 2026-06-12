@@ -56,44 +56,44 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="paper-grain min-h-dvh">
       {/* Desktop / tablet sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[246px] flex-col border-r border-line bg-card md:flex">
-        <Link href="/" className="flex items-center gap-2.5 px-[18px] pb-3 pt-5">
-          <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-accent text-on-accent">
-            <Wallet className="h-5 w-5" />
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[208px] flex-col border-r border-line bg-card md:flex">
+        <Link href="/" className="flex items-center gap-2 px-4 pb-2.5 pt-4">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
+            <Wallet className="h-4 w-4" />
           </span>
-          <span className="font-display text-xl font-bold tracking-tight">SplitWisest</span>
+          <span className="font-display text-lg font-bold tracking-tight">SplitWisest</span>
         </Link>
-        <div className="px-3.5 pb-2.5">
+        <div className="px-3 pb-2">
           <Link
             href={addExpenseHref}
-            className="flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-[10px] bg-accent px-2.5 py-2.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="flex min-h-[var(--control-h)] w-full items-center justify-center gap-1.5 rounded-[10px] bg-accent px-2.5 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
           >
-            <Plus className="h-4.5 w-4.5" /> Add expense
+            <Plus className="h-4 w-4" /> Add expense
           </Link>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 px-3">
+        <nav className="flex flex-1 flex-col gap-0.5 px-2.5">
           {NAV.map(({ href, label, icon: Icon, badge }) => (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors ${
                 isActive(href)
                   ? "bg-accent-soft text-accent-dark"
                   : "text-ink-soft hover:bg-paper hover:text-ink"
               }`}
             >
-              <Icon className="h-4.5 w-4.5" />
+              <Icon className="h-4 w-4" />
               <span className="flex-1">{label}</span>
               {badge && <Badge count={unread[badge]} />}
             </Link>
           ))}
         </nav>
-        <div className="border-t border-line p-3">
+        <div className="border-t border-line p-2.5">
           <button
             onClick={toggle}
-            className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-sm font-medium text-ink-soft hover:bg-paper hover:text-ink"
+            className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium text-ink-soft hover:bg-paper hover:text-ink"
           >
-            {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             <span className="flex-1 text-left">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
           {me && (
@@ -159,8 +159,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-[246px] md:h-dvh md:overflow-hidden md:pb-6 md:pt-6 lg:px-10">
-        <div className="mx-auto flex w-full max-w-5xl flex-col md:h-full md:min-h-0">{children}</div>
+      <main className="px-4 pb-24 pt-4 sm:px-5 md:ml-[208px] md:h-dvh md:overflow-hidden md:pb-4 md:pt-4 lg:px-8">
+        <div className="mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0">{children}</div>
       </main>
 
       {/* Mobile bottom nav */}
@@ -194,10 +194,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
       <div>
-        <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
+        <h1 className="font-display text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
+        {subtitle && <p className="mt-0.5 text-xs text-ink-soft">{subtitle}</p>}
       </div>
       {action}
     </div>

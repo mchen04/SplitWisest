@@ -36,7 +36,7 @@ export default function SettingsPage() {
         <AppearanceCard />
         <PasswordCard />
         <RecoveryCard />
-        <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+        <Card className="flex flex-wrap items-center justify-between gap-3 px-3.5 py-3">
           <div>
             <p className="font-medium">Log out</p>
             <p className="text-sm text-ink-faint">End your session on this device.</p>
@@ -56,7 +56,7 @@ function AppearanceCard() {
   return (
     <Card>
       <CardHeader title={<span className="flex items-center gap-2"><Palette className="h-4 w-4" /> Appearance</span>} />
-      <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3.5">
         <div>
           <p className="font-medium">Dark mode</p>
           <p className="text-sm text-ink-faint">
@@ -101,7 +101,7 @@ function ProfileCard({ me, onSaved }: { me: Me | null; onSaved: (m: Me) => void 
   return (
     <Card>
       <CardHeader title={<span className="flex items-center gap-2"><UserCog className="h-4 w-4" /> Profile</span>} />
-      <form onSubmit={submit} className="space-y-4 p-4">
+      <form onSubmit={submit} className="space-y-3 p-3.5">
         <Field label="Display name">
           <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required maxLength={50} disabled={!me} />
         </Field>
@@ -140,7 +140,7 @@ function PasswordCard() {
   return (
     <Card>
       <CardHeader title={<span className="flex items-center gap-2"><KeyRound className="h-4 w-4" /> Password</span>} />
-      <form onSubmit={submit} className="space-y-4 p-4">
+      <form onSubmit={submit} className="space-y-3 p-3.5">
         <Field label="Current password">
           <Input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} required autoComplete="current-password" />
         </Field>
@@ -193,7 +193,7 @@ function RecoveryCard() {
   return (
     <Card>
       <CardHeader title={<span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" /> Account recovery</span>} />
-      <div className="space-y-4 p-4">
+      <div className="space-y-3 p-3.5">
         <p className="text-sm text-ink-soft">
           Recovery codes let you reset your password if you forget it. Store them somewhere safe — each code works once.
         </p>

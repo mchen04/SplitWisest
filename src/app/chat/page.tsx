@@ -162,7 +162,7 @@ function ChatPageInner() {
                   <button
                     onClick={() => open(c)}
                     aria-current={active ? "true" : undefined}
-                    className={`flex w-full items-center gap-3 py-2.5 pl-3 pr-10 text-left transition-colors md:pr-3 ${
+                    className={`flex w-full items-center gap-2.5 py-2 pl-3 pr-10 text-left transition-colors md:pr-3 ${
                       active ? "bg-accent-soft" : "hover:bg-paper"
                     }`}
                   >
@@ -281,7 +281,7 @@ function ChatPageInner() {
     <AppShell>
       <div className="mb-4 hidden items-end justify-between md:flex md:shrink-0">
         <div>
-          <h1 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">Messages</h1>
+          <h1 className="font-display text-xl font-bold tracking-tight sm:text-2xl">Messages</h1>
           <p className="mt-1 text-sm text-ink-soft">Group conversations and direct messages.</p>
         </div>
       </div>
