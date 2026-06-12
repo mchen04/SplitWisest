@@ -136,9 +136,10 @@ export async function loadAuthorizedSettlementForMutation(id: number, userId: nu
     recipientId: Number(raw.recipient_id),
     createdBy: Number(raw.created_by),
   };
+  const isParticipant = settlement.payerId === userId || settlement.recipientId === userId;
   const allowed = groupId === null
-    ? settlement.payerId === userId || settlement.recipientId === userId
-    : await isGroupMember(groupId, userId);
+    ? isParticipant
+    : (settlement.createdBy === userId || isParticipant) && await isGroupMember(groupId, userId);
   if (!allowed) forbidden("You can't edit this settlement");
   return settlement;
 }
