@@ -34,9 +34,17 @@ interface ExistingExpense {
   categoryId: number | null;
   notes: string;
   splitMethod: string;
+  updatedAt: string;
+  itemizedTaxCents?: number;
+  itemizedTipCents?: number;
   shares: { userId: number; shareCents: number; rawInput: number | null }[];
   items: { name: string; amountCents: number; participantIds: number[] }[];
   attachments: { id: number; filename: string; mime: string }[];
+}
+
+function adjustmentRate(adjustmentCents: number, subtotalCents: number, fallback: string): string {
+  if (adjustmentCents <= 0 || subtotalCents <= 0) return fallback;
+  return ((adjustmentCents * 100) / subtotalCents).toFixed(8).replace(/\.?0+$/, "");
 }
 
 export function ExpenseForm({
@@ -105,10 +113,13 @@ export function ExpenseForm({
         else if (s.rawInput !== null) vals[s.userId] = String(s.rawInput);
       }
       setValues(vals);
-      setTaxEnabled(false);
-      setTaxRate(CALIFORNIA_TAX_RATE);
-      setTipEnabled(false);
-      setTipRate("20");
+      const savedItemSubtotal = existing.items.reduce((sum, item) => sum + item.amountCents, 0);
+      const savedTaxCents = existing.itemizedTaxCents ?? 0;
+      const savedTipCents = existing.itemizedTipCents ?? 0;
+      setTaxEnabled(savedTaxCents > 0);
+      setTaxRate(adjustmentRate(savedTaxCents, savedItemSubtotal, CALIFORNIA_TAX_RATE));
+      setTipEnabled(savedTipCents > 0);
+      setTipRate(adjustmentRate(savedTipCents, savedItemSubtotal, "20"));
       setItems(
         existing.items.map((i) => ({
           name: i.name,
@@ -258,11 +269,13 @@ export function ExpenseForm({
           : undefined,
       itemizedTaxCents: method === "itemized" ? taxCents : undefined,
       itemizedTipCents: method === "itemized" ? tipCents : undefined,
+      expectedUpdatedAt: existing?.updatedAt,
     };
 
     setBusy(true);
     try {
       let expenseId: number;
+      const createdNewExpense = !existing;
       if (existing) {
         await api(`/api/expenses/${existing.id}`, { method: "PATCH", body });
         expenseId = existing.id;
@@ -270,10 +283,23 @@ export function ExpenseForm({
         const r = await api<{ id: number }>(`/api/groups/${groupId}/expenses`, { body });
         expenseId = r.id;
       }
-      for (const f of files) {
-        const form = new FormData();
-        form.append("file", f);
-        await api(`/api/expenses/${expenseId}/attachments`, { form });
+      onSaved();
+      try {
+        for (const f of files) {
+          const form = new FormData();
+          form.append("file", f);
+          await api(`/api/expenses/${expenseId}/attachments`, { form });
+        }
+      } catch (err) {
+        const message = err instanceof ApiClientError ? err.message : "Receipt upload failed";
+        if (createdNewExpense) {
+          onClose();
+          window.alert(`Expense saved, but receipt upload failed: ${message}`);
+          return;
+        }
+        setError(`Expense saved, but receipt upload failed: ${message}`);
+        setBusy(false);
+        return;
       }
       onSaved();
       onClose();
@@ -418,7 +444,7 @@ export function ExpenseForm({
           <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000} />
         </Field>
 
-        <Field label="Receipts" hint="Images or PDF, up to 4 MB each">
+        <Field label="Receipts" hint="Uploaded after the expense is saved; images or PDF, up to 4 MB each">
           <div className="flex flex-wrap items-center gap-2">
             <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:border-ink-faint">
               <Paperclip className="h-4 w-4" /> Attach file

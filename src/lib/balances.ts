@@ -12,51 +12,14 @@ export interface MemberBalance {
 
 export async function groupBalances(groupId: number): Promise<MemberBalance[]> {
   const rows = await sql`
-    WITH members AS (
-      SELECT u.id, u.display_name FROM group_members gm JOIN users u ON u.id = gm.user_id
-      WHERE gm.group_id = ${groupId}
-    ),
-    paid AS (
-      SELECT payer_id AS uid, COALESCE(SUM(converted_cents),0) AS amt
-      FROM expenses WHERE group_id = ${groupId} GROUP BY payer_id
-    ),
-    owed AS (
-      SELECT es.user_id AS uid, COALESCE(SUM(
-        CASE WHEN e.amount_cents = 0 THEN 0
-        ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END
-      ),0) AS amt
-      FROM expense_shares es JOIN expenses e ON e.id = es.expense_id
-      WHERE e.group_id = ${groupId} GROUP BY es.user_id
-    ),
-    settled_out AS (
-      SELECT payer_id AS uid, COALESCE(SUM(converted_cents),0) AS amt
-      FROM settlements WHERE group_id = ${groupId} GROUP BY payer_id
-    ),
-    settled_in AS (
-      SELECT recipient_id AS uid, COALESCE(SUM(converted_cents),0) AS amt
-      FROM settlements WHERE group_id = ${groupId} GROUP BY recipient_id
-    )
-    SELECT m.id, m.display_name,
-      COALESCE(p.amt,0) - COALESCE(o.amt,0) + COALESCE(so.amt,0) - COALESCE(si.amt,0) AS net
-    FROM members m
-    LEFT JOIN paid p ON p.uid = m.id
-    LEFT JOIN owed o ON o.uid = m.id
-    LEFT JOIN settled_out so ON so.uid = m.id
-    LEFT JOIN settled_in si ON si.uid = m.id
-    ORDER BY m.display_name`;
-  const balances = rows.map((r) => ({
-    userId: Number(r.id),
+    SELECT user_id, display_name, net_cents
+    FROM group_balance_rows(${groupId})
+    ORDER BY display_name, user_id`;
+  return rows.map((r) => ({
+    userId: Number(r.user_id),
     displayName: r.display_name,
-    netCents: Number(r.net),
+    netCents: Number(r.net_cents),
   }));
-  // Rounding during currency conversion of shares can leave a few stray cents
-  // so that nets don't sum to zero. Absorb the drift into the largest balance.
-  const drift = balances.reduce((s, b) => s + b.netCents, 0);
-  if (drift !== 0 && balances.length > 0) {
-    const target = balances.reduce((a, b) => (Math.abs(b.netCents) > Math.abs(a.netCents) ? b : a));
-    target.netCents -= drift;
-  }
-  return balances;
 }
 
 export function suggestSettlements(balances: MemberBalance[]): Transfer[] {
@@ -89,49 +52,11 @@ async function accumulatePairBalances(userId: number, onlyFriendId?: number): Pr
         SELECT 1 FROM group_members them
         WHERE them.group_id = g.id AND them.user_id = ${onlyFriendId ?? null}
       ))
-    ),
-    members AS (
-      SELECT rg.id AS group_id, rg.currency, u.id AS user_id, u.display_name
-      FROM relevant_groups rg
-      JOIN group_members gm ON gm.group_id = rg.id
-      JOIN users u ON u.id = gm.user_id
-    ),
-    paid AS (
-      SELECT e.group_id, e.payer_id AS uid, COALESCE(SUM(e.converted_cents), 0) AS amt
-      FROM expenses e
-      JOIN relevant_groups rg ON rg.id = e.group_id
-      GROUP BY e.group_id, e.payer_id
-    ),
-    owed AS (
-      SELECT e.group_id, es.user_id AS uid, COALESCE(SUM(
-        CASE WHEN e.amount_cents = 0 THEN 0
-        ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END
-      ), 0) AS amt
-      FROM expense_shares es
-      JOIN expenses e ON e.id = es.expense_id
-      JOIN relevant_groups rg ON rg.id = e.group_id
-      GROUP BY e.group_id, es.user_id
-    ),
-    settled_out AS (
-      SELECT s.group_id, s.payer_id AS uid, COALESCE(SUM(s.converted_cents), 0) AS amt
-      FROM settlements s
-      JOIN relevant_groups rg ON rg.id = s.group_id
-      GROUP BY s.group_id, s.payer_id
-    ),
-    settled_in AS (
-      SELECT s.group_id, s.recipient_id AS uid, COALESCE(SUM(s.converted_cents), 0) AS amt
-      FROM settlements s
-      JOIN relevant_groups rg ON rg.id = s.group_id
-      GROUP BY s.group_id, s.recipient_id
     )
-    SELECT m.group_id, m.currency, m.user_id, m.display_name,
-      COALESCE(p.amt,0) - COALESCE(o.amt,0) + COALESCE(so.amt,0) - COALESCE(si.amt,0) AS net
-    FROM members m
-    LEFT JOIN paid p ON p.group_id = m.group_id AND p.uid = m.user_id
-    LEFT JOIN owed o ON o.group_id = m.group_id AND o.uid = m.user_id
-    LEFT JOIN settled_out so ON so.group_id = m.group_id AND so.uid = m.user_id
-    LEFT JOIN settled_in si ON si.group_id = m.group_id AND si.uid = m.user_id
-    ORDER BY m.group_id, m.display_name`;
+    SELECT rg.id AS group_id, rg.currency, b.user_id, b.display_name, b.net_cents AS net
+    FROM relevant_groups rg
+    CROSS JOIN LATERAL group_balance_rows(rg.id) b
+    ORDER BY rg.id, b.display_name, b.user_id`;
 
   const byGroup = new Map<number, { currency: string; balances: MemberBalance[] }>();
   for (const row of groupRows) {
@@ -146,11 +71,6 @@ async function accumulatePairBalances(userId: number, onlyFriendId?: number): Pr
   }
 
   for (const g of byGroup.values()) {
-    const drift = g.balances.reduce((sum, b) => sum + b.netCents, 0);
-    if (drift !== 0 && g.balances.length > 0) {
-      const target = g.balances.reduce((a, b) => (Math.abs(b.netCents) > Math.abs(a.netCents) ? b : a));
-      target.netCents -= drift;
-    }
     for (const t of simplifyDebts(new Map(g.balances.map((b) => [b.userId, b.netCents])))) {
       if (t.from === userId && (!onlyFriendId || t.to === onlyFriendId)) {
         const key = `${t.to}:${g.currency}`;

@@ -16,6 +16,7 @@ interface DirectSettlement {
   currency: string;
   date: string;
   note: string;
+  updatedAt: string;
 }
 
 // History of offline payments recorded directly between you and one friend
@@ -57,7 +58,7 @@ export function DirectPaymentsModal({
     if (!window.confirm(`Delete this recorded payment (${fmtMoney(s.amountCents, s.currency)})? Balances will update.`)) return;
     setError(null);
     try {
-      await api(`/api/settlements/${s.id}`, { method: "DELETE" });
+      await api(`/api/settlements/${s.id}?expectedUpdatedAt=${encodeURIComponent(s.updatedAt)}`, { method: "DELETE" });
       reload();
       onChanged();
     } catch (err) {

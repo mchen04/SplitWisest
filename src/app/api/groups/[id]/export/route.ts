@@ -1,21 +1,21 @@
 import { NextRequest } from "next/server";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden } from "@/lib/api";
+import { handler } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { isGroupMember } from "@/lib/balances";
+import { parseGroupId, requireGroupMember } from "@/lib/groups";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 function csvCell(v: unknown): string {
-  const s = String(v ?? "");
+  const raw = String(v ?? "").replace(/\r\n?/g, "\n");
+  const s = /^\s*[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  const group = await requireGroupMember(groupId, user.id);
 
   const rows = await sql`
     SELECT to_char(e.expense_date, 'YYYY-MM-DD') AS expense_date, e.title, e.amount_cents, e.currency, e.converted_cents,
@@ -27,9 +27,7 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
     LEFT JOIN categories c ON c.id = e.category_id
     WHERE e.group_id = ${groupId}
     ORDER BY e.expense_date, e.id`;
-  const group = await sql`SELECT name, currency FROM groups WHERE id = ${groupId}`;
-
-  const header = ["Date", "Title", "Amount", "Currency", `Amount (${group[0].currency})`, "Paid by", "Category", "Split", "Notes", "Shares"];
+  const header = ["Date", "Title", "Amount", "Currency", `Amount (${group.currency})`, "Paid by", "Category", "Split", "Notes", "Shares"];
   const lines = [header.join(",")];
   for (const r of rows) {
     lines.push([
@@ -48,7 +46,7 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   return new Response(lines.join("\n") + "\n", {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${group[0].name.replace(/[^a-z0-9-_ ]/gi, "")}-expenses.csv"`,
+      "Content-Disposition": `attachment; filename="${group.name.replace(/[^a-z0-9-_ ]/gi, "")}-expenses.csv"`,
     },
   });
 });

@@ -4,6 +4,7 @@ import { handler, notFound, forbidden, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
 import { safeAttachmentFilename } from "@/lib/attachments";
+import { insertExpenseAttachment } from "@/lib/attachment-writes";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -26,9 +27,13 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
 
   const buf = Buffer.from(await file.arrayBuffer());
   const filename = safeAttachmentFilename(file.name);
-  const inserted = await sql`
-    INSERT INTO attachments (expense_id, filename, mime, data)
-    VALUES (${id}, ${filename}, ${file.type}, ${buf})
-    RETURNING id`;
-  return NextResponse.json({ id: Number(inserted[0].id) });
+  const insertedId = await insertExpenseAttachment({
+    expenseId: id,
+    userId: user.id,
+    filename,
+    mime: file.type,
+    data: buf,
+  });
+  if (insertedId === null) forbidden();
+  return NextResponse.json({ id: insertedId });
 });

@@ -1,3 +1,5 @@
+import { invalidInput } from "./errors";
+
 // All money is handled as integer cents. Splits must sum exactly to the total;
 // remainders from integer division are distributed one cent at a time to the
 // earliest participants so nothing is ever lost or invented.
@@ -11,7 +13,7 @@ export interface SplitInput {
 }
 
 export function splitEqual(totalCents: number, userIds: number[]): Map<number, number> {
-  if (userIds.length === 0) throw new Error("No participants");
+  if (userIds.length === 0) invalidInput("No participants");
   const base = Math.floor(totalCents / userIds.length);
   let remainder = totalCents - base * userIds.length;
   const out = new Map<number, number>();
@@ -28,22 +30,22 @@ export function splitExact(totalCents: number, inputs: SplitInput[]): Map<number
   let sum = 0;
   for (const { userId, value } of inputs) {
     const cents = Math.round(value ?? 0);
-    if (cents < 0) throw new Error("Negative share");
+    if (cents < 0) invalidInput("Negative share");
     out.set(userId, cents);
     sum += cents;
   }
   if (sum !== totalCents) {
-    throw new Error(`Exact amounts must add up to the total (got ${sum}, expected ${totalCents})`);
+    invalidInput(`Exact amounts must add up to the total (got ${sum}, expected ${totalCents})`);
   }
   return out;
 }
 
 export function splitPercentage(totalCents: number, inputs: SplitInput[]): Map<number, number> {
-  if (inputs.length === 0) throw new Error("No participants");
-  if (inputs.some((i) => (i.value ?? 0) < 0)) throw new Error("Percentages must be positive");
+  if (inputs.length === 0) invalidInput("No participants");
+  if (inputs.some((i) => (i.value ?? 0) < 0)) invalidInput("Percentages must be positive");
   const totalPct = inputs.reduce((s, i) => s + (i.value ?? 0), 0);
   if (Math.abs(totalPct - 100) > 0.001) {
-    throw new Error(`Percentages must add up to 100 (got ${totalPct})`);
+    invalidInput(`Percentages must add up to 100 (got ${totalPct})`);
   }
   return distributeProportional(
     totalCents,
@@ -52,10 +54,10 @@ export function splitPercentage(totalCents: number, inputs: SplitInput[]): Map<n
 }
 
 export function splitShares(totalCents: number, inputs: SplitInput[]): Map<number, number> {
-  if (inputs.length === 0) throw new Error("No participants");
-  if (inputs.some((i) => (i.value ?? 0) < 0)) throw new Error("Shares must be positive");
+  if (inputs.length === 0) invalidInput("No participants");
+  if (inputs.some((i) => (i.value ?? 0) < 0)) invalidInput("Shares must be positive");
   const totalShares = inputs.reduce((s, i) => s + (i.value ?? 0), 0);
-  if (totalShares <= 0) throw new Error("Total shares must be positive");
+  if (totalShares <= 0) invalidInput("Total shares must be positive");
   return distributeProportional(
     totalCents,
     inputs.map((i) => ({ userId: i.userId, weight: i.value ?? 0 }))
@@ -69,7 +71,7 @@ function distributeProportional(
   weights: { userId: number; weight: number }[]
 ): Map<number, number> {
   const totalWeight = weights.reduce((s, w) => s + w.weight, 0);
-  if (totalWeight <= 0) throw new Error("Total weight must be positive");
+  if (totalWeight <= 0) invalidInput("Total weight must be positive");
   const rows = weights.map(({ userId, weight }) => {
     const raw = (totalCents * weight) / totalWeight;
     const floor = Math.floor(raw);
@@ -103,7 +105,7 @@ export function computeShares(
       return splitShares(totalCents, inputs);
     case "itemized":
       // itemized expenses compute shares from items; handled by caller
-      throw new Error("Itemized shares are computed from items");
+      invalidInput("Itemized shares are computed from items");
   }
 }
 
@@ -117,16 +119,19 @@ export function computeItemizedShares(
   const itemSum = items.reduce((s, i) => s + i.amountCents, 0);
   const adjustmentTotal = Math.round(adjustments.taxCents ?? 0) + Math.round(adjustments.tipCents ?? 0);
   if (itemSum + adjustmentTotal !== totalCents) {
-    throw new Error(`Item amounts plus tax and tip must add up to the total (got ${itemSum + adjustmentTotal}, expected ${totalCents})`);
+    invalidInput(`Item amounts plus tax and tip must add up to the total (got ${itemSum + adjustmentTotal}, expected ${totalCents})`);
   }
   const out = new Map<number, number>();
   for (const item of items) {
-    if (item.participantIds.length === 0) throw new Error("Each item needs at least one participant");
+    if (item.participantIds.length === 0) invalidInput("Each item needs at least one participant");
+    if (new Set(item.participantIds).size !== item.participantIds.length) {
+      invalidInput("Duplicate item participants");
+    }
     const split = splitEqual(item.amountCents, item.participantIds);
     for (const [uid, cents] of split) out.set(uid, (out.get(uid) ?? 0) + cents);
   }
   if (adjustmentTotal > 0) {
-    if (itemSum <= 0) throw new Error("Item subtotal must be positive when tax or tip is added");
+    if (itemSum <= 0) invalidInput("Item subtotal must be positive when tax or tip is added");
     const adjustmentShares = distributeProportional(
       adjustmentTotal,
       [...out.entries()].map(([userId, weight]) => ({ userId, weight }))
@@ -178,9 +183,9 @@ export function parseAmountToCents(input: string): number {
     ? input.replace(/,(\d{1,2})$/, ".$1")
     : input;
   const cleaned = normalized.replace(/[^0-9.]/g, "");
-  if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) throw new Error("Invalid amount");
+  if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) invalidInput("Invalid amount");
   const cents = Math.round(parseFloat(cleaned) * 100);
-  if (!Number.isFinite(cents) || cents <= 0) throw new Error("Amount must be positive");
-  if (cents > 100_000_000_000) throw new Error("Amount too large");
+  if (!Number.isFinite(cents) || cents <= 0) invalidInput("Amount must be positive");
+  if (cents > 100_000_000_000) invalidInput("Amount too large");
   return cents;
 }

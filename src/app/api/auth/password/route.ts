@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest } from "@/lib/api";
-import { requireUser, hashPassword, verifyPassword } from "@/lib/auth";
-import { cookies } from "next/headers";
+import { requireUser, hashPassword, verifyPassword, revokeOtherSessions } from "@/lib/auth";
 
 const Body = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -20,10 +19,6 @@ export const POST = handler(async (req: NextRequest) => {
     badRequest("Current password is incorrect");
   }
   await sql`UPDATE users SET password_hash = ${hashPassword(newPassword)} WHERE id = ${user.id}`;
-  const store = await cookies();
-  const keep = store.get("sw_session")?.value;
-  if (keep) {
-    await sql`DELETE FROM sessions WHERE user_id = ${user.id} AND token <> ${keep}`;
-  }
+  await revokeOtherSessions(user.id);
   return NextResponse.json({ ok: true });
 });

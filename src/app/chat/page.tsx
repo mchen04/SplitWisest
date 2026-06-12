@@ -80,7 +80,8 @@ function ChatPageInner() {
     setPins(loadPins());
     load();
   }, []);
-  useSync(() => {
+  useSync((c, prev) => {
+    if (c.messageCursor === prev.messageCursor) return;
     load();
     setRefreshKey((k) => k + 1);
   });

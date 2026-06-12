@@ -1,48 +1,5 @@
-import { sql } from "./db";
-
-export async function logActivity(
-  groupId: number | null,
-  actorId: number,
-  type: string,
-  summary: string,
-  data: Record<string, unknown> = {},
-  actionText?: string
-) {
-  const payload = actionText ? { ...data, actionText } : data;
-  await sql`INSERT INTO activity (group_id, actor_id, type, summary, data)
-            VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify(payload)})`;
-}
-
-export async function logGroupActivity(
-  groupId: number,
-  actorId: number,
-  type: string,
-  summary: string,
-  data: Record<string, unknown> = {},
-  actionText?: string
-) {
-  await logActivity(groupId, actorId, type, summary, data, actionText);
-}
-
-export async function logUserActivity({
-  actorId,
-  visibleUserIds,
-  type,
-  summary,
-  data = {},
-  actionText,
-}: {
-  actorId: number;
-  visibleUserIds: number[];
-  type: string;
-  summary: string;
-  data?: Record<string, unknown>;
-  actionText?: string;
-}) {
-  await logActivity(null, actorId, type, summary, {
-    ...data,
-    visibleUserIds: visibleUserIds.map(String),
-  }, actionText);
+export function activityData(data: Record<string, unknown> = {}, actionText?: string): string {
+  return JSON.stringify(actionText ? { ...data, actionText } : data);
 }
 
 export function activityActionText(row: { summary: string; actorName: string; data?: unknown }): string {

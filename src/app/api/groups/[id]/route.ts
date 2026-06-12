@@ -1,24 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden } from "@/lib/api";
+import { badRequest, handler, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { groupBalances, suggestSettlements, isGroupMember } from "@/lib/balances";
+import { groupBalances, suggestSettlements } from "@/lib/balances";
 import { materializeRecurring } from "@/lib/expenses";
-import { logActivity } from "@/lib/activity";
+import { deleteGroup, parseGroupId, renameGroupWithActivity, requireGroupMember } from "@/lib/groups";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden("You are not a member of this group");
+  const groupId = parseGroupId((await params).id);
+  const group = await requireGroupMember(groupId, user.id);
 
   await materializeRecurring(groupId);
 
-  const groupRows = await sql`SELECT id, name, currency, invite_code, created_by FROM groups WHERE id = ${groupId}`;
-  if (groupRows.length === 0) notFound();
   const members = await sql`
     SELECT u.id, u.display_name, u.username FROM group_members gm
     JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ${groupId} ORDER BY u.display_name`;
@@ -28,10 +25,10 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   return NextResponse.json({
     group: {
       id: groupId,
-      name: groupRows[0].name,
-      currency: groupRows[0].currency,
-      inviteCode: groupRows[0].invite_code,
-      createdBy: Number(groupRows[0].created_by),
+      name: group.name,
+      currency: group.currency,
+      inviteCode: group.inviteCode,
+      createdBy: group.createdBy,
     },
     members: members.map((m) => ({ id: Number(m.id), displayName: m.display_name, username: m.username })),
     balances,
@@ -45,13 +42,10 @@ const PatchBody = z.object({ name: z.string().trim().min(1, "Group name is requi
 // existing expenses store amounts already converted to the group's currency.
 export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden("You are not a member of this group");
+  const groupId = parseGroupId((await params).id);
+  await requireGroupMember(groupId, user.id);
   const { name } = PatchBody.parse(await req.json());
-  const rows = await sql`UPDATE groups SET name = ${name} WHERE id = ${groupId} RETURNING id`;
-  if (rows.length === 0) notFound();
-  await logActivity(groupId, user.id, "group.renamed", `${user.displayName} renamed the group to "${name}"`, {}, `renamed the group to "${name}"`);
+  await renameGroupWithActivity(groupId, user, name);
   return NextResponse.json({ ok: true });
 });
 
@@ -60,11 +54,16 @@ export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
 // recurring rules, and group activity.
 export const DELETE = handler(async (_req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  const rows = await sql`SELECT created_by FROM groups WHERE id = ${groupId}`;
-  if (rows.length === 0) notFound();
-  if (Number(rows[0].created_by) !== user.id) forbidden("Only the group's creator can delete it");
-  await sql`DELETE FROM groups WHERE id = ${groupId}`;
+  const groupId = parseGroupId((await params).id);
+  const group = await requireGroupMember(groupId, user.id);
+  if (group.createdBy !== user.id) forbidden("Only the group's creator can delete it");
+  const result = await deleteGroup(groupId, user);
+  if (!result.deleted && result.outstandingBalances > 0) {
+    badRequest("Settle all balances in this group before deleting it");
+  }
+  if (!result.deleted && result.activeRecurring > 0) {
+    badRequest("Stop all recurring expenses before deleting this group");
+  }
+  if (!result.deleted) forbidden("Only the group's creator can delete it");
   return NextResponse.json({ ok: true });
 });

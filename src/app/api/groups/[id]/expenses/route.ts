@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden } from "@/lib/api";
+import { handler } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { isGroupMember } from "@/lib/balances";
-import { ExpenseBody, insertExpense } from "@/lib/expenses";
-import { logActivity } from "@/lib/activity";
-import { fmtMoney } from "@/lib/money";
+import { createExpenseWithActivity, ExpenseBody } from "@/lib/expenses";
+import { parseGroupId, requireGroupMember } from "@/lib/groups";
+import { versionToken } from "@/lib/versions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  await requireGroupMember(groupId, user.id);
 
   const q = req.nextUrl.searchParams;
   const text = q.get("q") || null;
@@ -29,6 +27,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const rows = await sql`
     SELECT e.id, e.title, e.amount_cents, e.currency, e.converted_cents, e.expense_date,
       e.payer_id, e.category_id, e.notes, e.split_method, e.created_at, e.updated_at,
+      to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
       p.display_name AS payer_name, c.name AS category_name, c.icon AS category_icon,
       (SELECT COUNT(*) FROM attachments a WHERE a.expense_id = e.id) AS attachment_count,
       (SELECT json_agg(json_build_object('userId', es.user_id, 'shareCents', es.share_cents,
@@ -66,6 +65,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       categoryIcon: e.category_icon,
       notes: e.notes,
       splitMethod: e.split_method,
+      updatedAt: versionToken(e.updated_at_token),
       attachmentCount: Number(e.attachment_count),
       shares: e.shares ?? [],
     })),
@@ -74,16 +74,10 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
 
 export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  const group = await requireGroupMember(groupId, user.id);
 
   const input = ExpenseBody.parse(await req.json());
-  const group = await sql`SELECT currency FROM groups WHERE id = ${groupId}`;
-  const expenseId = await insertExpense(groupId, group[0].currency, user.id, input);
-  await logActivity(groupId, user.id, "expense.added",
-    `${user.displayName} added "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`,
-    { expenseId },
-    `added "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`);
+  const expenseId = await createExpenseWithActivity(groupId, group.currency, user, input);
   return NextResponse.json({ id: expenseId });
 });

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, badRequest, notFound } from "@/lib/api";
+import { handler, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { friendBalances } from "@/lib/balances";
-import { canRemoveFriend, canRequestFriendById, createFriendRequest, createFriendship, friendshipExists, removeFriendship } from "@/lib/relationships";
-import { logUserActivity } from "@/lib/activity";
+import { assertAuthRateLimit, clearAuthRateLimit } from "@/lib/rate-limit";
+import {
+  canRequestFriendById,
+  removeFriendshipWithActivity,
+  requestOrAcceptFriendship,
+} from "@/lib/relationships";
 
 export const GET = handler(async () => {
   const user = await requireUser();
@@ -74,34 +78,27 @@ const Body = z.object({
 export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const { code, userId } = Body.parse(await req.json());
+  if (code) await assertAuthRateLimit(req, "invite", code);
   const rows = userId
     ? await sql`SELECT id, display_name FROM users WHERE id = ${userId}`
     : await sql`SELECT id, display_name FROM users WHERE invite_code = ${code}`;
   if (rows.length === 0) badRequest("No user found for that invite code");
+  if (code) await clearAuthRateLimit("invite", code);
   const friendId = Number(rows[0].id);
   if (friendId === user.id) badRequest("That is your own invite code");
 
   if (userId && !(await canRequestFriendById(user.id, friendId))) badRequest("Use an invite code to add this person");
 
-  if (await friendshipExists(user.id, friendId)) badRequest("You are already friends");
-
-  // Reciprocal request waiting? Accept it.
-  const reciprocal = await sql`
-    SELECT id FROM friend_requests WHERE from_id = ${friendId} AND to_id = ${user.id}`;
-  if (reciprocal.length > 0) {
-    await createFriendship(user.id, friendId);
-    await logUserActivity({
-      actorId: user.id,
-      visibleUserIds: [user.id, friendId],
-      type: "friend.added",
-      summary: `${user.displayName} and ${rows[0].display_name} are now friends`,
-      actionText: `and ${rows[0].display_name} are now friends`,
-    });
-    return NextResponse.json({ status: "accepted", id: friendId, displayName: rows[0].display_name });
-  }
-
-  await createFriendRequest(user.id, friendId);
-  return NextResponse.json({ status: "requested", id: friendId, displayName: rows[0].display_name });
+  const status = await requestOrAcceptFriendship({
+    actorId: user.id,
+    actorName: user.displayName,
+    friendId,
+    friendName: rows[0].display_name,
+    requireSharedGroup: !!userId,
+  });
+  if (status === "already-friends") badRequest("You are already friends");
+  if (status === "shared-group-required") badRequest("Use an invite code to add this person");
+  return NextResponse.json({ status, id: friendId, displayName: rows[0].display_name });
 });
 
 const DeleteBody = z.object({ friendId: z.number().int().positive() });
@@ -111,17 +108,10 @@ const DeleteBody = z.object({ friendId: z.number().int().positive() });
 export const DELETE = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const { friendId } = DeleteBody.parse(await req.json());
-  if (!(await friendshipExists(user.id, friendId))) notFound("You are not friends with this user");
 
-  if (!(await canRemoveFriend(user.id, friendId))) badRequest("Settle up with this friend before removing them");
-
-  await removeFriendship(user.id, friendId);
-  await logUserActivity({
-    actorId: user.id,
-    visibleUserIds: [user.id, friendId],
-    type: "friend.removed",
-    summary: `${user.displayName} removed a friend`,
-    actionText: "removed a friend",
-  });
+  const result = await removeFriendshipWithActivity(user, friendId);
+  if (!result.removed && result.hasBalance) {
+    badRequest("Settle up with this friend before removing them");
+  }
   return NextResponse.json({ ok: true });
 });

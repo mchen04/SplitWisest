@@ -48,7 +48,7 @@ pnpm tsc --noEmit    # typecheck
 pnpm next build      # production build
 ```
 
-Browser/E2E verification is done with `agent-browser` across mobile portrait, mobile landscape, tablet, desktop, and wide viewports (see `docs/QA.md`).
+Browser/E2E verification is done with `agent-browser` across mobile portrait, mobile landscape, tablet, desktop, and wide viewports.
 
 ## Deployment (Vercel)
 
@@ -63,4 +63,3 @@ Set `DATABASE_URL` in Vercel project env vars. Add `SIGNUP_CODE` only if you wan
 - `docs/ARCHITECTURE.md` — auth, balance math, settlements, realtime, chat, deployment
 - `docs/DATABASE.md` — schema and migration notes for Neon
 - `docs/USAGE.md` — user-facing workflow guide
-- `docs/QA.md` — QA checklist and verification results

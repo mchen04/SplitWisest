@@ -43,7 +43,15 @@ export default function Dashboard() {
   }, []);
 
   useEffect(load, [load]);
-  useSync(load);
+  useSync((c, prev) => {
+    if (
+      c.activityCursor !== prev.activityCursor ||
+      c.nudgeCursor !== prev.nudgeCursor ||
+      c.requestCursor !== prev.requestCursor
+    ) {
+      load();
+    }
+  });
 
   // Totals per currency across all friends
   const owedToMe: Record<string, number> = {};

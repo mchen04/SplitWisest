@@ -3,14 +3,16 @@ import { sql } from "@/lib/db";
 import { handler, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
-import { ExpenseBody, updateExpense } from "@/lib/expenses";
-import { logActivity } from "@/lib/activity";
-import { fmtMoney } from "@/lib/money";
+import { deleteExpenseWithActivity, ExpenseBody, updateExpenseByIdWithActivity } from "@/lib/expenses";
+import { versionToken } from "@/lib/versions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 async function loadExpense(id: number, userId: number) {
-  const rows = await sql`SELECT * FROM expenses WHERE id = ${id}`;
+  const rows = await sql`
+    SELECT e.*, to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token
+    FROM expenses e
+    WHERE e.id = ${id}`;
   if (rows.length === 0) notFound("Expense not found");
   const e = rows[0];
   if (!(await isGroupMember(Number(e.group_id), userId))) forbidden();
@@ -40,6 +42,9 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
       categoryId: e.category_id ? Number(e.category_id) : null,
       notes: e.notes,
       splitMethod: e.split_method,
+      updatedAt: versionToken(e.updated_at_token),
+      itemizedTaxCents: Number(e.itemized_tax_cents ?? 0),
+      itemizedTipCents: Number(e.itemized_tip_cents ?? 0),
       shares: shares.map((s) => ({
         userId: Number(s.user_id),
         shareCents: Number(s.share_cents),
@@ -61,31 +66,24 @@ export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
-  const e = await loadExpense(id, user.id);
   const input = ExpenseBody.parse(await req.json());
-  const group = await sql`SELECT currency FROM groups WHERE id = ${e.group_id}`;
-  await updateExpense(id, Number(e.group_id), group[0].currency, user.id, input, {
-    amountCents: Number(e.amount_cents),
-    currency: e.currency,
-    convertedCents: Number(e.converted_cents),
-    fxRate: Number(e.fx_rate),
-  });
-  await logActivity(Number(e.group_id), user.id, "expense.edited",
-    `${user.displayName} edited "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`,
-    { expenseId: id },
-    `edited "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`);
+  await updateExpenseByIdWithActivity(id, user, input);
   return NextResponse.json({ ok: true });
 });
 
-export const DELETE = handler(async (_req: NextRequest, { params }: Ctx) => {
+export const DELETE = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
   const e = await loadExpense(id, user.id);
-  await sql`DELETE FROM expenses WHERE id = ${id}`;
-  await logActivity(Number(e.group_id), user.id, "expense.deleted",
-    `${user.displayName} deleted "${e.title}" (${fmtMoney(Number(e.amount_cents), e.currency)})`,
-    {},
-    `deleted "${e.title}" (${fmtMoney(Number(e.amount_cents), e.currency)})`);
+  const expectedUpdatedAt = req.nextUrl.searchParams.get("expectedUpdatedAt") ?? undefined;
+  await deleteExpenseWithActivity({
+    id,
+    groupId: Number(e.group_id),
+    title: e.title,
+    amountCents: Number(e.amount_cents),
+    currency: e.currency,
+    expectedUpdatedAt,
+  }, user);
   return NextResponse.json({ ok: true });
 });

@@ -15,6 +15,7 @@ interface Detail {
   payerId: number;
   notes: string;
   splitMethod: string;
+  updatedAt: string;
   shares: { userId: number; shareCents: number; displayName: string }[];
   items: { id: number; name: string; amountCents: number; participantIds: number[] }[];
   attachments: { id: number; filename: string; mime: string }[];

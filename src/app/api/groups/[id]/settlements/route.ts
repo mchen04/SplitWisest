@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden, badRequest } from "@/lib/api";
+import { handler, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { isGroupMember } from "@/lib/balances";
-import { logActivity } from "@/lib/activity";
-import { settlementFields, settlementSummary } from "@/lib/settlements";
-import { convert } from "@/lib/fx";
+import { recordGroupSettlement, settlementFields } from "@/lib/settlements";
+import { parseGroupId, requireGroupMember } from "@/lib/groups";
+import { versionToken } from "@/lib/versions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -18,13 +17,14 @@ const Body = z.object({
 
 export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  await requireGroupMember(groupId, user.id);
   const limit = Math.min(Math.max(Number(req.nextUrl.searchParams.get("limit")) || 50, 1), 1000);
   const rows = await sql`
     SELECT s.id, s.payer_id, s.recipient_id, s.amount_cents, s.currency, s.converted_cents,
-      s.settled_date, s.note, p.display_name AS payer_name, r.display_name AS recipient_name
+      s.settled_date, s.note, s.updated_at,
+      to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
+      p.display_name AS payer_name, r.display_name AS recipient_name
     FROM settlements s
     JOIN users p ON p.id = s.payer_id JOIN users r ON r.id = s.recipient_id
     WHERE s.group_id = ${groupId} ORDER BY s.settled_date DESC, s.id DESC LIMIT ${limit + 1}`;
@@ -43,30 +43,17 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       convertedCents: Number(s.converted_cents),
       date: s.settled_date,
       note: s.note,
+      updatedAt: versionToken(s.updated_at_token),
     })),
   });
 });
 
 export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  const group = await requireGroupMember(groupId, user.id);
   const body = Body.parse(await req.json());
   if (body.payerId === body.recipientId) badRequest("Payer and recipient must be different");
-  if (!(await isGroupMember(groupId, body.payerId)) || !(await isGroupMember(groupId, body.recipientId))) {
-    badRequest("Both people must be group members");
-  }
-  const group = await sql`SELECT currency FROM groups WHERE id = ${groupId}`;
-  const { cents: convertedCents } = await convert(body.amountCents, body.currency, group[0].currency);
-  const rows = await sql`
-    INSERT INTO settlements (group_id, payer_id, recipient_id, amount_cents, currency, converted_cents, settled_date, note, created_by)
-    VALUES (${groupId}, ${body.payerId}, ${body.recipientId}, ${body.amountCents}, ${body.currency},
-      ${convertedCents}, ${body.date}, ${body.note}, ${user.id})
-    RETURNING id`;
-  await logActivity(groupId, user.id, "settlement.recorded",
-    await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency),
-    { settlementId: Number(rows[0].id) },
-    await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency));
-  return NextResponse.json({ id: Number(rows[0].id) });
+  const settlement = await recordGroupSettlement(groupId, group.currency, user.id, body);
+  return NextResponse.json({ id: settlement.id, updatedAt: settlement.updatedAt });
 });

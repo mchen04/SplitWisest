@@ -175,7 +175,7 @@ export function useUnread(): Unread {
 
 // Invokes onChange whenever a sync cursor advances. This is the realtime
 // backbone: cheap, serverless-friendly, no websockets to break.
-export function useSync(onChange: ((c: SyncCursors) => void) | undefined) {
+export function useSync(onChange: ((c: SyncCursors, prev: SyncCursors) => void) | undefined) {
   const enabled = !!onChange;
   const last = useRef<SyncCursors | null>(null);
   const cb = useRef(onChange);
@@ -193,7 +193,7 @@ export function useSync(onChange: ((c: SyncCursors) => void) | undefined) {
         c.nudgeCursor !== prev.nudgeCursor ||
         c.requestCursor !== prev.requestCursor
       )) {
-        cb.current?.(c);
+        cb.current?.(c, prev);
       }
     });
   }, [enabled]);
@@ -206,7 +206,7 @@ export function useSync(onChange: ((c: SyncCursors) => void) | undefined) {
 export function useApiData<T>(
   path: string,
   debounceMs = 0,
-  opts: { sync?: boolean } = {}
+  opts: { sync?: false | keyof SyncCursors | (keyof SyncCursors)[] } = {}
 ): { data: T | null; error: string | null; status: number | null; reload: () => void } {
   const [state, setState] = useState<{ path: string; data: T | null; error: string | null; status: number | null }>({
     path,
@@ -218,14 +218,7 @@ export function useApiData<T>(
     const requestedPath = path;
     apiCached<T>(path)
       .then((next) => {
-        // Skip the state update when the payload is byte-identical to what we
-        // already render — background refreshes shouldn't repaint anything.
-        setState((prev) =>
-          prev.path === requestedPath && prev.error === null && prev.data !== null &&
-          JSON.stringify(prev.data) === JSON.stringify(next)
-            ? prev
-            : { path: requestedPath, data: next, error: null, status: 200 }
-        );
+        setState({ path: requestedPath, data: next, error: null, status: 200 });
       })
       .catch((err) => {
         setState({
@@ -240,7 +233,17 @@ export function useApiData<T>(
     const t = setTimeout(reload, debounceMs);
     return () => clearTimeout(t);
   }, [reload, debounceMs]);
-  useSync(opts.sync === false ? undefined : reload);
+  const syncKeys =
+    opts.sync === false ? null : Array.isArray(opts.sync) ? opts.sync : opts.sync ? [opts.sync] : null;
+  useSync(
+    opts.sync === false
+      ? undefined
+      : syncKeys
+        ? (c, prev) => {
+            if (syncKeys.some((key) => c[key] !== prev[key])) reload();
+          }
+        : reload
+  );
   // While the fresh fetch is in flight (or after a path change), serve the
   // last cached payload for this path so navigation renders instantly.
   const cached = (dataCache.get(path) as T | undefined) ?? null;

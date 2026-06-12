@@ -16,10 +16,15 @@ export const GET = handler(async () => {
 // plaintext codes ONCE — they are never retrievable again.
 export const POST = handler(async () => {
   const user = await requireUser();
-  await sql`DELETE FROM recovery_codes WHERE user_id = ${user.id}`;
   const codes = Array.from({ length: CODE_COUNT }, () => newRecoveryCode());
-  for (const code of codes) {
-    await sql`INSERT INTO recovery_codes (user_id, code_hash) VALUES (${user.id}, ${hashRecoveryCode(code)})`;
-  }
+  const rows = codes.map((code) => ({ code_hash: hashRecoveryCode(code) }));
+  await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${user.id}::int)`,
+    tx`DELETE FROM recovery_codes WHERE user_id = ${user.id}`,
+    tx`
+      INSERT INTO recovery_codes (user_id, code_hash)
+      SELECT ${user.id}, x.code_hash
+      FROM jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) AS x(code_hash text)`,
+  ]);
   return NextResponse.json({ codes });
 });

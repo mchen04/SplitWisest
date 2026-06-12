@@ -4,6 +4,7 @@ import { handler, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
 import { attachmentContentDisposition } from "@/lib/attachments";
+import { deleteExpenseAttachment } from "@/lib/attachment-writes";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,7 +42,8 @@ export const DELETE = handler(async (_req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const id = Number((await params).id);
   if (!Number.isInteger(id)) notFound();
-  await loadWithAccess(id, user.id);
-  await sql`DELETE FROM attachments WHERE id = ${id}`;
+  const result = await deleteExpenseAttachment(id, user.id);
+  if (result === "not-found") notFound("Attachment not found");
+  if (result === "forbidden") forbidden();
   return NextResponse.json({ ok: true });
 });

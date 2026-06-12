@@ -1,4 +1,21 @@
 import { neon } from "@neondatabase/serverless";
+import { existsSync, readFileSync } from "fs";
+
+function loadLocalEnv() {
+  const path = ".env.local";
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx < 0) continue;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
+    process.env[key] ??= value;
+  }
+}
+
+loadLocalEnv();
 
 export type Json = Record<string, unknown>;
 
@@ -47,8 +64,9 @@ export async function request(path: string, opts: { cookie?: string; method?: st
     body: opts.form ?? (opts.body ? JSON.stringify(opts.body) : undefined),
   });
   const contentType = res.headers.get("content-type") ?? "";
-  const json = contentType.includes("json") ? await res.json().catch(() => ({})) : {};
-  return { res, json: json as Json, text: contentType.includes("json") ? "" : await res.text().catch(() => "") };
+  const text = await res.text().catch(() => "");
+  const json = contentType.includes("json") ? JSON.parse(text || "{}") : {};
+  return { res, json: json as Json, text };
 }
 
 export async function signup(role: string, suffix: string, password: string, prefix = "qa") {
@@ -91,6 +109,14 @@ export async function login(username: string, password: string) {
 export async function cleanupQaUsers(suffix: string, prefix = "qa") {
   const escapedSuffix = suffix.replace(/[\\_%]/g, "\\$&");
   const users = await sql`SELECT id FROM users WHERE username LIKE ${`${prefix}\\_%\\_${escapedSuffix}`} ESCAPE '\\'`;
+  await sql`CREATE TABLE IF NOT EXISTS auth_rate_limits (
+    scope TEXT NOT NULL,
+    key TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (scope, key)
+  )`;
+  await sql`DELETE FROM auth_rate_limits WHERE key LIKE ${`${prefix}\\_%\\_${escapedSuffix}`} ESCAPE '\\'`;
   const userIds = users.map((u) => Number(u.id));
   if (userIds.length === 0) return;
   const groupNamePrefix = prefix === "core" ? "Core Flow " : "QA ";

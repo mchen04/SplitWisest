@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden } from "@/lib/api";
+import { handler } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { isGroupMember } from "@/lib/balances";
 import { activityActionText } from "@/lib/activity";
+import { parseGroupId, requireGroupMember } from "@/lib/groups";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  await requireGroupMember(groupId, user.id);
   const since = Number(req.nextUrl.searchParams.get("since") ?? 0);
   const rows = await sql`
     SELECT a.id, a.type, a.summary, a.data, a.created_at, a.actor_id, u.display_name

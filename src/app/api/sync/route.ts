@@ -16,7 +16,12 @@ export const GET = handler(async () => {
            OR (a.group_id IS NULL AND a.data->'visibleUserIds' ? ${String(user.id)})) AS act,
       (SELECT COALESCE(MAX(m.id),0) FROM messages m
         WHERE m.group_id IN (SELECT group_id FROM group_members WHERE user_id = ${user.id})
-           OR m.dm_a = ${user.id} OR m.dm_b = ${user.id}) AS msg,
+           OR EXISTS (
+             SELECT 1 FROM friendships f
+             WHERE m.channel = 'dm'
+               AND (m.dm_a = ${user.id} OR m.dm_b = ${user.id})
+               AND ((f.user_a = m.dm_a AND f.user_b = m.dm_b) OR (f.user_a = m.dm_b AND f.user_b = m.dm_a))
+           )) AS msg,
       (SELECT COALESCE(MAX(n.id),0) FROM nudges n
         WHERE n.to_id = ${user.id} AND n.seen_at IS NULL) AS nudge,
       (SELECT COALESCE(MAX(fr.id),0) FROM friend_requests fr
@@ -40,6 +45,10 @@ export const GET = handler(async () => {
       FROM messages m
       WHERE m.channel = 'dm' AND m.sender_id <> ${user.id}
         AND (m.dm_a = ${user.id} OR m.dm_b = ${user.id})
+        AND EXISTS (
+          SELECT 1 FROM friendships f
+          WHERE (f.user_a = m.dm_a AND f.user_b = m.dm_b) OR (f.user_a = m.dm_b AND f.user_b = m.dm_a)
+        )
       GROUP BY 1
     )
     SELECT

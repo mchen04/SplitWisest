@@ -2,10 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler } from "@/lib/api";
-import { requireUser, newInviteCode } from "@/lib/auth";
-import { logActivity } from "@/lib/activity";
+import { requireUser } from "@/lib/auth";
 import { groupBalances } from "@/lib/balances";
 import { CURRENCIES } from "@/lib/fx";
+import { createGroup } from "@/lib/groups";
 
 export const GET = handler(async () => {
   const user = await requireUser();
@@ -47,11 +47,6 @@ const CreateBody = z.object({
 export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const { name, currency } = CreateBody.parse(await req.json());
-  const rows = await sql`
-    INSERT INTO groups (name, currency, invite_code, created_by)
-    VALUES (${name}, ${currency}, ${newInviteCode()}, ${user.id}) RETURNING id, invite_code`;
-  const groupId = Number(rows[0].id);
-  await sql`INSERT INTO group_members (group_id, user_id) VALUES (${groupId}, ${user.id})`;
-  await logActivity(groupId, user.id, "group.created", `${user.displayName} created the group "${name}"`, {}, `created the group "${name}"`);
-  return NextResponse.json({ id: groupId, inviteCode: rows[0].invite_code });
+  const group = await createGroup(user, name, currency);
+  return NextResponse.json({ id: group.id, inviteCode: group.inviteCode });
 });

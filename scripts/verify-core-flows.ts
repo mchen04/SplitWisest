@@ -1,4 +1,4 @@
-import { assert, assertNoSecretText, baseUrl, cleanupQaUsers, jsonArray, jsonNumber, jsonObject, jsonString, login, request, signup } from "./qa-support";
+import { assert, assertNoSecretText, baseUrl, cleanupQaUsers, jsonArray, jsonNumber, jsonObject, jsonString, login, request, signup, sql } from "./qa-support";
 
 const password = "core-flow-password";
 const recoveredPassword = "core-flow-recovered-password";
@@ -8,11 +8,64 @@ const today = new Date().toISOString().slice(0, 10);
 async function main() {
   assert(process.env.DATABASE_URL, "DATABASE_URL is required");
   await cleanupQaUsers(suffix, "core");
+  const usernameIndex = await sql`
+    SELECT 1 FROM pg_indexes
+    WHERE indexname = 'users_lower_username_idx'
+      AND indexdef ILIKE '%UNIQUE INDEX%'
+      AND indexdef ILIKE '%lower(username)%'`;
+  assert(usernameIndex.length === 1, "case-insensitive username unique index missing");
 
   const alice = await signup("alice", suffix, password, "core");
+  assert(alice.inviteCode.length >= 32, "new personal invite code should be at least 128 bits");
+  const duplicateSignup = await fetch(`${baseUrl}/api/auth/signup`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      username: alice.username,
+      password,
+      displayName: `Core duplicate ${suffix}`,
+    }),
+  });
+  assert(duplicateSignup.status === 400, `duplicate signup returned ${duplicateSignup.status}`);
   const bob = await signup("bob", suffix, password, "core");
   const charlie = await signup("charlie", suffix, password, "core");
+  const dave = await signup("dave", suffix, password, "core");
   const outsider = await signup("outsider", suffix, password, "core");
+  const driftLow = await signup("driftlow", suffix, password, "core");
+  const driftHigh = await signup("drifthigh", suffix, password, "core");
+  const driftOther = await signup("driftother", suffix, password, "core");
+
+  await sql`UPDATE users SET display_name = ${`Core drift same ${suffix}`} WHERE id = ANY(${[driftLow.id, driftHigh.id]})`;
+  await sql`UPDATE users SET display_name = ${`Core drift other ${suffix}`} WHERE id = ${driftOther.id}`;
+  const driftGroupRows = await sql`
+    INSERT INTO groups (name, currency, invite_code, created_by)
+    VALUES (${`Core Flow Drift ${suffix}`}, 'USD', ${`core_drift_${suffix}`}, ${driftLow.id})
+    RETURNING id`;
+  const driftGroupId = Number(driftGroupRows[0].id);
+  await sql`
+    INSERT INTO group_members (group_id, user_id)
+    VALUES (${driftGroupId}, ${driftLow.id}), (${driftGroupId}, ${driftHigh.id}), (${driftGroupId}, ${driftOther.id})`;
+  await sql`
+    INSERT INTO settlements (group_id, payer_id, recipient_id, amount_cents, currency, converted_cents, settled_date, created_by)
+    VALUES (${driftGroupId}, ${driftHigh.id}, ${driftLow.id}, 50, 'USD', 50, ${today}, ${driftLow.id})`;
+  const driftExpenseRows = await sql`
+    INSERT INTO expenses (group_id, title, amount_cents, currency, converted_cents, fx_rate,
+      expense_date, payer_id, category_id, notes, split_method, created_by)
+    VALUES (${driftGroupId}, 'drift fixture', 3, 'USD', 1, 1, ${today}, ${driftOther.id}, null, '', 'equal', ${driftOther.id})
+    RETURNING id`;
+  const driftExpenseId = Number(driftExpenseRows[0].id);
+  await sql`
+    INSERT INTO expense_shares (expense_id, user_id, share_cents)
+    VALUES (${driftExpenseId}, ${driftLow.id}, 1), (${driftExpenseId}, ${driftHigh.id}, 1), (${driftExpenseId}, ${driftOther.id}, 1)`;
+  const driftProjection = new Map(
+    (await sql`SELECT user_id, net_cents FROM group_balance_rows(${driftGroupId})`).map((r) => [
+      Number(r.user_id),
+      Number(r.net_cents),
+    ])
+  );
+  assert(driftProjection.get(driftLow.id) === -51, "drift fixture should assign tied drift to the lower duplicate-name user id");
+  assert(driftProjection.get(driftHigh.id) === 50, "drift fixture should preserve the higher duplicate-name user balance");
+  assert(driftProjection.get(driftOther.id) === 1, "drift fixture should preserve the non-tied residual balance");
 
   const created = await request("/api/groups", {
     cookie: alice.cookie,
@@ -21,13 +74,69 @@ async function main() {
   assert(created.res.status === 200, `create group returned ${created.res.status}`);
   const groupId = Number(created.json.id);
   const groupInvite = String(created.json.inviteCode);
+  assert(groupInvite.length >= 32, "new group invite code should be at least 128 bits");
+
+  const fakeInviteCode = `core_invite_${suffix}`;
+  for (let i = 0; i < 8; i++) {
+    const missingInvite = await request("/api/groups/join", { cookie: outsider.cookie, body: { code: fakeInviteCode } });
+    assert(missingInvite.res.status === 400, `invalid invite attempt ${i} returned ${missingInvite.res.status}`);
+  }
+  const throttledInvite = await request("/api/groups/join", { cookie: outsider.cookie, body: { code: fakeInviteCode } });
+  assert(
+    throttledInvite.res.status === 400 && /too many attempts/i.test(throttledInvite.text),
+    "invite throttling did not trigger"
+  );
+  await sql`DELETE FROM auth_rate_limits WHERE scope = 'invite:account' AND key = lower(${fakeInviteCode})`;
+  await sql`DELETE FROM auth_rate_limits WHERE scope = 'invite:ip' AND key = 'unknown'`;
+
+  const customCategory = await request("/api/categories", { cookie: alice.cookie, body: { name: `Core Category ${suffix}` } });
+  assert(customCategory.res.status === 200, `create category returned ${customCategory.res.status}`);
+  const duplicateCategory = await request("/api/categories", { cookie: alice.cookie, body: { name: `core category ${suffix}` } });
+  assert(duplicateCategory.res.status === 400, `duplicate category returned ${duplicateCategory.res.status}`);
 
   const join = await request("/api/groups/join", { cookie: bob.cookie, body: { code: groupInvite } });
   assert(join.res.status === 200, `join group returned ${join.res.status}`);
+  const daveJoin = await request("/api/groups/join", { cookie: dave.cookie, body: { code: groupInvite } });
+  assert(daveJoin.res.status === 200, `Dave join group returned ${daveJoin.res.status}`);
+  const removeDave = await request(`/api/groups/${groupId}/members/${dave.id}`, { cookie: alice.cookie, method: "DELETE" });
+  assert(removeDave.res.status === 200, `remove settled member returned ${removeDave.res.status}`);
 
   const bobGroups = await request("/api/groups", { cookie: bob.cookie });
   assert(jsonArray(bobGroups.json.groups, "groups").some((g) => jsonNumber(jsonObject(g, "group").id, "group.id") === groupId), "joined group missing for Bob");
   assertNoSecretText(bobGroups.json, "groups response");
+
+  const deleteFixture = await request("/api/groups", {
+    cookie: alice.cookie,
+    body: { name: `Core Delete Fixture ${suffix}`, currency: "USD" },
+  });
+  assert(deleteFixture.res.status === 200, `create delete fixture returned ${deleteFixture.res.status}`);
+  const deleteGroupId = Number(deleteFixture.json.id);
+  const deleteJoin = await request("/api/groups/join", { cookie: bob.cookie, body: { code: String(deleteFixture.json.inviteCode) } });
+  assert(deleteJoin.res.status === 200, `join delete fixture returned ${deleteJoin.res.status}`);
+  const deleteFixtureExpense = await request(`/api/groups/${deleteGroupId}/expenses`, {
+    cookie: alice.cookie,
+    body: {
+      title: `Delete fixture ${suffix}`,
+      amountCents: 10000,
+      currency: "USD",
+      date: today,
+      payerId: alice.id,
+      categoryId: null,
+      notes: "",
+      splitMethod: "equal",
+      participants: [{ userId: alice.id }, { userId: bob.id }],
+    },
+  });
+  assert(deleteFixtureExpense.res.status === 200, `delete fixture expense returned ${deleteFixtureExpense.res.status}`);
+  const deleteUnsettledGroup = await request(`/api/groups/${deleteGroupId}`, { cookie: alice.cookie, method: "DELETE" });
+  assert(deleteUnsettledGroup.res.status === 400, `delete unsettled group returned ${deleteUnsettledGroup.res.status}`);
+  const settleDeleteFixture = await request(`/api/groups/${deleteGroupId}/settlements`, {
+    cookie: alice.cookie,
+    body: { payerId: bob.id, recipientId: alice.id, amountCents: 5000, currency: "USD", date: today, note: "settle before delete" },
+  });
+  assert(settleDeleteFixture.res.status === 200, `settle delete fixture returned ${settleDeleteFixture.res.status}`);
+  const deleteSettledGroup = await request(`/api/groups/${deleteGroupId}`, { cookie: alice.cookie, method: "DELETE" });
+  assert(deleteSettledGroup.res.status === 200, `delete settled group returned ${deleteSettledGroup.res.status}`);
 
   const friendReq = await request("/api/friends", { cookie: charlie.cookie, body: { code: alice.inviteCode } });
   assert(friendReq.res.status === 200, `friend request returned ${friendReq.res.status}`);
@@ -43,13 +152,13 @@ async function main() {
   assert(accept.res.status === 200, `accept request returned ${accept.res.status}`);
 
   const expenseBody = {
-    title: `Core dinner ${suffix}`,
+    title: `=Core dinner ${suffix}`,
     amountCents: 1200,
     currency: "USD",
     date: today,
     payerId: alice.id,
     categoryId: null,
-    notes: "core flow note",
+    notes: "\r=Core note formula",
     splitMethod: "equal",
     participants: [{ userId: alice.id }, { userId: bob.id }],
   };
@@ -59,14 +168,52 @@ async function main() {
 
   const detail = await request(`/api/expenses/${expenseId}`, { cookie: bob.cookie });
   assert(detail.res.status === 200, `expense detail returned ${detail.res.status}`);
-  assert(jsonObject(detail.json.expense, "expense").title === expenseBody.title, "expense title mismatch");
+  const loadedExpense = jsonObject(detail.json.expense, "expense");
+  assert(loadedExpense.title === expenseBody.title, "expense title mismatch");
+  const firstExpenseUpdatedAt = jsonString(loadedExpense.updatedAt, "expense updatedAt");
 
   const patched = await request(`/api/expenses/${expenseId}`, {
     cookie: alice.cookie,
     method: "PATCH",
-    body: { ...expenseBody, title: `Core dinner edited ${suffix}`, amountCents: 1400 },
+    body: { ...expenseBody, title: `=Core dinner edited ${suffix}`, amountCents: 1400, expectedUpdatedAt: firstExpenseUpdatedAt },
   });
   assert(patched.res.status === 200, `patch expense returned ${patched.res.status}`);
+
+  const itemizedBody = {
+    title: `Core itemized ${suffix}`,
+    amountCents: 12000,
+    currency: "USD",
+    date: today,
+    payerId: alice.id,
+    categoryId: null,
+    notes: "itemized tax and tip",
+    splitMethod: "itemized",
+    participants: [{ userId: alice.id }, { userId: bob.id }],
+    items: [{ name: "Dinner", amountCents: 10000, participantIds: [alice.id, bob.id] }],
+    itemizedTaxCents: 1000,
+    itemizedTipCents: 1000,
+  };
+  const itemized = await request(`/api/groups/${groupId}/expenses`, { cookie: alice.cookie, body: itemizedBody });
+  assert(itemized.res.status === 200, `create itemized expense returned ${itemized.res.status}`);
+  const itemizedId = Number(itemized.json.id);
+  const itemizedDetail = await request(`/api/expenses/${itemizedId}`, { cookie: bob.cookie });
+  assert(itemizedDetail.res.status === 200, `itemized detail returned ${itemizedDetail.res.status}`);
+  const loadedItemized = jsonObject(itemizedDetail.json.expense, "itemized expense");
+  assert(jsonNumber(loadedItemized.amountCents, "itemized amountCents") === 12000, "itemized amount mismatch");
+  assert(jsonNumber(loadedItemized.itemizedTaxCents, "itemizedTaxCents") === 1000, "itemized tax mismatch");
+  assert(jsonNumber(loadedItemized.itemizedTipCents, "itemizedTipCents") === 1000, "itemized tip mismatch");
+  const itemizedUpdatedAt = jsonString(loadedItemized.updatedAt, "itemized updatedAt");
+  const itemizedPatch = await request(`/api/expenses/${itemizedId}`, {
+    cookie: alice.cookie,
+    method: "PATCH",
+    body: { ...itemizedBody, expectedUpdatedAt: itemizedUpdatedAt },
+  });
+  assert(itemizedPatch.res.status === 200, `patch itemized expense returned ${itemizedPatch.res.status}`);
+  const itemizedAfterPatch = await request(`/api/expenses/${itemizedId}`, { cookie: bob.cookie });
+  const preservedItemized = jsonObject(itemizedAfterPatch.json.expense, "patched itemized expense");
+  assert(jsonNumber(preservedItemized.amountCents, "patched itemized amountCents") === 12000, "patched itemized amount mismatch");
+  assert(jsonNumber(preservedItemized.itemizedTaxCents, "patched itemizedTaxCents") === 1000, "patched itemized tax mismatch");
+  assert(jsonNumber(preservedItemized.itemizedTipCents, "patched itemizedTipCents") === 1000, "patched itemized tip mismatch");
 
   const comment = await request(`/api/expenses/${expenseId}/comments`, {
     cookie: bob.cookie,
@@ -108,6 +255,12 @@ async function main() {
   });
   assert(recurring.res.status === 200, `create recurring returned ${recurring.res.status}`);
   const recurringId = Number(recurring.json.id);
+  await sql`UPDATE recurring_expenses SET cadence = 'monthly', next_date = ${today}, anchor_day = 31 WHERE id = ${recurringId}`;
+  const recurringList = await request(`/api/groups/${groupId}/recurring`, { cookie: alice.cookie });
+  assert(recurringList.res.status === 200, `recurring list returned ${recurringList.res.status}`);
+  const recurringRow = jsonArray(recurringList.json.recurring, "recurring").find((row) => jsonNumber(jsonObject(row, "recurring row").id, "recurring id") === recurringId);
+  assert(recurringRow !== undefined, "created recurring rule missing from list");
+  const recurringUpdatedAt = jsonString(jsonObject(recurringRow, "recurring row").updatedAt, "recurring updatedAt");
   const editRecurring = await request(`/api/recurring/${recurringId}`, {
     cookie: bob.cookie,
     method: "PATCH",
@@ -119,14 +272,44 @@ async function main() {
       categoryId: null,
       participantIds: [alice.id, bob.id],
       notes: "",
-      cadence: "weekly",
+      cadence: "monthly",
       nextDate: today,
       active: true,
+      expectedUpdatedAt: recurringUpdatedAt,
     },
   });
   assert(editRecurring.res.status === 200, `edit recurring returned ${editRecurring.res.status}`);
-  const stopRecurring = await request(`/api/recurring/${recurringId}`, { cookie: alice.cookie, method: "DELETE" });
+  const recurringAnchorRows = await sql`SELECT anchor_day FROM recurring_expenses WHERE id = ${recurringId}`;
+  assert(Number(recurringAnchorRows[0]?.anchor_day) === 31, "recurring edit should preserve unchanged monthly anchor");
+  const editedRecurringUpdatedAt = jsonString(editRecurring.json.updatedAt, "edited recurring updatedAt");
+  const stopRecurring = await request(`/api/recurring/${recurringId}?expectedUpdatedAt=${encodeURIComponent(editedRecurringUpdatedAt)}`, {
+    cookie: alice.cookie,
+    method: "DELETE",
+  });
   assert(stopRecurring.res.status === 200, `stop recurring returned ${stopRecurring.res.status}`);
+  const staleRecurringStop = await request(`/api/recurring/${recurringId}?expectedUpdatedAt=${encodeURIComponent(editedRecurringUpdatedAt)}`, {
+    cookie: bob.cookie,
+    method: "DELETE",
+  });
+  assert(staleRecurringStop.res.status === 400, `stale recurring stop returned ${staleRecurringStop.res.status}`);
+  const staleRecurringEdit = await request(`/api/recurring/${recurringId}`, {
+    cookie: bob.cookie,
+    method: "PATCH",
+    body: {
+      title: `Core recurring stale ${suffix}`,
+      amountCents: 1001,
+      currency: "USD",
+      payerId: alice.id,
+      categoryId: null,
+      participantIds: [alice.id, bob.id],
+      notes: "",
+      cadence: "monthly",
+      nextDate: today,
+      active: true,
+      expectedUpdatedAt: editedRecurringUpdatedAt,
+    },
+  });
+  assert(staleRecurringEdit.res.status === 400, `stale recurring edit returned ${staleRecurringEdit.res.status}`);
 
   const groupSettlement = await request(`/api/groups/${groupId}/settlements`, {
     cookie: alice.cookie,
@@ -134,19 +317,53 @@ async function main() {
   });
   assert(groupSettlement.res.status === 200, `group settlement returned ${groupSettlement.res.status}`);
   const settlementId = Number(groupSettlement.json.id);
+  const firstSettlementUpdatedAt = jsonString(groupSettlement.json.updatedAt, "group settlement updatedAt");
   const editSettlement = await request(`/api/settlements/${settlementId}`, {
     cookie: bob.cookie,
     method: "PATCH",
-    body: { amountCents: 301, currency: "USD", date: today, note: "edited group settlement" },
+    body: {
+      amountCents: 301,
+      currency: "USD",
+      date: today,
+      note: "edited group settlement",
+      expectedUpdatedAt: firstSettlementUpdatedAt,
+    },
   });
   assert(editSettlement.res.status === 200, `edit settlement returned ${editSettlement.res.status}`);
+  const staleSettlementEdit = await request(`/api/settlements/${settlementId}`, {
+    cookie: bob.cookie,
+    method: "PATCH",
+    body: {
+      amountCents: 302,
+      currency: "USD",
+      date: today,
+      note: "stale group settlement",
+      expectedUpdatedAt: firstSettlementUpdatedAt,
+    },
+  });
+  assert(staleSettlementEdit.res.status === 400, `stale settlement edit returned ${staleSettlementEdit.res.status}`);
+  const editedSettlementUpdatedAt = jsonString(editSettlement.json.updatedAt, "edited settlement updatedAt");
+  const groupAfterLedgerChanges = await request(`/api/groups/${groupId}`, { cookie: alice.cookie });
+  assert(groupAfterLedgerChanges.res.status === 200, `group detail after ledger changes returned ${groupAfterLedgerChanges.res.status}`);
+  const apiBalances = new Map(
+    jsonArray(groupAfterLedgerChanges.json.balances, "group balances").map((b) => {
+      const balance = jsonObject(b, "group balance");
+      return [jsonNumber(balance.userId, "balance userId"), jsonNumber(balance.netCents, "balance netCents")];
+    })
+  );
+  const projectionBalances = await sql`SELECT user_id, net_cents FROM group_balance_rows(${groupId})`;
+  for (const balance of projectionBalances) {
+    const userId = Number(balance.user_id);
+    assert(apiBalances.get(userId) === Number(balance.net_cents), `balance projection mismatch for ${userId}`);
+  }
 
   const directSettlement = await request("/api/settlements", {
     cookie: alice.cookie,
     body: { friendId: charlie.id, direction: "i-paid", amountCents: 222, currency: "USD", date: today, note: "direct settlement" },
   });
   assert(directSettlement.res.status === 200, `direct settlement returned ${directSettlement.res.status}`);
-  const deleteDirect = await request(`/api/settlements/${Number(directSettlement.json.id)}`, {
+  const directSettlementUpdatedAt = jsonString(directSettlement.json.updatedAt, "direct settlement updatedAt");
+  const deleteDirect = await request(`/api/settlements/${Number(directSettlement.json.id)}?expectedUpdatedAt=${encodeURIComponent(directSettlementUpdatedAt)}`, {
     cookie: charlie.cookie,
     method: "DELETE",
   });
@@ -156,6 +373,22 @@ async function main() {
   assert(groupMsg.res.status === 200, `group message returned ${groupMsg.res.status}`);
   const dm = await request(`/api/dm/${charlie.id}/messages`, { cookie: alice.cookie, body: { body: `dm hello ${suffix}` } });
   assert(dm.res.status === 200, `dm returned ${dm.res.status}`);
+  const outsiderReadGroup = await request("/api/read", { cookie: outsider.cookie, body: { scope: `msg:group:${groupId}`, lastId: 1_000_000_000_000 } });
+  assert(outsiderReadGroup.res.status === 403, `outsider group read marker returned ${outsiderReadGroup.res.status}`);
+  const aliceReadOutsiderDm = await request("/api/read", { cookie: alice.cookie, body: { scope: `msg:dm:${outsider.id}`, lastId: 1_000_000_000_000 } });
+  assert(aliceReadOutsiderDm.res.status === 403, `outsider dm read marker returned ${aliceReadOutsiderDm.res.status}`);
+  const forgedDmRead = await request("/api/read", { cookie: alice.cookie, body: { scope: `msg:dm:${charlie.id}`, lastId: 1_000_000_000_000 } });
+  assert(forgedDmRead.res.status === 200, `forged dm read marker returned ${forgedDmRead.res.status}`);
+  const charlieReply = await request(`/api/dm/${alice.id}/messages`, { cookie: charlie.cookie, body: { body: `dm reply ${suffix}` } });
+  assert(charlieReply.res.status === 200, `dm reply returned ${charlieReply.res.status}`);
+  const aliceConversations = await request("/api/conversations", { cookie: alice.cookie });
+  assert(aliceConversations.res.status === 200, `alice conversations returned ${aliceConversations.res.status}`);
+  const charlieConversation = jsonArray(aliceConversations.json.conversations, "conversations").find((row) => {
+    const conversation = jsonObject(row, "conversation");
+    return conversation.kind === "dm" && jsonNumber(conversation.id, "conversation id") === charlie.id;
+  });
+  assert(charlieConversation !== undefined, "Charlie conversation missing");
+  assert(jsonObject(charlieConversation, "Charlie conversation").unread === true, "future read marker should not hide later DM");
   const bobSync = await request("/api/sync", { cookie: bob.cookie });
   assert(jsonNumber(jsonObject(bobSync.json.unread, "unread").messages, "unread.messages") > 0, "Bob should have unread group message");
   await request("/api/read", { cookie: bob.cookie, body: { scope: `msg:group:${groupId}`, lastId: Number(groupMsg.json.id) } });
@@ -168,11 +401,27 @@ async function main() {
   const csv = await fetch(`${baseUrl}/api/groups/${groupId}/export`, { headers: { cookie: alice.cookie } });
   assert(csv.status === 200, `CSV returned ${csv.status}`);
   assert((csv.headers.get("content-type") ?? "").includes("text/csv"), "CSV content-type mismatch");
+  const csvText = await csv.text();
+  assert(csvText.includes(`'=Core dinner edited ${suffix}`), "CSV should neutralize formula-like expense titles");
+  assert(!csvText.includes("\r=Core note formula"), "CSV should normalize carriage returns before export");
+  assert(csvText.includes(`"'\n=Core note formula"`), "CSV should neutralize formula-like notes after normalized line breaks");
 
   const recovery = await request("/api/me/recovery-codes", { cookie: alice.cookie, method: "POST" });
   assert(recovery.res.status === 200, `recovery returned ${recovery.res.status}`);
   const recoveryCodes = jsonArray(recovery.json.codes, "recovery codes");
   assert(recoveryCodes.length === 8, "recovery code count mismatch");
+  const recoveryRows = await sql`SELECT COUNT(*)::int AS n FROM recovery_codes WHERE user_id = ${alice.id} AND used_at IS NULL`;
+  assert(Number(recoveryRows[0].n) === 8, "recovery code regeneration should persist exactly eight unused codes");
+  const [parallelRecoveryA, parallelRecoveryB] = await Promise.all([
+    request("/api/me/recovery-codes", { cookie: alice.cookie, method: "POST" }),
+    request("/api/me/recovery-codes", { cookie: alice.cookie, method: "POST" }),
+  ]);
+  assert(parallelRecoveryA.res.status === 200, `parallel recovery A returned ${parallelRecoveryA.res.status}`);
+  assert(parallelRecoveryB.res.status === 200, `parallel recovery B returned ${parallelRecoveryB.res.status}`);
+  const parallelRecoveryRows = await sql`SELECT COUNT(*)::int AS n FROM recovery_codes WHERE user_id = ${alice.id} AND used_at IS NULL`;
+  assert(Number(parallelRecoveryRows[0].n) === 8, "parallel recovery regeneration should leave exactly one active code set");
+  const finalRecovery = await request("/api/me/recovery-codes", { cookie: alice.cookie, method: "POST" });
+  assert(finalRecovery.res.status === 200, `final recovery returned ${finalRecovery.res.status}`);
   const settings = await request("/api/me", {
     cookie: alice.cookie,
     method: "PATCH",
@@ -190,12 +439,18 @@ async function main() {
   assertNoSecretText(outsiderExpense.json, "outsider expense error");
   assertNoSecretText(unauthGroup.json, "unauth group error");
 
-  const deleteGroupSettlement = await request(`/api/settlements/${settlementId}`, { cookie: alice.cookie, method: "DELETE" });
+  const deleteGroupSettlement = await request(`/api/settlements/${settlementId}?expectedUpdatedAt=${encodeURIComponent(editedSettlementUpdatedAt)}`, {
+    cookie: alice.cookie,
+    method: "DELETE",
+  });
   assert(deleteGroupSettlement.res.status === 200, `delete group settlement returned ${deleteGroupSettlement.res.status}`);
-  const deleteExpense = await request(`/api/expenses/${expenseId}`, { cookie: alice.cookie, method: "DELETE" });
+  const deleteExpenseDetail = await request(`/api/expenses/${expenseId}`, { cookie: alice.cookie });
+  const deleteExpenseUpdatedAt = jsonString(jsonObject(deleteExpenseDetail.json.expense, "delete expense").updatedAt, "delete expense updatedAt");
+  const deleteExpense = await request(`/api/expenses/${expenseId}?expectedUpdatedAt=${encodeURIComponent(deleteExpenseUpdatedAt)}`, { cookie: alice.cookie, method: "DELETE" });
   assert(deleteExpense.res.status === 200, `delete expense returned ${deleteExpense.res.status}`);
 
-  const recoveryCode = jsonString(recoveryCodes[0], "recovery code");
+  const latestRecoveryCodes = jsonArray(finalRecovery.json.codes, "final recovery codes");
+  const recoveryCode = jsonString(latestRecoveryCodes[0], "recovery code");
   const recovered = await fetch(`${baseUrl}/api/auth/recover`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -204,6 +459,14 @@ async function main() {
   assert(recovered.status === 200, `recover returned ${recovered.status}`);
   const oldLogin = await login(alice.username, password);
   assert(oldLogin.res.status === 400, `old password should fail after recovery, got ${oldLogin.res.status}`);
+  for (let i = 0; i < 8; i++) {
+    const failedLogin = await login(alice.username, `${password}-wrong-${i}`);
+    assert(failedLogin.res.status === 400, `failed login ${i} returned ${failedLogin.res.status}`);
+  }
+  const throttledLogin = await login(alice.username, `${password}-wrong-throttled`);
+  assert(throttledLogin.res.status === 400 && /too many attempts/i.test(throttledLogin.text), "login throttling did not trigger");
+  await sql`DELETE FROM auth_rate_limits WHERE scope = 'login:account' AND key = lower(${alice.username})`;
+  await sql`DELETE FROM auth_rate_limits WHERE scope = 'login:ip' AND key = 'unknown'`;
   const newLogin = await login(alice.username, recoveredPassword);
   assert(newLogin.res.status === 200, `new password login failed: ${newLogin.res.status} ${newLogin.text}`);
   const logout = await request("/api/auth/logout", { cookie: newLogin.cookie, method: "POST" });

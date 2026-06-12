@@ -37,7 +37,9 @@ export default function ActivityPage() {
   }, [limit]);
 
   useEffect(load, [load]);
-  useSync(load);
+  useSync((c, prev) => {
+    if (c.activityCursor !== prev.activityCursor) load();
+  });
 
   return (
     <AppShell>

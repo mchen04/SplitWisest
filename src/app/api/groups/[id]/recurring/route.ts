@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, notFound, forbidden, badRequest } from "@/lib/api";
+import { handler } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { isGroupMember, loadGroupMemberIds } from "@/lib/balances";
-import { logActivity } from "@/lib/activity";
 import { CURRENCIES } from "@/lib/fx";
+import { parseGroupId, requireGroupMember } from "@/lib/groups";
+import { createRecurringExpenseWithActivity } from "@/lib/expenses";
+import { versionToken } from "@/lib/versions";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  await requireGroupMember(groupId, user.id);
   const rows = await sql`
-    SELECT r.*, u.display_name AS payer_name, c.name AS category_name
+    SELECT r.*, to_char(r.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
+      u.display_name AS payer_name, c.name AS category_name
     FROM recurring_expenses r
     JOIN users u ON u.id = r.payer_id
     LEFT JOIN categories c ON c.id = r.category_id
@@ -31,10 +32,13 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
       categoryId: r.category_id ? Number(r.category_id) : null,
       categoryName: r.category_name,
       participantIds: (r.participant_ids as number[]).map(Number),
+      notes: r.notes,
       cadence: r.cadence,
-      nextDate: r.next_date,
-      active: r.active,
-    })),
+	      nextDate: r.next_date,
+	      anchorDay: r.anchor_day ? Number(r.anchor_day) : null,
+	      active: r.active,
+	      updatedAt: versionToken(r.updated_at_token),
+	    })),
   });
 });
 
@@ -52,21 +56,9 @@ const Body = z.object({
 
 export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
-  const groupId = Number((await params).id);
-  if (!Number.isInteger(groupId)) notFound();
-  if (!(await isGroupMember(groupId, user.id))) forbidden();
+  const groupId = parseGroupId((await params).id);
+  await requireGroupMember(groupId, user.id);
   const body = Body.parse(await req.json());
-  const memberIds = await loadGroupMemberIds(groupId);
-  if (!memberIds.has(body.payerId)) badRequest("Payer must be a group member");
-  for (const pid of body.participantIds) if (!memberIds.has(pid)) badRequest("All participants must be group members");
-  const rows = await sql`
-    INSERT INTO recurring_expenses (group_id, title, amount_cents, currency, payer_id, category_id,
-      participant_ids, notes, cadence, next_date, anchor_day, created_by)
-    VALUES (${groupId}, ${body.title}, ${body.amountCents}, ${body.currency}, ${body.payerId},
-      ${body.categoryId ?? null}, ${body.participantIds}, ${body.notes}, ${body.cadence},
-      ${body.startDate}, ${Number(body.startDate.slice(8, 10))}, ${user.id})
-    RETURNING id`;
-  await logActivity(groupId, user.id, "recurring.created",
-    `${user.displayName} set up a ${body.cadence} recurring expense "${body.title}"`);
-  return NextResponse.json({ id: Number(rows[0].id) });
+  const id = await createRecurringExpenseWithActivity(groupId, user, body);
+  return NextResponse.json({ id });
 });

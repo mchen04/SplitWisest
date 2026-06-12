@@ -2,8 +2,11 @@ import { z } from "zod";
 import { sql } from "./db";
 import { fmtMoney } from "./money";
 import { CURRENCIES } from "./fx";
-import { forbidden, notFound } from "./api";
+import { badRequest, forbidden, notFound } from "./api";
 import { isGroupMember } from "./balances";
+import { convert } from "./fx";
+import { activityData } from "./activity";
+import { VersionToken, versionToken } from "./versions";
 
 // Validation fields shared by group and direct (friend) settlement bodies.
 export const settlementFields = {
@@ -11,6 +14,10 @@ export const settlementFields = {
   currency: z.string().refine((c) => CURRENCIES.includes(c), "Unsupported currency"),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
   note: z.string().max(500).default(""),
+};
+
+export const settlementVersionField = {
+  expectedUpdatedAt: VersionToken,
 };
 
 // The activity summary line shared by both settlement routes.
@@ -25,12 +32,248 @@ export async function settlementSummary(
   return `${nameOf(payerId)} paid ${nameOf(recipientId)} ${fmtMoney(amountCents, currency)} (recorded offline)`;
 }
 
+export async function recordGroupSettlement(
+  groupId: number,
+  groupCurrency: string,
+  createdBy: number,
+  body: {
+    payerId: number;
+    recipientId: number;
+    amountCents: number;
+    currency: string;
+    date: string;
+    note: string;
+  }
+): Promise<{ id: number; updatedAt: string }> {
+  const { cents: convertedCents } = await convert(body.amountCents, body.currency, groupCurrency);
+  const summary = await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency);
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH members_ok AS (
+      SELECT 1
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${body.payerId}
+      )
+      AND EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${body.recipientId}
+      )
+      AND EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${createdBy}
+      )
+    ),
+    s AS (
+      INSERT INTO settlements (group_id, payer_id, recipient_id, amount_cents, currency, converted_cents, settled_date, note, created_by)
+      SELECT ${groupId}, ${body.payerId}, ${body.recipientId}, ${body.amountCents}, ${body.currency},
+        ${convertedCents}, ${body.date}, ${body.note}, ${createdBy}
+      FROM members_ok
+      RETURNING id, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${groupId}, ${createdBy}, 'settlement.recorded', ${summary},
+        jsonb_build_object('settlementId', s.id, 'actionText', ${summary}::text)
+      FROM s
+      RETURNING 1
+    )
+    SELECT id, updated_at FROM s`,
+  ]);
+  if (!rows[0]) badRequest("Both people must be group members");
+  return { id: Number(rows[0].id), updatedAt: versionToken(rows[0].updated_at) };
+}
+
+export async function recordDirectSettlement(
+  createdBy: number,
+  body: {
+    payerId: number;
+    recipientId: number;
+    amountCents: number;
+    currency: string;
+    date: string;
+    note: string;
+  }
+): Promise<{ id: number; updatedAt: string }> {
+  if (createdBy !== body.payerId && createdBy !== body.recipientId) forbidden("You can't record this settlement");
+  const userA = Math.min(body.payerId, body.recipientId);
+  const userB = Math.max(body.payerId, body.recipientId);
+  const summary = await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency);
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${userA}::int, ${userB}::int)`,
+    tx`
+    WITH friendship_ok AS (
+      SELECT 1
+      FROM friendships
+      WHERE user_a = ${userA} AND user_b = ${userB}
+    ),
+    s AS (
+      INSERT INTO settlements (group_id, payer_id, recipient_id, amount_cents, currency, converted_cents, settled_date, note, created_by)
+      SELECT NULL, ${body.payerId}, ${body.recipientId}, ${body.amountCents}, ${body.currency},
+        ${body.amountCents}, ${body.date}, ${body.note}, ${createdBy}
+      FROM friendship_ok
+      RETURNING id, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT null, ${createdBy}, 'settlement.recorded', ${summary},
+        jsonb_build_object(
+          'visibleUserIds', to_jsonb(ARRAY[${String(body.payerId)}::text, ${String(body.recipientId)}::text]),
+          'settlementId', s.id,
+          'actionText', ${summary}::text
+        )
+      FROM s
+      RETURNING 1
+    )
+    SELECT id, updated_at FROM s`,
+  ]);
+  if (!rows[0]) forbidden("You are not friends with this user");
+  return { id: Number(rows[0].id), updatedAt: versionToken(rows[0].updated_at) };
+}
+
+export async function updateSettlementWithActivity(
+  settlement: AuthorizedSettlement,
+  user: { id: number; displayName: string },
+  body: { amountCents: number; currency: string; date: string; note: string; expectedUpdatedAt: string },
+  convertedCents: number
+) {
+  const actionText = await settlementSummary(settlement.payerId, settlement.recipientId, body.amountCents, body.currency);
+  const summary = `${user.displayName} edited a recorded payment - now ${actionText}`;
+  const visibleUserIds = [settlement.payerId, settlement.recipientId].map(String);
+  const userA = Math.min(settlement.payerId, settlement.recipientId);
+  const userB = Math.max(settlement.payerId, settlement.recipientId);
+  const [, rows] = await sql.transaction((tx) => [
+    settlement.groupId === null
+      ? tx`SELECT pg_advisory_xact_lock(${userA}::int, ${userB}::int)`
+      : tx`SELECT pg_advisory_xact_lock(${settlement.groupId}::int)`,
+    tx`
+    WITH existing_members_ok AS (
+      SELECT 1
+      WHERE (
+          ${settlement.groupId}::bigint IS NULL
+          AND EXISTS (
+            SELECT 1 FROM friendships
+            WHERE user_a = ${userA} AND user_b = ${userB}
+          )
+        )
+        OR (
+          EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${settlement.groupId} AND user_id = ${settlement.payerId}
+          )
+          AND EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${settlement.groupId} AND user_id = ${settlement.recipientId}
+          )
+          AND EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${settlement.groupId} AND user_id = ${user.id}
+          )
+        )
+    ),
+    upd AS (
+      UPDATE settlements SET amount_cents = ${body.amountCents}, currency = ${body.currency},
+        converted_cents = ${convertedCents}, settled_date = ${body.date}, note = ${body.note}, updated_at = now()
+      FROM existing_members_ok
+      WHERE id = ${settlement.id}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') = ${body.expectedUpdatedAt}
+      RETURNING id, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${settlement.groupId}, ${user.id}, 'settlement.updated', ${summary},
+        ${activityData(settlement.groupId === null ? { visibleUserIds } : {})}::jsonb
+      FROM upd
+      RETURNING 1
+    ),
+    stale AS (
+      SELECT 1 FROM settlements
+      WHERE id = ${settlement.id}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') <> ${body.expectedUpdatedAt}
+    )
+    SELECT (SELECT count(*) FROM upd)::int AS updated,
+      EXISTS(SELECT 1 FROM stale) AS stale,
+      (SELECT updated_at FROM upd) AS updated_at`,
+  ]);
+  if (Number(rows[0]?.updated ?? 0) === 0 && rows[0]?.stale) badRequest("Settlement changed, refresh and try again");
+  if (Number(rows[0]?.updated ?? 0) === 0 && settlement.groupId === null) forbidden("You are not friends with this user");
+  if (Number(rows[0]?.updated ?? 0) === 0) badRequest("This settlement involves someone who has left the group");
+  return { updatedAt: versionToken(rows[0].updated_at) };
+}
+
+export async function deleteSettlementWithActivity(
+  settlement: AuthorizedSettlement,
+  user: { id: number; displayName: string },
+  expectedUpdatedAt: string
+) {
+  const summary = `${user.displayName} deleted a recorded payment`;
+  const visibleUserIds = [settlement.payerId, settlement.recipientId].map(String);
+  const userA = Math.min(settlement.payerId, settlement.recipientId);
+  const userB = Math.max(settlement.payerId, settlement.recipientId);
+  const [, rows] = await sql.transaction((tx) => [
+    settlement.groupId === null
+      ? tx`SELECT pg_advisory_xact_lock(${userA}::int, ${userB}::int)`
+      : tx`SELECT pg_advisory_xact_lock(${settlement.groupId}::int)`,
+    tx`
+    WITH existing_members_ok AS (
+      SELECT 1
+      WHERE (
+          ${settlement.groupId}::bigint IS NULL
+          AND EXISTS (
+            SELECT 1 FROM friendships
+            WHERE user_a = ${userA} AND user_b = ${userB}
+          )
+        )
+        OR (
+          EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${settlement.groupId} AND user_id = ${settlement.payerId}
+          )
+          AND EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${settlement.groupId} AND user_id = ${settlement.recipientId}
+          )
+          AND EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${settlement.groupId} AND user_id = ${user.id}
+          )
+        )
+    ),
+    del AS (
+      DELETE FROM settlements
+      USING existing_members_ok
+      WHERE id = ${settlement.id}
+        AND to_char(settlements.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') = ${expectedUpdatedAt}
+      RETURNING id
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${settlement.groupId}, ${user.id}, 'settlement.deleted', ${summary},
+        ${activityData(settlement.groupId === null ? { visibleUserIds } : {})}::jsonb
+      FROM del
+      RETURNING 1
+    ),
+    stale AS (
+      SELECT 1 FROM settlements
+      WHERE id = ${settlement.id}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') <> ${expectedUpdatedAt}
+    )
+    SELECT (SELECT count(*) FROM del)::int AS deleted,
+      EXISTS(SELECT 1 FROM stale) AS stale`,
+  ]);
+  if (Number(rows[0]?.deleted ?? 0) === 0 && rows[0]?.stale) badRequest("Settlement changed, refresh and try again");
+  if (Number(rows[0]?.deleted ?? 0) === 0 && settlement.groupId === null) forbidden("You are not friends with this user");
+  if (Number(rows[0]?.deleted ?? 0) === 0) badRequest("This settlement involves someone who has left the group");
+}
+
 export interface AuthorizedSettlement {
   id: number;
   groupId: number | null;
   payerId: number;
   recipientId: number;
   createdBy: number;
+  updatedAt: string;
 }
 
 export interface SettlementHistoryRow {
@@ -125,7 +368,11 @@ export async function loadVisibleSettlementHistory({
 
 export async function loadAuthorizedSettlementForMutation(id: number, userId: number): Promise<AuthorizedSettlement> {
   if (!Number.isInteger(id)) notFound();
-  const rows = await sql`SELECT id, group_id, payer_id, recipient_id, created_by FROM settlements WHERE id = ${id}`;
+  const rows = await sql`
+    SELECT id, group_id, payer_id, recipient_id, created_by,
+      to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+    FROM settlements
+    WHERE id = ${id}`;
   if (rows.length === 0) notFound();
   const raw = rows[0];
   const groupId = raw.group_id === null ? null : Number(raw.group_id);
@@ -135,6 +382,7 @@ export async function loadAuthorizedSettlementForMutation(id: number, userId: nu
     payerId: Number(raw.payer_id),
     recipientId: Number(raw.recipient_id),
     createdBy: Number(raw.created_by),
+    updatedAt: versionToken(raw.updated_at),
   };
   const isParticipant = settlement.payerId === userId || settlement.recipientId === userId;
   const allowed = groupId === null

@@ -106,7 +106,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     if (!deleting) return;
     setDeleteBusy(true);
     try {
-      await api(`/api/expenses/${deleting.id}`, { method: "DELETE" });
+      await api(`/api/expenses/${deleting.id}?expectedUpdatedAt=${encodeURIComponent(deleting.updatedAt)}`, { method: "DELETE" });
       setDeleting(null);
       refreshAll();
     } finally {
@@ -450,7 +450,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       aria-label={`Edit ${r.title}`}
                       onClick={() => setEditingRecurring({
                         id: r.id, title: r.title, amountCents: r.amountCents, payerId: r.payerId,
-                        cadence: r.cadence as "weekly" | "monthly", nextDate: r.nextDate, active: r.active,
+                        currency: r.currency, categoryId: r.categoryId, participantIds: r.participantIds,
+                        notes: r.notes, cadence: r.cadence as "weekly" | "monthly", nextDate: r.nextDate,
+                        anchorDay: r.anchorDay, active: r.active, updatedAt: r.updatedAt,
                       })}
                       className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
                     >
@@ -461,7 +463,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       onClick={async () => {
                         if (!window.confirm(`Stop the recurring expense "${r.title}"? Existing expenses are kept.`)) return;
                         try {
-                          await api(`/api/recurring/${r.id}`, { method: "DELETE" });
+                          await api(`/api/recurring/${r.id}?expectedUpdatedAt=${encodeURIComponent(r.updatedAt)}`, { method: "DELETE" });
                           loadDetail();
                         } catch (e) {
                           window.alert(e instanceof ApiClientError ? e.message : "Could not stop the recurring expense");
@@ -558,7 +560,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       onClick={async () => {
                         if (!window.confirm(`Delete this recorded payment (${fmtMoney(s.amountCents, s.currency)} from ${s.payerName} to ${s.recipientName})? Balances will update.`)) return;
                         try {
-                          await api(`/api/settlements/${s.id}`, { method: "DELETE" });
+                          await api(`/api/settlements/${s.id}?expectedUpdatedAt=${encodeURIComponent(s.updatedAt)}`, { method: "DELETE" });
                           refreshAll();
                         } catch (e) {
                           window.alert(e instanceof ApiClientError ? e.message : "Could not delete the payment");

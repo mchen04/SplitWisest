@@ -26,7 +26,7 @@ export function SettleModal({
   meId: number;
   defaultCurrency: string;
   prefill?: { payerId: number; recipientId: number; amountCents: number } | null;
-  existing?: { id: number; payerId: number; recipientId: number; amountCents: number; currency: string; date: string; note: string } | null;
+  existing?: { id: number; payerId: number; recipientId: number; amountCents: number; currency: string; date: string; note: string; updatedAt: string } | null;
 }) {
   const [payerId, setPayerId] = useState(meId);
   const [recipientId, setRecipientId] = useState(0);
@@ -77,7 +77,7 @@ export function SettleModal({
       if (existing) {
         await api(`/api/settlements/${existing.id}`, {
           method: "PATCH",
-          body: { amountCents, currency, date, note },
+          body: { amountCents, currency, date, note, expectedUpdatedAt: existing.updatedAt },
         });
       } else {
         await api(`/api/groups/${groupId}/settlements`, {

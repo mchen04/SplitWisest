@@ -4,6 +4,8 @@ import { sql } from "./db";
 
 const SESSION_COOKIE = "sw_session";
 const SESSION_DAYS = 30;
+const DUMMY_HASH = "scrypt:0123456789abcdef0123456789abcdef:" + "ab".repeat(64);
+const RECOVERY_CODE_CHECKS = 8;
 
 export function hashPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
@@ -17,6 +19,10 @@ export function verifyPassword(password: string, stored: string): boolean {
   const candidate = scryptSync(password, salt, 64);
   const expected = Buffer.from(hash, "hex");
   return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
+export function verifyPasswordForLogin(password: string, stored: string | null | undefined): boolean {
+  return verifyPassword(password, stored ?? DUMMY_HASH) && !!stored;
 }
 
 export function newToken(): string {
@@ -38,8 +44,22 @@ export function verifyRecoveryCode(code: string, stored: string): boolean {
   return verifyPassword(code.trim().toUpperCase(), stored);
 }
 
+export function matchingRecoveryCodeId(
+  code: string,
+  candidates: { id: number; codeHash: string }[],
+): number | null {
+  let match: number | null = null;
+  const checks = Math.max(RECOVERY_CODE_CHECKS, candidates.length);
+  for (let i = 0; i < checks; i++) {
+    const candidate = candidates[i];
+    const matched = verifyRecoveryCode(code, candidate?.codeHash ?? DUMMY_HASH);
+    if (matched && candidate && match === null) match = candidate.id;
+  }
+  return match;
+}
+
 export function newInviteCode(): string {
-  return randomBytes(4).toString("hex");
+  return randomBytes(16).toString("hex");
 }
 
 export interface SessionUser {
@@ -72,6 +92,14 @@ export async function clearSession() {
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) await sql`DELETE FROM sessions WHERE token = ${token}`;
   store.delete(SESSION_COOKIE);
+}
+
+export async function revokeOtherSessions(userId: number) {
+  const store = await cookies();
+  const keep = store.get(SESSION_COOKIE)?.value;
+  if (keep) {
+    await sql`DELETE FROM sessions WHERE user_id = ${userId} AND token <> ${keep}`;
+  }
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {

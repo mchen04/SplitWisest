@@ -24,6 +24,7 @@ export interface Expense {
   categoryName: string | null;
   notes: string;
   splitMethod: string;
+  updatedAt: string;
   attachmentCount: number;
   shares: { userId: number; shareCents: number; convertedShareCents: number }[];
 }
@@ -35,9 +36,14 @@ export interface Recurring {
   currency: string;
   payerId: number;
   payerName: string;
+  categoryId: number | null;
+  participantIds: number[];
+  notes: string;
   cadence: string;
   nextDate: string;
+  anchorDay: number | null;
   active: boolean;
+  updatedAt: string;
 }
 
 export interface Settlement {
@@ -50,6 +56,7 @@ export interface Settlement {
   currency: string;
   date: string;
   note: string;
+  updatedAt: string;
 }
 
 export interface GroupActivity {
@@ -123,9 +130,9 @@ export function useGroupPageData({
     reloadExpenses();
   }, [reloadOverview, reloadExpenses]);
 
-  useSync(() => {
-    refreshAll();
-    setRefreshKey((k) => k + 1);
+  useSync((c, prev) => {
+    if (c.activityCursor !== prev.activityCursor) refreshAll();
+    if (c.messageCursor !== prev.messageCursor) setRefreshKey((k) => k + 1);
   });
 
   return {

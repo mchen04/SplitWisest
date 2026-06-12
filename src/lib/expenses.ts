@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { sql } from "./db";
-import { computeShares, computeItemizedShares, SplitMethod } from "./money";
+import { computeShares, computeItemizedShares, fmtMoney, SplitMethod } from "./money";
 import { convert, CURRENCIES } from "./fx";
-import { ApiError, badRequest } from "./api";
+import { ApiError, badRequest, forbidden, notFound } from "./api";
 import { loadGroupMemberIds } from "./balances";
+import { activityData } from "./activity";
+import { VersionToken, versionToken } from "./versions";
 
 export const ExpenseBody = z.object({
   title: z.string().trim().min(1, "Title is required").max(120),
@@ -28,29 +30,46 @@ export const ExpenseBody = z.object({
     .optional(),
   itemizedTaxCents: z.number().int().min(0).optional(),
   itemizedTipCents: z.number().int().min(0).optional(),
+  expectedUpdatedAt: VersionToken.optional(),
 });
 
 export type ExpenseInput = z.infer<typeof ExpenseBody>;
 
-export async function validateExpense(groupId: number, userId: number, input: ExpenseInput) {
+export async function validateExpenseActors(
+  groupId: number,
+  userId: number,
+  input: { payerId: number; categoryId?: number | null; participants?: { userId: number }[]; participantIds?: number[] }
+): Promise<Set<number>> {
   const memberIds = await loadGroupMemberIds(groupId);
   if (!memberIds.has(input.payerId)) badRequest("Payer must be a group member");
-  for (const p of input.participants) {
-    if (!memberIds.has(p.userId)) badRequest("All participants must be group members");
+  const participantIds = input.participants?.map((p) => p.userId) ?? input.participantIds ?? [];
+  for (const userId of participantIds) {
+    if (!memberIds.has(userId)) badRequest("All participants must be group members");
   }
-  const uniq = new Set(input.participants.map((p) => p.userId));
-  if (uniq.size !== input.participants.length) badRequest("Duplicate participants");
+  const uniq = new Set(participantIds);
+  if (uniq.size !== participantIds.length) badRequest("Duplicate participants");
 
   if (input.categoryId) {
     const cat = await sql`
       SELECT 1 FROM categories WHERE id = ${input.categoryId} AND (owner_id IS NULL OR owner_id = ${userId})`;
     if (cat.length === 0) badRequest("Unknown category");
   }
+  return memberIds;
+}
 
+export async function validateExpense(groupId: number, userId: number, input: ExpenseInput) {
+  const memberIds = await validateExpenseActors(groupId, userId, input);
+  return validateExpenseShares(memberIds, input);
+}
+
+function validateExpenseShares(memberIds: Set<number>, input: ExpenseInput) {
   let shares: Map<number, number>;
   if (input.splitMethod === "itemized") {
     if (!input.items || input.items.length === 0) badRequest("Itemized expenses need at least one item");
     for (const item of input.items!) {
+      if (new Set(item.participantIds).size !== item.participantIds.length) {
+        badRequest("Duplicate item participants");
+      }
       for (const pid of item.participantIds) {
         if (!memberIds.has(pid)) badRequest("All item participants must be group members");
       }
@@ -87,32 +106,129 @@ function itemsJson(input: ExpenseInput): string {
   );
 }
 
-// Insert the expense, its shares, and its items in ONE SQL statement so the
-// write is atomic — the Neon HTTP driver has no multi-statement transactions,
-// and a partial write (expense without shares) would corrupt balances.
+function itemizedTaxCents(input: ExpenseInput): number {
+  return input.splitMethod === "itemized" ? input.itemizedTaxCents ?? 0 : 0;
+}
+
+function itemizedTipCents(input: ExpenseInput): number {
+  return input.splitMethod === "itemized" ? input.itemizedTipCents ?? 0 : 0;
+}
+
+function memberIdsJson(userIds: number[]): string {
+  return JSON.stringify(userIds.map((userId) => ({ user_id: userId })));
+}
+
+// Insert the expense, its shares, and its items in one transaction. The first
+// statement takes the group lock; the second statement reads membership from a
+// fresh snapshot after any lock wait.
 export async function insertExpense(
   groupId: number,
   groupCurrency: string,
   createdBy: number,
   input: ExpenseInput,
-  recurringId: number | null = null
-): Promise<number> {
-  const shares = await validateExpense(groupId, createdBy, input);
+  opts: {
+    recurring?: {
+      id: number;
+      currentDate: string;
+      nextDate: string;
+      cadence: string;
+      storedAnchorDay: number | null;
+      effectiveAnchorDay: number;
+    } | null;
+    activity?: { actorName: string; type: string; actionText: string } | null;
+  } = {}
+): Promise<number | null> {
+  const recurringId = opts.recurring?.id ?? null;
+  const shares = recurringId === null
+    ? await validateExpense(groupId, createdBy, input)
+    : validateExpenseShares(await loadGroupMemberIds(groupId), input);
   const { cents: convertedCents, rate } = await convert(input.amountCents, input.currency, groupCurrency);
-  const rows = await sql`
-    WITH e AS (
+  const summary = opts.activity ? `${opts.activity.actorName} ${opts.activity.actionText}` : null;
+  const data = opts.activity ? activityData({}, opts.activity.actionText) : "{}";
+  const recurringCurrentDate = opts.recurring?.currentDate ?? null;
+  const recurringNextDate = opts.recurring?.nextDate ?? null;
+  const recurringCadence = opts.recurring?.cadence ?? null;
+  const recurringStoredAnchorDay = opts.recurring?.storedAnchorDay ?? null;
+  const recurringEffectiveAnchorDay = opts.recurring?.effectiveAnchorDay ?? null;
+  const activityType = opts.activity?.type ?? null;
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH share_rows AS (
+      SELECT x.user_id, x.share_cents, x.raw_input
+      FROM jsonb_to_recordset(${sharesJson(shares, input)}::jsonb)
+        AS x(user_id bigint, share_cents bigint, raw_input numeric)
+    ),
+    members_ok AS (
+      SELECT 1
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${input.payerId}
+      )
+      AND (
+        ${activityType}::text IS NULL OR EXISTS (
+          SELECT 1 FROM group_members
+          WHERE group_id = ${groupId} AND user_id = ${createdBy}
+        )
+      )
+      AND (
+        ${recurringId}::bigint IS NULL OR ${input.categoryId ?? null}::bigint IS NULL OR EXISTS (
+          SELECT 1 FROM categories
+          WHERE id = ${input.categoryId ?? null}
+        )
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM share_rows sr
+        WHERE NOT EXISTS (
+          SELECT 1 FROM group_members gm
+          WHERE gm.group_id = ${groupId} AND gm.user_id = sr.user_id
+        )
+      )
+    ),
+    claimed_recurring AS (
+      UPDATE recurring_expenses SET next_date = ${recurringNextDate}, anchor_day = ${recurringEffectiveAnchorDay},
+        updated_at = now()
+      FROM members_ok
+      WHERE id = ${recurringId}
+        AND next_date = ${recurringCurrentDate}
+        AND active
+        AND title = ${input.title}
+        AND amount_cents = ${input.amountCents}
+        AND currency = ${input.currency}
+        AND payer_id = ${input.payerId}
+        AND category_id IS NOT DISTINCT FROM ${input.categoryId ?? null}
+        AND notes = ${input.notes}
+        AND cadence = ${recurringCadence}
+        AND anchor_day IS NOT DISTINCT FROM ${recurringStoredAnchorDay}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM unnest(participant_ids) AS p(user_id)
+          FULL JOIN (SELECT user_id FROM share_rows) sr USING (user_id)
+          WHERE p.user_id IS NULL OR sr.user_id IS NULL
+        )
+      RETURNING id
+    ),
+    insert_gate AS (
+      SELECT NULL::bigint AS recurring_id FROM members_ok WHERE ${recurringId}::bigint IS NULL
+      UNION ALL
+      SELECT id FROM claimed_recurring
+    ),
+    e AS (
       INSERT INTO expenses (group_id, title, amount_cents, currency, converted_cents, fx_rate,
-        expense_date, payer_id, category_id, notes, split_method, recurring_id, created_by)
-      VALUES (${groupId}, ${input.title}, ${input.amountCents}, ${input.currency}, ${convertedCents},
+        expense_date, payer_id, category_id, notes, split_method, itemized_tax_cents,
+        itemized_tip_cents, recurring_id, created_by)
+      SELECT ${groupId}, ${input.title}, ${input.amountCents}, ${input.currency}, ${convertedCents},
         ${rate}, ${input.date}, ${input.payerId}, ${input.categoryId ?? null}, ${input.notes},
-        ${input.splitMethod}, ${recurringId}, ${createdBy})
+        ${input.splitMethod}, ${itemizedTaxCents(input)}, ${itemizedTipCents(input)},
+        insert_gate.recurring_id, ${createdBy}
+      FROM insert_gate
       RETURNING id
     ),
     s AS (
       INSERT INTO expense_shares (expense_id, user_id, share_cents, raw_input)
       SELECT e.id, x.user_id, x.share_cents, x.raw_input
-      FROM e, jsonb_to_recordset(${sharesJson(shares, input)}::jsonb)
-        AS x(user_id bigint, share_cents bigint, raw_input numeric)
+      FROM e, share_rows x
       RETURNING 1
     ),
     it AS (
@@ -122,23 +238,43 @@ export async function insertExpense(
       FROM e, jsonb_to_recordset(${itemsJson(input)}::jsonb)
         AS x(name text, amount_cents bigint, participant_ids jsonb)
       RETURNING 1
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${groupId}, ${createdBy}, ${activityType}, ${summary},
+        jsonb_set(${data}::jsonb, '{expenseId}', to_jsonb(e.id))
+      FROM e
+      WHERE ${activityType}::text IS NOT NULL
+      RETURNING 1
     )
-    SELECT e.id FROM e`;
-  return Number(rows[0].id);
+    SELECT e.id FROM e`,
+  ]);
+  return rows[0] ? Number(rows[0].id) : null;
 }
 
-// Atomic update: one statement rewrites the expense row, its shares, and items.
-// FX is preserved from the existing row when the monetary fields are unchanged,
-// so editing a title never silently re-converts at today's rate.
-export async function updateExpense(
+export async function createExpenseWithActivity(
+  groupId: number,
+  groupCurrency: string,
+  createdBy: { id: number; displayName: string },
+  input: ExpenseInput
+): Promise<number> {
+  const actionText = `added "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`;
+  const id = await insertExpense(groupId, groupCurrency, createdBy.id, input, {
+    activity: { actorName: createdBy.displayName, type: "expense.added", actionText },
+  });
+  if (id === null) badRequest("Payer and participants must be group members");
+  return id;
+}
+
+export async function updateExpenseWithActivity(
   expenseId: number,
   groupId: number,
   groupCurrency: string,
-  userId: number,
+  user: { id: number; displayName: string },
   input: ExpenseInput,
   prev: { amountCents: number; currency: string; convertedCents: number; fxRate: number }
 ) {
-  const shares = await validateExpense(groupId, userId, input);
+  const shares = await validateExpense(groupId, user.id, input);
   let convertedCents = prev.convertedCents;
   let rate = prev.fxRate;
   if (input.amountCents !== prev.amountCents || input.currency !== prev.currency) {
@@ -146,38 +282,408 @@ export async function updateExpense(
     convertedCents = c.cents;
     rate = c.rate;
   }
-  await sql`
-    WITH upd AS (
+  const actionText = `edited "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`;
+  const summary = `${user.displayName} ${actionText}`;
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH share_rows AS (
+      SELECT x.user_id, x.share_cents, x.raw_input
+      FROM jsonb_to_recordset(${sharesJson(shares, input)}::jsonb)
+        AS x(user_id bigint, share_cents bigint, raw_input numeric)
+    ),
+    existing_members_ok AS (
+      SELECT 1
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${user.id}
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM (
+          SELECT e.payer_id AS user_id
+          FROM expenses e
+          WHERE e.id = ${expenseId} AND e.group_id = ${groupId}
+          UNION
+          SELECT es.user_id
+          FROM expense_shares es
+          JOIN expenses e ON e.id = es.expense_id
+          WHERE e.id = ${expenseId} AND e.group_id = ${groupId}
+        ) existing_participants
+        WHERE NOT EXISTS (
+          SELECT 1 FROM group_members gm
+          WHERE gm.group_id = ${groupId} AND gm.user_id = existing_participants.user_id
+        )
+      )
+    ),
+    members_ok AS (
+      SELECT 1
+      FROM existing_members_ok
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${input.payerId}
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM share_rows sr
+        WHERE NOT EXISTS (
+          SELECT 1 FROM group_members gm
+          WHERE gm.group_id = ${groupId} AND gm.user_id = sr.user_id
+        )
+      )
+    ),
+    upd AS (
       UPDATE expenses SET title = ${input.title}, amount_cents = ${input.amountCents},
         currency = ${input.currency}, converted_cents = ${convertedCents}, fx_rate = ${rate},
         expense_date = ${input.date}, payer_id = ${input.payerId},
         category_id = ${input.categoryId ?? null}, notes = ${input.notes},
-        split_method = ${input.splitMethod}, updated_at = now()
-      WHERE id = ${expenseId}
+        split_method = ${input.splitMethod}, itemized_tax_cents = ${itemizedTaxCents(input)},
+        itemized_tip_cents = ${itemizedTipCents(input)}, updated_at = now()
+      FROM members_ok
+      WHERE id = ${expenseId} AND group_id = ${groupId}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') = ${input.expectedUpdatedAt}
       RETURNING id
     ),
-    del_s AS (DELETE FROM expense_shares WHERE expense_id = ${expenseId} RETURNING 1),
-    del_i AS (DELETE FROM expense_items WHERE expense_id = ${expenseId} RETURNING 1),
+    del_s AS (
+      DELETE FROM expense_shares es
+      USING upd
+      WHERE es.expense_id = upd.id
+      RETURNING 1
+    ),
+    del_i AS (
+      DELETE FROM expense_items ei
+      USING upd
+      WHERE ei.expense_id = upd.id
+      RETURNING 1
+    ),
     ins_s AS (
       INSERT INTO expense_shares (expense_id, user_id, share_cents, raw_input)
-      SELECT ${expenseId}, x.user_id, x.share_cents, x.raw_input
-      FROM jsonb_to_recordset(${sharesJson(shares, input)}::jsonb)
-        AS x(user_id bigint, share_cents bigint, raw_input numeric)
-      -- referencing del_s forces it to run first; sibling CTEs are otherwise
-      -- unordered and the insert would collide with the old PK rows
-      WHERE (SELECT count(*) FROM del_s) >= 0
+      SELECT upd.id, x.user_id, x.share_cents, x.raw_input
+      FROM upd
+      CROSS JOIN (SELECT count(*) FROM del_s) deleted
+      CROSS JOIN share_rows x
       RETURNING 1
     ),
     ins_i AS (
       INSERT INTO expense_items (expense_id, name, amount_cents, participant_ids)
-      SELECT ${expenseId}, x.name, x.amount_cents,
+      SELECT upd.id, x.name, x.amount_cents,
         ARRAY(SELECT jsonb_array_elements_text(x.participant_ids)::bigint)
-      FROM jsonb_to_recordset(${itemsJson(input)}::jsonb)
+      FROM upd
+      CROSS JOIN (SELECT count(*) FROM del_i) deleted
+      CROSS JOIN jsonb_to_recordset(${itemsJson(input)}::jsonb)
         AS x(name text, amount_cents bigint, participant_ids jsonb)
-      WHERE (SELECT count(*) FROM del_i) >= 0
+      RETURNING 1
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${groupId}, ${user.id}, 'expense.edited', ${summary},
+        jsonb_set(${activityData({}, actionText)}::jsonb, '{expenseId}', to_jsonb(upd.id))
+      FROM upd
       RETURNING 1
     )
-    SELECT 1`;
+    SELECT (SELECT count(*) FROM upd)::int AS updated`,
+  ]);
+  if (Number(rows[0]?.updated ?? 0) === 0) badRequest("Expense changed, refresh and try again");
+}
+
+export async function updateExpenseByIdWithActivity(
+  expenseId: number,
+  user: { id: number; displayName: string },
+  input: ExpenseInput
+) {
+  if (!input.expectedUpdatedAt) badRequest("Expense changed, refresh and try again");
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(e.group_id::int) FROM expenses e WHERE e.id = ${expenseId}`,
+    tx`
+    SELECT e.group_id, g.currency AS group_currency, e.amount_cents, e.currency,
+      e.converted_cents, e.fx_rate,
+      to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at,
+      EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = e.group_id AND user_id = ${user.id}
+      ) AS is_member
+    FROM expenses e
+    JOIN groups g ON g.id = e.group_id
+    WHERE e.id = ${expenseId}`,
+  ]);
+  if (rows.length === 0) notFound("Expense not found");
+  const e = rows[0];
+  if (!e.is_member) forbidden();
+  if (versionToken(e.updated_at) !== input.expectedUpdatedAt) {
+    badRequest("Expense changed, refresh and try again");
+  }
+  await updateExpenseWithActivity(expenseId, Number(e.group_id), e.group_currency as string, user, input, {
+    amountCents: Number(e.amount_cents),
+    currency: e.currency as string,
+    convertedCents: Number(e.converted_cents),
+    fxRate: Number(e.fx_rate),
+  });
+}
+
+export async function deleteExpenseWithActivity(
+  expense: { id: number; groupId: number; title: string; amountCents: number; currency: string; expectedUpdatedAt?: string },
+  user: { id: number; displayName: string }
+) {
+  if (!expense.expectedUpdatedAt) badRequest("Expense changed, refresh and try again");
+  const actionText = `deleted "${expense.title}" (${fmtMoney(expense.amountCents, expense.currency)})`;
+  const summary = `${user.displayName} ${actionText}`;
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${expense.groupId}::int)`,
+    tx`
+    WITH existing_members_ok AS (
+      SELECT 1
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${expense.groupId} AND user_id = ${user.id}
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM (
+          SELECT e.payer_id AS user_id
+          FROM expenses e
+          WHERE e.id = ${expense.id} AND e.group_id = ${expense.groupId}
+          UNION
+          SELECT es.user_id
+          FROM expense_shares es
+          JOIN expenses e ON e.id = es.expense_id
+          WHERE e.id = ${expense.id} AND e.group_id = ${expense.groupId}
+        ) existing_participants
+        WHERE NOT EXISTS (
+          SELECT 1 FROM group_members gm
+          WHERE gm.group_id = ${expense.groupId} AND gm.user_id = existing_participants.user_id
+        )
+      )
+    ),
+    del AS (
+      DELETE FROM expenses
+      USING existing_members_ok
+      WHERE id = ${expense.id} AND group_id = ${expense.groupId}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') = ${expense.expectedUpdatedAt}
+      RETURNING id
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${expense.groupId}, ${user.id}, 'expense.deleted', ${summary},
+        ${activityData({}, actionText)}::jsonb
+      FROM del
+      RETURNING 1
+    )
+    SELECT (SELECT count(*) FROM del)::int AS deleted`,
+  ]);
+  if (Number(rows[0]?.deleted ?? 0) === 0) badRequest("Expense changed, refresh and try again");
+}
+
+export async function insertExpenseComment(
+  expenseId: number,
+  author: { id: number; displayName: string },
+  body: string
+): Promise<{ id: number; createdAt: string } | null> {
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(group_id::int) FROM expenses WHERE id = ${expenseId}`,
+    tx`
+    WITH accessible_expense AS (
+      SELECT e.id
+      FROM expenses e
+      WHERE e.id = ${expenseId}
+        AND EXISTS (
+          SELECT 1 FROM group_members
+          WHERE group_id = e.group_id AND user_id = ${author.id}
+        )
+    )
+    INSERT INTO expense_comments (expense_id, author_id, body)
+    SELECT id, ${author.id}, ${body}
+    FROM accessible_expense
+    RETURNING id, created_at`,
+  ]);
+  return rows[0] ? { id: Number(rows[0].id), createdAt: rows[0].created_at as string } : null;
+}
+
+export async function createRecurringExpenseWithActivity(
+  groupId: number,
+  user: { id: number; displayName: string },
+  body: {
+    title: string;
+    amountCents: number;
+    currency: string;
+    payerId: number;
+    categoryId?: number | null;
+    participantIds: number[];
+    notes: string;
+    cadence: "weekly" | "monthly";
+    startDate: string;
+  }
+): Promise<number> {
+  await validateExpenseActors(groupId, user.id, body);
+  const summary = `${user.displayName} set up a ${body.cadence} recurring expense "${body.title}"`;
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH participant_rows AS (
+      SELECT x.user_id
+      FROM jsonb_to_recordset(${memberIdsJson(body.participantIds)}::jsonb) AS x(user_id bigint)
+    ),
+    members_ok AS (
+      SELECT 1
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${body.payerId}
+      )
+      AND EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${user.id}
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM participant_rows pr
+        WHERE NOT EXISTS (
+          SELECT 1 FROM group_members gm
+          WHERE gm.group_id = ${groupId} AND gm.user_id = pr.user_id
+        )
+      )
+    ),
+    upd AS (
+      INSERT INTO recurring_expenses (group_id, title, amount_cents, currency, payer_id, category_id,
+        participant_ids, notes, cadence, next_date, anchor_day, created_by)
+      SELECT ${groupId}, ${body.title}, ${body.amountCents}, ${body.currency}, ${body.payerId},
+        ${body.categoryId ?? null}, ${body.participantIds}, ${body.notes}, ${body.cadence},
+        ${body.startDate}, ${Number(body.startDate.slice(8, 10))}, ${user.id}
+      FROM members_ok
+      RETURNING id
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${groupId}, ${user.id}, 'recurring.created', ${summary}, '{}'::jsonb
+      FROM upd
+      RETURNING 1
+    )
+    SELECT id FROM upd`,
+  ]);
+  if (!rows[0]) badRequest("Payer and participants must be group members");
+  return Number(rows[0].id);
+}
+
+export async function updateRecurringExpenseWithActivity(
+  id: number,
+  groupId: number,
+  user: { id: number; displayName: string },
+  body: {
+    title: string;
+    amountCents: number;
+    currency: string;
+    payerId: number;
+    categoryId?: number | null;
+    participantIds: number[];
+    notes: string;
+    cadence: "weekly" | "monthly";
+    nextDate: string;
+    active: boolean;
+    expectedUpdatedAt: string;
+  }
+) {
+  await validateExpenseActors(groupId, user.id, body);
+  const summary = `${user.displayName} updated the recurring expense "${body.title}"`;
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH participant_rows AS (
+      SELECT x.user_id
+      FROM jsonb_to_recordset(${memberIdsJson(body.participantIds)}::jsonb) AS x(user_id bigint)
+    ),
+    members_ok AS (
+      SELECT 1
+      WHERE EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${body.payerId}
+      )
+      AND EXISTS (
+        SELECT 1 FROM group_members
+        WHERE group_id = ${groupId} AND user_id = ${user.id}
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM participant_rows pr
+        WHERE NOT EXISTS (
+          SELECT 1 FROM group_members gm
+          WHERE gm.group_id = ${groupId} AND gm.user_id = pr.user_id
+        )
+      )
+    ),
+    upd AS (
+      UPDATE recurring_expenses r SET
+        title = ${body.title}, amount_cents = ${body.amountCents}, currency = ${body.currency},
+        payer_id = ${body.payerId}, category_id = ${body.categoryId ?? null},
+        participant_ids = ${body.participantIds}, notes = ${body.notes}, cadence = ${body.cadence},
+        next_date = ${body.nextDate},
+        anchor_day = CASE
+          WHEN r.next_date = ${body.nextDate}::date AND r.cadence = ${body.cadence} THEN r.anchor_day
+          ELSE ${Number(body.nextDate.slice(8, 10))}
+        END,
+        active = ${body.active},
+        updated_at = now()
+      FROM members_ok
+      WHERE r.id = ${id} AND r.group_id = ${groupId}
+        AND to_char(r.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') = ${body.expectedUpdatedAt}
+      RETURNING id, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${groupId}, ${user.id}, 'recurring.updated', ${summary}, '{}'::jsonb
+      FROM upd
+      RETURNING 1
+    ),
+    stale AS (
+      SELECT 1 FROM recurring_expenses
+      WHERE id = ${id}
+        AND group_id = ${groupId}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') <> ${body.expectedUpdatedAt}
+    )
+    SELECT (SELECT count(*) FROM upd)::int AS updated,
+      EXISTS(SELECT 1 FROM stale) AS stale,
+      (SELECT updated_at FROM upd) AS updated_at`,
+  ]);
+  if (Number(rows[0]?.updated ?? 0) === 0 && rows[0]?.stale) badRequest("Recurring expense changed, refresh and try again");
+  if (Number(rows[0]?.updated ?? 0) === 0) badRequest("Payer and participants must be group members");
+  return { updatedAt: versionToken(rows[0].updated_at) };
+}
+
+export async function stopRecurringExpenseWithActivity(
+  id: number,
+  groupId: number,
+  title: string,
+  user: { id: number; displayName: string },
+  expectedUpdatedAt: string
+) {
+  const summary = `${user.displayName} stopped the recurring expense "${title}"`;
+  const [, rows] = await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH upd AS (
+      UPDATE recurring_expenses SET active = false, updated_at = now()
+      WHERE id = ${id} AND group_id = ${groupId}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') = ${expectedUpdatedAt}
+        AND EXISTS (
+          SELECT 1 FROM group_members
+          WHERE group_id = ${groupId} AND user_id = ${user.id}
+        )
+      RETURNING id
+    ),
+    a AS (
+      INSERT INTO activity (group_id, actor_id, type, summary, data)
+      SELECT ${groupId}, ${user.id}, 'recurring.stopped', ${summary}, '{}'::jsonb
+      FROM upd
+      RETURNING 1
+    ),
+    stale AS (
+      SELECT 1 FROM recurring_expenses
+      WHERE id = ${id}
+        AND group_id = ${groupId}
+        AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') <> ${expectedUpdatedAt}
+    )
+    SELECT (SELECT count(*) FROM upd)::int AS updated,
+      EXISTS(SELECT 1 FROM stale) AS stale`,
+  ]);
+  if (Number(rows[0]?.updated ?? 0) === 0 && rows[0]?.stale) badRequest("Recurring expense changed, refresh and try again");
+  if (Number(rows[0]?.updated ?? 0) === 0) badRequest("You must be a group member to update recurring expenses");
 }
 
 function nextOccurrence(current: string, cadence: string, anchorDay: number): string {
@@ -196,55 +702,138 @@ function nextOccurrence(current: string, cadence: string, anchorDay: number): st
   return d.toISOString().slice(0, 10);
 }
 
-// Materialize due recurring expenses for a group, lazily on group view.
-// Each period is claimed with a compare-and-set on next_date before inserting,
-// so concurrent viewers can't double-create and a crash never replays periods.
+async function deactivateRecurringIfSnapshotStillInvalid(
+  groupId: number,
+  snapshot: {
+    id: number;
+    currentDate: string;
+    title: string;
+    amountCents: number;
+    currency: string;
+    payerId: number;
+    categoryId: number | null;
+    notes: string;
+    cadence: string;
+    storedAnchorDay: number | null;
+    effectiveAnchorDay: number;
+    participantIds: number[];
+  }
+) {
+  await sql.transaction((tx) => [
+    tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
+    tx`
+    WITH participant_rows AS (
+      SELECT x.user_id
+      FROM jsonb_to_recordset(${memberIdsJson(snapshot.participantIds)}::jsonb) AS x(user_id bigint)
+    ),
+    stale_invalid AS (
+      SELECT 1
+      FROM recurring_expenses r
+      WHERE r.id = ${snapshot.id}
+        AND r.group_id = ${groupId}
+        AND r.next_date = ${snapshot.currentDate}
+        AND r.active
+        AND r.title = ${snapshot.title}
+        AND r.amount_cents = ${snapshot.amountCents}
+        AND r.currency = ${snapshot.currency}
+        AND r.payer_id = ${snapshot.payerId}
+        AND r.category_id IS NOT DISTINCT FROM ${snapshot.categoryId}
+        AND r.notes = ${snapshot.notes}
+        AND r.cadence = ${snapshot.cadence}
+        AND r.anchor_day IS NOT DISTINCT FROM ${snapshot.storedAnchorDay}
+        AND NOT EXISTS (
+          SELECT 1
+          FROM unnest(r.participant_ids) AS p(user_id)
+          FULL JOIN participant_rows pr USING (user_id)
+          WHERE p.user_id IS NULL OR pr.user_id IS NULL
+        )
+        AND (
+          NOT EXISTS (
+            SELECT 1 FROM group_members
+            WHERE group_id = ${groupId} AND user_id = ${snapshot.payerId}
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM participant_rows pr
+            WHERE NOT EXISTS (
+              SELECT 1 FROM group_members gm
+              WHERE gm.group_id = ${groupId} AND gm.user_id = pr.user_id
+            )
+          )
+        )
+    )
+    UPDATE recurring_expenses SET active = false, updated_at = now()
+    FROM stale_invalid
+    WHERE id = ${snapshot.id}`,
+  ]);
+}
+
+// Materialize due recurring expenses for a group, lazily on group view. Each
+// period's next_date advance and generated expense insert happen in one SQL
+// statement, so process death cannot claim a period without writing it.
 export async function materializeRecurring(groupId: number) {
   const due = await sql`
     SELECT r.*, g.currency AS group_currency FROM recurring_expenses r
     JOIN groups g ON g.id = r.group_id
     WHERE r.group_id = ${groupId} AND r.active AND r.next_date <= CURRENT_DATE`;
   for (const r of due) {
-    const anchorDay = Number(r.anchor_day ?? new Date(String(r.next_date).slice(0, 10) + "T00:00:00Z").getUTCDate());
+    let storedAnchorDay = r.anchor_day === null ? null : Number(r.anchor_day);
+    const effectiveAnchorDay = storedAnchorDay ?? new Date(String(r.next_date).slice(0, 10) + "T00:00:00Z").getUTCDate();
     let current = String(r.next_date).slice(0, 10);
     for (let i = 0; i < 24; i++) {
       if (new Date(current + "T00:00:00Z").getTime() > Date.now()) break;
-      const next = nextOccurrence(current, r.cadence, anchorDay);
-      // Claim this period: only one request wins the compare-and-set.
-      const claimed = await sql`
-        UPDATE recurring_expenses SET next_date = ${next}
-        WHERE id = ${r.id} AND next_date = ${current} AND active
-        RETURNING id`;
-      if (claimed.length === 0) break; // another request is materializing
-      const participants = (r.participant_ids as number[]).map((id) => ({ userId: Number(id) }));
+      const next = nextOccurrence(current, r.cadence, effectiveAnchorDay);
+      const participantIds = (r.participant_ids as number[]).map(Number);
+      const participants = participantIds.map((id) => ({ userId: id }));
+      const snapshot = {
+        id: Number(r.id),
+        currentDate: current,
+        title: r.title,
+        amountCents: Number(r.amount_cents),
+        currency: r.currency,
+        payerId: Number(r.payer_id),
+        categoryId: r.category_id ? Number(r.category_id) : null,
+        notes: r.notes,
+        cadence: r.cadence as string,
+        storedAnchorDay,
+        effectiveAnchorDay,
+        participantIds,
+      };
       try {
-        await insertExpense(
+        const inserted = await insertExpense(
           groupId,
           r.group_currency,
           Number(r.created_by),
           {
-            title: r.title,
-            amountCents: Number(r.amount_cents),
-            currency: r.currency,
+            title: snapshot.title,
+            amountCents: snapshot.amountCents,
+            currency: snapshot.currency,
             date: current,
-            payerId: Number(r.payer_id),
-            categoryId: r.category_id ? Number(r.category_id) : null,
-            notes: r.notes,
+            payerId: snapshot.payerId,
+            categoryId: snapshot.categoryId,
+            notes: snapshot.notes,
             splitMethod: "equal",
             participants,
           },
-          Number(r.id)
+          {
+            recurring: {
+              id: snapshot.id,
+              currentDate: current,
+              nextDate: next,
+              cadence: snapshot.cadence,
+              storedAnchorDay: snapshot.storedAnchorDay,
+              effectiveAnchorDay: snapshot.effectiveAnchorDay,
+            },
+          }
         );
+        if (inserted === null) break;
+        storedAnchorDay = effectiveAnchorDay;
       } catch (e) {
         console.error(`recurring ${r.id} failed to materialize:`, e);
         if (e instanceof ApiError && e.status === 400) {
           // Validation failures (e.g. payer left the group) won't heal on
           // retry: deactivate so the group view doesn't re-attempt forever.
-          await sql`UPDATE recurring_expenses SET active = false WHERE id = ${r.id}`;
-        } else {
-          // Transient error: release the claim so the period retries later.
-          await sql`UPDATE recurring_expenses SET next_date = ${current}
-                    WHERE id = ${r.id} AND next_date = ${next}`;
+          await deactivateRecurringIfSnapshotStillInvalid(groupId, snapshot);
         }
         break;
       }

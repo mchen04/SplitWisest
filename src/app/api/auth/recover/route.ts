@@ -4,10 +4,11 @@ import { sql } from "@/lib/db";
 import { handler, badRequest } from "@/lib/api";
 import {
   hashPassword,
-  verifyRecoveryCode,
+  matchingRecoveryCodeId,
   createSession,
   setSessionCookie,
 } from "@/lib/auth";
+import { assertAuthRateLimit, clearAuthRateLimit } from "@/lib/rate-limit";
 
 const Body = z.object({
   username: z.string().trim().min(1, "Username is required"),
@@ -19,21 +20,25 @@ const Body = z.object({
 // password, consumes that single code, and logs the user in.
 export const POST = handler(async (req: NextRequest) => {
   const { username, code, newPassword } = Body.parse(await req.json());
+  await assertAuthRateLimit(req, "recover", username);
   const users = await sql`SELECT id FROM users WHERE lower(username) = lower(${username})`;
-  if (users.length === 0) badRequest("Invalid username or recovery code");
-  const userId = Number(users[0].id);
+  const userId = users.length > 0 ? Number(users[0].id) : null;
 
-  const codes = await sql`
+  const codes = userId ? await sql`
     SELECT id, code_hash FROM recovery_codes
-    WHERE user_id = ${userId} AND used_at IS NULL`;
-  const match = codes.find((c) => verifyRecoveryCode(code, c.code_hash));
-  if (!match) badRequest("Invalid username or recovery code");
+    WHERE user_id = ${userId} AND used_at IS NULL`
+    : [];
+  const matchId = matchingRecoveryCodeId(
+    code,
+    codes.map((c) => ({ id: Number(c.id), codeHash: c.code_hash })),
+  );
+  if (!userId || !matchId) badRequest("Invalid username or recovery code");
 
   const passwordHash = hashPassword(newPassword);
   const reset = await sql`
     WITH consumed AS (
       UPDATE recovery_codes SET used_at = now()
-      WHERE id = ${match.id} AND user_id = ${userId} AND used_at IS NULL
+      WHERE id = ${matchId} AND user_id = ${userId} AND used_at IS NULL
       RETURNING user_id
     ),
     reset_user AS (
@@ -47,6 +52,7 @@ export const POST = handler(async (req: NextRequest) => {
     SELECT id FROM reset_user`;
   if (reset.length === 0) badRequest("Invalid username or recovery code");
 
+  await clearAuthRateLimit("recover", username);
   const token = await createSession(userId);
   await setSessionCookie(token);
   return NextResponse.json({ ok: true });

@@ -20,7 +20,7 @@ export function DirectSettleModal({
   friend: DirectSettleFriend | null;
   onClose: () => void;
   onSaved: () => void;
-  existing?: { id: number; amountCents: number; currency: string; date: string; note: string } | null;
+  existing?: { id: number; amountCents: number; currency: string; date: string; note: string; updatedAt: string } | null;
 }) {
   if (!friend) return null;
   return <DirectSettleForm key={`${friend.id}:${existing?.id ?? "new"}`} friend={friend} onClose={onClose} onSaved={onSaved} existing={existing} />;
@@ -35,7 +35,7 @@ function DirectSettleForm({
   friend: DirectSettleFriend;
   onClose: () => void;
   onSaved: () => void;
-  existing?: { id: number; amountCents: number; currency: string; date: string; note: string } | null;
+  existing?: { id: number; amountCents: number; currency: string; date: string; note: string; updatedAt: string } | null;
 }) {
   const [initialCurrency, initialAmount] = Object.entries(friend.netByCurrency)[0] ?? ["USD", 0];
   const [direction, setDirection] = useState<"i-paid" | "they-paid">(initialAmount < 0 ? "i-paid" : "they-paid");
@@ -51,7 +51,10 @@ function DirectSettleForm({
     if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
     run(async () => {
       if (existing) {
-        await api(`/api/settlements/${existing.id}`, { method: "PATCH", body: { amountCents, currency, date, note } });
+        await api(`/api/settlements/${existing.id}`, {
+          method: "PATCH",
+          body: { amountCents, currency, date, note, expectedUpdatedAt: existing.updatedAt },
+        });
       } else {
         await api("/api/settlements", {
           body: { friendId: friend.id, direction, amountCents, currency, date, note },

@@ -3,9 +3,9 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { logUserActivity } from "@/lib/activity";
-import { settlementFields, settlementSummary } from "@/lib/settlements";
+import { recordDirectSettlement, settlementFields } from "@/lib/settlements";
 import { canSettleDirectly } from "@/lib/relationships";
+import { versionToken } from "@/lib/versions";
 
 // History of direct (group-less) settlements involving the caller, optionally
 // narrowed to a single friend. Group settlements are listed per-group instead.
@@ -14,7 +14,8 @@ export const GET = handler(async (req: NextRequest) => {
   const friendIdParam = req.nextUrl.searchParams.get("friendId");
   const friendId = friendIdParam ? Number(friendIdParam) : null;
   const rows = await sql`
-    SELECT s.id, s.payer_id, s.recipient_id, s.amount_cents, s.currency, s.settled_date, s.note,
+    SELECT s.id, s.payer_id, s.recipient_id, s.amount_cents, s.currency, s.settled_date, s.note, s.updated_at,
+      to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
       p.display_name AS payer_name, r.display_name AS recipient_name
     FROM settlements s
     JOIN users p ON p.id = s.payer_id JOIN users r ON r.id = s.recipient_id
@@ -32,6 +33,7 @@ export const GET = handler(async (req: NextRequest) => {
       currency: s.currency,
       date: s.settled_date,
       note: s.note,
+      updatedAt: versionToken(s.updated_at_token),
     })),
   });
 });
@@ -51,19 +53,13 @@ export const POST = handler(async (req: NextRequest) => {
 
   const payerId = body.direction === "i-paid" ? user.id : body.friendId;
   const recipientId = body.direction === "i-paid" ? body.friendId : user.id;
-  // direct settlements have no group; keep the original currency as converted
-  const rows = await sql`
-    INSERT INTO settlements (group_id, payer_id, recipient_id, amount_cents, currency, converted_cents, settled_date, note, created_by)
-    VALUES (NULL, ${payerId}, ${recipientId}, ${body.amountCents}, ${body.currency},
-      ${body.amountCents}, ${body.date}, ${body.note}, ${user.id})
-    RETURNING id`;
-  await logUserActivity({
-    actorId: user.id,
-    visibleUserIds: [payerId, recipientId],
-    type: "settlement.recorded",
-    summary: await settlementSummary(payerId, recipientId, body.amountCents, body.currency),
-    data: { settlementId: Number(rows[0].id) },
-    actionText: await settlementSummary(payerId, recipientId, body.amountCents, body.currency),
+  const settlement = await recordDirectSettlement(user.id, {
+    payerId,
+    recipientId,
+    amountCents: body.amountCents,
+    currency: body.currency,
+    date: body.date,
+    note: body.note,
   });
-  return NextResponse.json({ id: Number(rows[0].id) });
+  return NextResponse.json({ id: settlement.id, updatedAt: settlement.updatedAt });
 });

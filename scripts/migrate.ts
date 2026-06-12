@@ -1,6 +1,59 @@
 import { neon } from "@neondatabase/serverless";
+import { randomBytes } from "crypto";
+import { existsSync, readFileSync } from "fs";
+
+function loadLocalEnv() {
+  const path = ".env.local";
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx < 0) continue;
+    const key = trimmed.slice(0, idx).trim();
+    const value = trimmed.slice(idx + 1).trim().replace(/^['"]|['"]$/g, "");
+    process.env[key] ??= value;
+  }
+}
+
+loadLocalEnv();
 
 const sql = neon(process.env.DATABASE_URL!);
+
+function isUniqueViolation(err: unknown) {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === "23505";
+}
+
+async function rotateShortInviteCodes(table: "users" | "groups") {
+  const rows = table === "users"
+    ? await sql`SELECT id FROM users WHERE length(invite_code) < 32 ORDER BY id`
+    : await sql`SELECT id FROM groups WHERE length(invite_code) < 32 ORDER BY id`;
+
+  for (const row of rows) {
+    const id = Number(row.id);
+    let rotated = false;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const inviteCode = randomBytes(16).toString("hex");
+      try {
+        const updated = table === "users"
+          ? await sql`UPDATE users SET invite_code = ${inviteCode} WHERE id = ${id} AND length(invite_code) < 32 RETURNING 1`
+          : await sql`UPDATE groups SET invite_code = ${inviteCode} WHERE id = ${id} AND length(invite_code) < 32 RETURNING 1`;
+        rotated = true;
+        if (updated.length === 0) break;
+        break;
+      } catch (err) {
+        if (isUniqueViolation(err)) continue;
+        throw err;
+      }
+    }
+    if (!rotated) throw new Error(`Could not rotate legacy ${table} invite code for id ${id}`);
+  }
+
+  const remaining = table === "users"
+    ? await sql`SELECT 1 FROM users WHERE length(invite_code) < 32 LIMIT 1`
+    : await sql`SELECT 1 FROM groups WHERE length(invite_code) < 32 LIMIT 1`;
+  if (remaining.length > 0) throw new Error(`Legacy short ${table} invite codes remain after migration`);
+}
 
 async function main() {
   await sql`CREATE TABLE IF NOT EXISTS users (
@@ -11,12 +64,40 @@ async function main() {
     invite_code TEXT UNIQUE NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  await sql`
+    UPDATE users u
+    SET username = 'sw_migrated_' || u.id || '_' || md5(u.username || ':' || u.id)
+    WHERE EXISTS (
+      SELECT 1 FROM users keep
+      WHERE lower(keep.username) = lower(u.username)
+        AND keep.id < u.id
+    )`;
+  await sql`UPDATE users SET username = lower(username) WHERE username <> lower(username)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS users_lower_username_idx ON users (lower(username))`;
+  await rotateShortInviteCodes("users");
+  await sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'users_id_advisory_lock_range'
+      ) THEN
+        ALTER TABLE users ADD CONSTRAINT users_id_advisory_lock_range CHECK (id BETWEEN 1 AND 2147483647);
+      END IF;
+    END $$`;
 
   await sql`CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+
+  await sql`CREATE TABLE IF NOT EXISTS auth_rate_limits (
+    scope TEXT NOT NULL,
+    key TEXT NOT NULL,
+    window_start TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (scope, key)
   )`;
 
   await sql`CREATE TABLE IF NOT EXISTS friendships (
@@ -35,6 +116,16 @@ async function main() {
     created_by BIGINT NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  await rotateShortInviteCodes("groups");
+  await sql`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'groups_id_advisory_lock_range'
+      ) THEN
+        ALTER TABLE groups ADD CONSTRAINT groups_id_advisory_lock_range CHECK (id BETWEEN 1 AND 2147483647);
+      END IF;
+    END $$`;
 
   await sql`CREATE TABLE IF NOT EXISTS group_members (
     group_id BIGINT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -64,11 +155,15 @@ async function main() {
     category_id BIGINT REFERENCES categories(id) ON DELETE SET NULL,
     notes TEXT NOT NULL DEFAULT '',
     split_method TEXT NOT NULL CHECK (split_method IN ('equal','exact','percentage','shares','itemized')),
+    itemized_tax_cents BIGINT NOT NULL DEFAULT 0 CHECK (itemized_tax_cents >= 0),
+    itemized_tip_cents BIGINT NOT NULL DEFAULT 0 CHECK (itemized_tip_cents >= 0),
     recurring_id BIGINT,
     created_by BIGINT NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS itemized_tax_cents BIGINT NOT NULL DEFAULT 0 CHECK (itemized_tax_cents >= 0)`;
+  await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS itemized_tip_cents BIGINT NOT NULL DEFAULT 0 CHECK (itemized_tip_cents >= 0)`;
 
   await sql`CREATE TABLE IF NOT EXISTS expense_shares (
     expense_id BIGINT NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
@@ -107,8 +202,75 @@ async function main() {
     note TEXT NOT NULL DEFAULT '',
     created_by BIGINT NOT NULL REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (payer_id <> recipient_id)
   )`;
+  await sql`ALTER TABLE settlements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`;
+
+  await sql`
+    CREATE OR REPLACE FUNCTION group_balance_rows(target_group_id bigint)
+    RETURNS TABLE(user_id bigint, display_name text, net_cents bigint)
+    LANGUAGE sql
+    STABLE
+    AS $$
+      WITH members AS (
+        SELECT u.id AS user_id, u.display_name
+        FROM group_members gm
+        JOIN users u ON u.id = gm.user_id
+        WHERE gm.group_id = target_group_id
+      ),
+      paid AS (
+        SELECT payer_id AS user_id, COALESCE(SUM(converted_cents), 0) AS amount_cents
+        FROM expenses
+        WHERE group_id = target_group_id
+        GROUP BY payer_id
+      ),
+      owed AS (
+        SELECT es.user_id, COALESCE(SUM(
+          CASE WHEN e.amount_cents = 0 THEN 0
+          ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END
+        ), 0) AS amount_cents
+        FROM expense_shares es
+        JOIN expenses e ON e.id = es.expense_id
+        WHERE e.group_id = target_group_id
+        GROUP BY es.user_id
+      ),
+      settled_out AS (
+        SELECT payer_id AS user_id, COALESCE(SUM(converted_cents), 0) AS amount_cents
+        FROM settlements
+        WHERE group_id = target_group_id
+        GROUP BY payer_id
+      ),
+      settled_in AS (
+        SELECT recipient_id AS user_id, COALESCE(SUM(converted_cents), 0) AS amount_cents
+        FROM settlements
+        WHERE group_id = target_group_id
+        GROUP BY recipient_id
+      ),
+      raw_balances AS (
+        SELECT m.user_id, m.display_name,
+          COALESCE(p.amount_cents, 0) - COALESCE(o.amount_cents, 0)
+            + COALESCE(so.amount_cents, 0) - COALESCE(si.amount_cents, 0) AS net_cents
+        FROM members m
+        LEFT JOIN paid p ON p.user_id = m.user_id
+        LEFT JOIN owed o ON o.user_id = m.user_id
+        LEFT JOIN settled_out so ON so.user_id = m.user_id
+        LEFT JOIN settled_in si ON si.user_id = m.user_id
+      ),
+      drift AS (
+        SELECT COALESCE(SUM(net_cents), 0)::bigint AS net_cents
+        FROM raw_balances
+      ),
+      ranked_balances AS (
+        SELECT rb.*,
+          row_number() OVER (ORDER BY ABS(rb.net_cents) DESC, rb.display_name, rb.user_id) AS drift_rank
+        FROM raw_balances rb
+      )
+      SELECT rb.user_id, rb.display_name,
+        (rb.net_cents - CASE WHEN rb.drift_rank = 1 THEN (SELECT net_cents FROM drift) ELSE 0 END)::bigint AS net_cents
+      FROM ranked_balances rb
+      ORDER BY rb.display_name, rb.user_id
+    $$`;
 
   await sql`CREATE TABLE IF NOT EXISTS recurring_expenses (
     id BIGSERIAL PRIMARY KEY,
@@ -123,12 +285,28 @@ async function main() {
     cadence TEXT NOT NULL CHECK (cadence IN ('weekly','monthly')),
     next_date DATE NOT NULL,
     anchor_day INT,
-    active BOOLEAN NOT NULL DEFAULT true,
-    created_by BIGINT NOT NULL REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`;
+	    active BOOLEAN NOT NULL DEFAULT true,
+	    created_by BIGINT NOT NULL REFERENCES users(id),
+	    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+	    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	  )`;
 
-  await sql`ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS anchor_day INT`;
+	  await sql`ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS anchor_day INT`;
+	  await sql`ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`;
+  await sql`
+    UPDATE recurring_expenses r
+    SET anchor_day = CASE
+      WHEN r.cadence = 'monthly' THEN GREATEST(
+        EXTRACT(DAY FROM r.next_date)::int,
+        COALESCE((
+          SELECT MAX(EXTRACT(DAY FROM e.expense_date)::int)
+          FROM expenses e
+          WHERE e.recurring_id = r.id
+        ), 0)
+      )
+      ELSE EXTRACT(DAY FROM r.next_date)::int
+    END
+    WHERE r.anchor_day IS NULL`;
 
   await sql`CREATE TABLE IF NOT EXISTS activity (
     id BIGSERIAL PRIMARY KEY,
@@ -220,27 +398,44 @@ async function main() {
     UNIQUE (from_id, to_id),
     CHECK (from_id <> to_id)
   )`;
+  await sql`
+    DELETE FROM friend_requests fr
+    USING friend_requests newer
+    WHERE LEAST(fr.from_id, fr.to_id) = LEAST(newer.from_id, newer.to_id)
+      AND GREATEST(fr.from_id, fr.to_id) = GREATEST(newer.from_id, newer.to_id)
+      AND fr.id < newer.id`;
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS friend_requests_pair_idx
+    ON friend_requests (LEAST(from_id, to_id), GREATEST(from_id, to_id))`;
 
-  // Dedupe global categories: UNIQUE(owner_id, name) does not constrain rows
-  // where owner_id IS NULL (NULLs are distinct in Postgres), so non-idempotent
-  // seeds accumulated duplicates. Repoint references to the lowest id per name,
-  // delete the rest, then enforce uniqueness with a partial index.
+  // Dedupe categories on the same case-insensitive key enforced by routes.
+  // Repoint references to the lowest id per owner/name key, delete the rest,
+  // then enforce uniqueness with partial expression indexes.
   await sql`
     UPDATE expenses e SET category_id = k.keep_id FROM (
-      SELECT name, min(id) AS keep_id FROM categories WHERE owner_id IS NULL GROUP BY name
-    ) k JOIN categories c ON c.name = k.name AND c.owner_id IS NULL
+      SELECT owner_id, lower(name) AS key_name, min(id) AS keep_id
+      FROM categories
+      GROUP BY owner_id, lower(name)
+    ) k JOIN categories c ON c.owner_id IS NOT DISTINCT FROM k.owner_id AND lower(c.name) = k.key_name
     WHERE e.category_id = c.id AND e.category_id <> k.keep_id`;
   await sql`
     UPDATE recurring_expenses e SET category_id = k.keep_id FROM (
-      SELECT name, min(id) AS keep_id FROM categories WHERE owner_id IS NULL GROUP BY name
-    ) k JOIN categories c ON c.name = k.name AND c.owner_id IS NULL
+      SELECT owner_id, lower(name) AS key_name, min(id) AS keep_id
+      FROM categories
+      GROUP BY owner_id, lower(name)
+    ) k JOIN categories c ON c.owner_id IS NOT DISTINCT FROM k.owner_id AND lower(c.name) = k.key_name
     WHERE e.category_id = c.id AND e.category_id <> k.keep_id`;
   await sql`
-    DELETE FROM categories c WHERE c.owner_id IS NULL AND c.id <> (
-      SELECT min(id) FROM categories c2 WHERE c2.owner_id IS NULL AND c2.name = c.name
+    DELETE FROM categories c WHERE c.id <> (
+      SELECT min(id) FROM categories c2
+      WHERE c2.owner_id IS NOT DISTINCT FROM c.owner_id
+        AND lower(c2.name) = lower(c.name)
     )`;
+  await sql`DROP INDEX IF EXISTS categories_global_name_idx`;
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS categories_global_name_idx
-    ON categories (name) WHERE owner_id IS NULL`;
+    ON categories (lower(name)) WHERE owner_id IS NULL`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS categories_owner_lower_name_idx
+    ON categories (owner_id, lower(name)) WHERE owner_id IS NOT NULL`;
 
   await sql`INSERT INTO categories (name, icon, owner_id) VALUES
     ('General','tag',NULL),

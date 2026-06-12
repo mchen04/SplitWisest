@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { sql } from "@/lib/db";
-import { handler, badRequest, notFound, forbidden } from "@/lib/api";
+import { handler, badRequest, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { logUserActivity } from "@/lib/activity";
-import { cancelFriendRequest, createFriendship, friendshipExists } from "@/lib/relationships";
+import { acceptFriendRequestWithActivity, cancelFriendRequest, declineFriendRequest } from "@/lib/relationships";
 
 const Body = z.object({
   requestId: z.number().int().positive(),
@@ -15,36 +13,23 @@ const Body = z.object({
 export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const { requestId, action } = Body.parse(await req.json());
-  const rows = await sql`SELECT from_id, to_id FROM friend_requests WHERE id = ${requestId}`;
-  if (rows.length === 0) notFound("Request not found");
-  const fromId = Number(rows[0].from_id);
-  const toId = Number(rows[0].to_id);
 
   if (action === "cancel") {
-    if (fromId !== user.id) forbidden("You can only cancel your own requests");
-    await cancelFriendRequest(requestId);
+    if (!(await cancelFriendRequest(requestId, user.id))) notFound("Request not found");
     return NextResponse.json({ ok: true });
   }
 
-  // accept / decline are recipient-only
-  if (toId !== user.id) forbidden("This request isn't addressed to you");
   if (action === "decline") {
-    await cancelFriendRequest(requestId);
+    if (!(await declineFriendRequest(requestId, user.id))) notFound("Request not found");
     return NextResponse.json({ ok: true });
   }
 
-  // accept
-  if (await friendshipExists(fromId, toId)) {
-    await cancelFriendRequest(requestId);
-    badRequest("You are already friends");
-  }
-  await createFriendship(fromId, toId);
-  await logUserActivity({
+  const result = await acceptFriendRequestWithActivity({
+    requestId,
     actorId: user.id,
-    visibleUserIds: [fromId, toId],
-    type: "friend.added",
-    summary: `${user.displayName} accepted a friend request`,
-    actionText: "accepted a friend request",
+    actorName: user.displayName,
   });
+  if (result === "missing") notFound("Request not found");
+  if (result === "already-friends") badRequest("You are already friends");
   return NextResponse.json({ ok: true });
 });

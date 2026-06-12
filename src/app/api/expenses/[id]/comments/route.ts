@@ -4,6 +4,7 @@ import { sql } from "@/lib/db";
 import { handler, notFound, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
+import { insertExpenseComment } from "@/lib/expenses";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -41,16 +42,15 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   if (!Number.isInteger(id)) notFound();
   await requireExpenseAccess(id, user.id);
   const { body } = Body.parse(await req.json());
-  const rows = await sql`
-    INSERT INTO expense_comments (expense_id, author_id, body)
-    VALUES (${id}, ${user.id}, ${body}) RETURNING id, created_at`;
+  const inserted = await insertExpenseComment(id, user, body);
+  if (inserted === null) forbidden();
   return NextResponse.json({
     comment: {
-      id: Number(rows[0].id),
+      id: inserted.id,
       authorId: user.id,
       authorName: user.displayName,
       body,
-      createdAt: rows[0].created_at,
+      createdAt: inserted.createdAt,
     },
   });
 });

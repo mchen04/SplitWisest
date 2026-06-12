@@ -1,5 +1,6 @@
 import { sql } from "./db";
 import { CURRENCIES } from "./currencies";
+import { invalidInput } from "./errors";
 export { CURRENCIES };
 
 // Fallback approximate rates (units per USD) used if the live fetch fails and
@@ -54,7 +55,7 @@ export async function convert(amountCents: number, from: string, to: string): Pr
   const rates = await getRatesPerUsd();
   const fromRate = rates[from];
   const toRate = rates[to];
-  if (!fromRate || !toRate) throw new Error(`Unsupported currency ${from} or ${to}`);
+  if (!fromRate || !toRate) invalidInput(`Unsupported currency ${from} or ${to}`);
   const rate = toRate / fromRate;
   return { cents: Math.round(amountCents * rate), rate };
 }

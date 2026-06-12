@@ -9,10 +9,16 @@ export interface ExistingRecurring {
   id: number;
   title: string;
   amountCents: number;
+  currency: string;
   payerId: number;
+  categoryId: number | null;
+  participantIds: number[];
+  notes: string;
   cadence: "weekly" | "monthly";
   nextDate: string;
+  anchorDay: number | null;
   active: boolean;
+  updatedAt: string;
 }
 
 export function RecurringModal({
@@ -59,8 +65,10 @@ export function RecurringModal({
         await api(`/api/recurring/${existing.id}`, {
           method: "PATCH",
           body: {
-            title: title.trim(), amountCents, currency: defaultCurrency, payerId,
-            participantIds, cadence, nextDate: startDate, notes: "", active: existing.active,
+            title: title.trim(), amountCents, currency: existing.currency, payerId,
+            categoryId: existing.categoryId, participantIds: existing.participantIds,
+            cadence, nextDate: startDate, notes: existing.notes, active: existing.active,
+            expectedUpdatedAt: existing.updatedAt,
           },
         });
       } else {

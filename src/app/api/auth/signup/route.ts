@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest } from "@/lib/api";
-import { hashPassword, createSession, setSessionCookie, newInviteCode } from "@/lib/auth";
-import { logActivity } from "@/lib/activity";
-import { createFriendship, joinGroupAndFriendMembers } from "@/lib/relationships";
+import { hashPassword, createSession, setSessionCookie } from "@/lib/auth";
+import { createSignupAccount } from "@/lib/signup";
+import { assertAuthRateLimit, clearAuthRateLimit } from "@/lib/rate-limit";
 
 const Body = z.object({
   username: z
@@ -19,6 +19,7 @@ const Body = z.object({
 
 export const POST = handler(async (req: NextRequest) => {
   const { username, password, displayName, inviteCode } = Body.parse(await req.json());
+  await assertAuthRateLimit(req, "signup", username);
 
   // The invite code is optional. If provided it must be the app signup code,
   // a friend's personal code (creates the friendship), or a group's invite
@@ -26,6 +27,7 @@ export const POST = handler(async (req: NextRequest) => {
   let inviterId: number | null = null;
   let joinGroupId: number | null = null;
   if (inviteCode && inviteCode !== process.env.SIGNUP_CODE) {
+    await assertAuthRateLimit(req, "invite", inviteCode);
     const inviter = await sql`SELECT id FROM users WHERE invite_code = ${inviteCode}`;
     if (inviter.length > 0) {
       inviterId = Number(inviter[0].id);
@@ -39,22 +41,17 @@ export const POST = handler(async (req: NextRequest) => {
   const existing = await sql`SELECT 1 FROM users WHERE lower(username) = lower(${username})`;
   if (existing.length > 0) badRequest("That username is taken");
 
-  const rows = await sql`
-    INSERT INTO users (username, display_name, password_hash, invite_code)
-    VALUES (${username.toLowerCase()}, ${displayName}, ${hashPassword(password)}, ${newInviteCode()})
-    RETURNING id`;
-  const userId = Number(rows[0].id);
-
-  if (inviterId) {
-    await createFriendship(inviterId, userId);
-  }
-  if (joinGroupId) {
-    await joinGroupAndFriendMembers(joinGroupId, userId);
-    await logActivity(joinGroupId, userId, "group.joined", `${displayName} joined the group`, {}, "joined the group");
-  }
-  await logActivity(null, userId, "user.joined", `${displayName} joined SplitWisest`, {}, "joined SplitWisest");
+  const userId = await createSignupAccount({
+    username,
+    displayName,
+    passwordHash: hashPassword(password),
+    inviterId,
+    joinGroupId,
+  });
 
   const token = await createSession(userId);
+  await clearAuthRateLimit("signup", username);
+  if (inviteCode && inviteCode !== process.env.SIGNUP_CODE) await clearAuthRateLimit("invite", inviteCode);
   await setSessionCookie(token);
   return NextResponse.json({ ok: true });
 });
