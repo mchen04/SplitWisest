@@ -6,6 +6,13 @@ import { api, ApiClientError, fmtMoney, todayStr, CURRENCIES } from "@/lib/clien
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
 import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
 
+const CALIFORNIA_TAX_RATE = "7.25";
+
+function amountToCents(value: string): number {
+  const n = Math.round(parseFloat(value || "0") * 100);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
 export interface Member {
   id: number;
   displayName: string;
@@ -62,6 +69,10 @@ export function ExpenseForm({
   const [selected, setSelected] = useState<Set<number>>(new Set(members.map((m) => m.id)));
   const [values, setValues] = useState<Record<number, string>>({});
   const [items, setItems] = useState<ItemRow[]>([]);
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [taxRate, setTaxRate] = useState(CALIFORNIA_TAX_RATE);
+  const [tipEnabled, setTipEnabled] = useState(false);
+  const [tipRate, setTipRate] = useState("20");
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCategory, setNewCategory] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -94,6 +105,10 @@ export function ExpenseForm({
         else if (s.rawInput !== null) vals[s.userId] = String(s.rawInput);
       }
       setValues(vals);
+      setTaxEnabled(false);
+      setTaxRate(CALIFORNIA_TAX_RATE);
+      setTipEnabled(false);
+      setTipRate("20");
       setItems(
         existing.items.map((i) => ({
           name: i.name,
@@ -113,6 +128,10 @@ export function ExpenseForm({
       setSelected(new Set(members.map((m) => m.id)));
       setValues({});
       setItems([]);
+      setTaxEnabled(false);
+      setTaxRate(CALIFORNIA_TAX_RATE);
+      setTipEnabled(false);
+      setTipRate("20");
     }
     // Reset only when the modal opens or the edited expense changes — background
     // sync replaces members/categories references and must not wipe live input.
@@ -120,15 +139,31 @@ export function ExpenseForm({
   }, [open, existing?.id]);
 
   const amountCents = useMemo(() => {
-    const n = Math.round(parseFloat(amount || "0") * 100);
-    return Number.isFinite(n) && n > 0 ? n : 0;
+    return amountToCents(amount);
   }, [amount]);
+
+  const itemSubtotalCents = useMemo(
+    () => items.reduce((s, i) => s + amountToCents(i.amount), 0),
+    [items]
+  );
+  const taxCents = useMemo(() => {
+    if (!taxEnabled || itemSubtotalCents <= 0) return 0;
+    return Math.round(itemSubtotalCents * (Math.max(parseFloat(taxRate || "0") || 0, 0) / 100));
+  }, [taxEnabled, itemSubtotalCents, taxRate]);
+  const tipCents = useMemo(() => {
+    if (!tipEnabled || itemSubtotalCents <= 0) return 0;
+    return Math.round(itemSubtotalCents * (Math.max(parseFloat(tipRate || "0") || 0, 0) / 100));
+  }, [tipEnabled, itemSubtotalCents, tipRate]);
+  const itemizedTotalCents = itemSubtotalCents + taxCents + tipCents;
+  const effectiveAmountCents = method === "itemized" && itemSubtotalCents > 0 ? itemizedTotalCents : amountCents;
+  const displayedAmount =
+    method === "itemized" && itemSubtotalCents > 0 ? (itemizedTotalCents / 100).toFixed(2) : amount;
 
   const participantList = members.filter((m) => selected.has(m.id));
 
   // Live validation feedback for split inputs
   const splitStatus = useMemo(() => {
-    if (method === "equal" || amountCents === 0) return null;
+    if (method === "equal" || effectiveAmountCents === 0) return null;
     if (method === "exact") {
       const sum = participantList.reduce((s, m) => s + Math.round(parseFloat(values[m.id] || "0") * 100), 0);
       const diff = amountCents - sum;
@@ -147,14 +182,14 @@ export function ExpenseForm({
       return sum > 0 ? { ok: true, msg: `${sum} total shares` } : { ok: false, msg: "Add at least one share" };
     }
     if (method === "itemized") {
-      const sum = items.reduce((s, i) => s + Math.round(parseFloat(i.amount || "0") * 100), 0);
-      const diff = amountCents - sum;
+      const sum = itemSubtotalCents + taxCents + tipCents;
+      const diff = effectiveAmountCents - sum;
       return diff === 0
-        ? { ok: true, msg: "Items match the total" }
-        : { ok: false, msg: `Items ${diff > 0 ? "under" : "over"} by ${fmtMoney(Math.abs(diff), currency)}` };
+        ? { ok: true, msg: `Items, tax, and tip total ${fmtMoney(sum, currency)}` }
+        : { ok: false, msg: `Items, tax, and tip ${diff > 0 ? "under" : "over"} by ${fmtMoney(Math.abs(diff), currency)}` };
     }
     return null;
-  }, [method, amountCents, participantList, values, items, currency]);
+  }, [method, amountCents, participantList, values, itemSubtotalCents, taxCents, tipCents, effectiveAmountCents, currency]);
 
   function toggleMember(id: number) {
     setSelected((prev) => {
@@ -197,7 +232,7 @@ export function ExpenseForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (amountCents <= 0) return setError("Enter a positive amount");
+    if (effectiveAmountCents <= 0) return setError("Enter a positive amount");
     if (method !== "itemized" && participantList.length === 0) return setError("Pick at least one participant");
 
     const participants = buildParticipants();
@@ -205,7 +240,7 @@ export function ExpenseForm({
 
     const body = {
       title: title.trim(),
-      amountCents,
+      amountCents: effectiveAmountCents,
       currency,
       date,
       payerId,
@@ -221,6 +256,8 @@ export function ExpenseForm({
               participantIds: i.participantIds,
             }))
           : undefined,
+      itemizedTaxCents: method === "itemized" ? taxCents : undefined,
+      itemizedTipCents: method === "itemized" ? tipCents : undefined,
     };
 
     setBusy(true);
@@ -257,9 +294,10 @@ export function ExpenseForm({
             <Field label="Amount">
               <Input
                 inputMode="decimal"
-                value={amount}
+                value={displayedAmount}
                 onChange={(e) => setAmount(e.target.value)}
-                required
+                required={method !== "itemized"}
+                readOnly={method === "itemized" && itemSubtotalCents > 0}
                 placeholder="0.00"
               />
             </Field>
@@ -347,7 +385,24 @@ export function ExpenseForm({
             onValue={(id, value) => setValues((v) => ({ ...v, [id]: value }))}
           />
         ) : (
-          <ItemizedSplit members={members} items={items} setItems={setItems} />
+          <ItemizedSplit
+            members={members}
+            items={items}
+            setItems={setItems}
+            currency={currency}
+            subtotalCents={itemSubtotalCents}
+            taxEnabled={taxEnabled}
+            taxRate={taxRate}
+            taxCents={taxCents}
+            tipEnabled={tipEnabled}
+            tipRate={tipRate}
+            tipCents={tipCents}
+            totalCents={itemizedTotalCents}
+            onTaxEnabled={setTaxEnabled}
+            onTaxRate={setTaxRate}
+            onTipEnabled={setTipEnabled}
+            onTipRate={setTipRate}
+          />
         )}
 
         {splitStatus && (

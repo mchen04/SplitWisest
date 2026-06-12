@@ -26,6 +26,8 @@ export const ExpenseBody = z.object({
       })
     )
     .optional(),
+  itemizedTaxCents: z.number().int().min(0).optional(),
+  itemizedTipCents: z.number().int().min(0).optional(),
 });
 
 export type ExpenseInput = z.infer<typeof ExpenseBody>;
@@ -53,7 +55,10 @@ export async function validateExpense(groupId: number, userId: number, input: Ex
         if (!memberIds.has(pid)) badRequest("All item participants must be group members");
       }
     }
-    shares = computeItemizedShares(input.amountCents, input.items!);
+    shares = computeItemizedShares(input.amountCents, input.items!, {
+      taxCents: input.itemizedTaxCents,
+      tipCents: input.itemizedTipCents,
+    });
   } else {
     shares = computeShares(input.splitMethod as SplitMethod, input.amountCents, input.participants);
   }

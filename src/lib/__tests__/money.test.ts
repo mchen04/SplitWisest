@@ -115,6 +115,22 @@ describe("computeItemizedShares", () => {
     const m = computeItemizedShares(101, [{ amountCents: 101, participantIds: [1, 2] }]);
     expect(sum(m)).toBe(101);
   });
+  it("allocates tax and tip proportionally to item subtotals", () => {
+    const m = computeItemizedShares(
+      1200,
+      [
+        { amountCents: 800, participantIds: [1] },
+        { amountCents: 200, participantIds: [2] },
+      ],
+      { taxCents: 100, tipCents: 100 }
+    );
+    expect(m.get(1)).toBe(960);
+    expect(m.get(2)).toBe(240);
+    expect(sum(m)).toBe(1200);
+  });
+  it("rejects tax and tip when the total does not match", () => {
+    expect(() => computeItemizedShares(1100, [{ amountCents: 1000, participantIds: [1] }], { taxCents: 50 })).toThrow();
+  });
 });
 
 describe("simplifyDebts", () => {

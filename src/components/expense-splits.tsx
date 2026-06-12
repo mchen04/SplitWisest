@@ -87,11 +87,39 @@ export function ParticipantSplit({
 
 // Itemized bill: a row per item with its own amount and per-item participants.
 export function ItemizedSplit({
-  members, items, setItems,
+  members,
+  items,
+  setItems,
+  currency,
+  subtotalCents,
+  taxEnabled,
+  taxRate,
+  taxCents,
+  tipEnabled,
+  tipRate,
+  tipCents,
+  totalCents,
+  onTaxEnabled,
+  onTaxRate,
+  onTipEnabled,
+  onTipRate,
 }: {
   members: Member[];
   items: ItemRow[];
   setItems: Dispatch<SetStateAction<ItemRow[]>>;
+  currency: string;
+  subtotalCents: number;
+  taxEnabled: boolean;
+  taxRate: string;
+  taxCents: number;
+  tipEnabled: boolean;
+  tipRate: string;
+  tipCents: number;
+  totalCents: number;
+  onTaxEnabled: (enabled: boolean) => void;
+  onTaxRate: (rate: string) => void;
+  onTipEnabled: (enabled: boolean) => void;
+  onTipRate: (rate: string) => void;
 }) {
   const patch = (idx: number, next: Partial<ItemRow>) =>
     setItems((arr) => arr.map((x, i) => (i === idx ? { ...x, ...next } : x)));
@@ -159,6 +187,58 @@ export function ItemizedSplit({
         >
           <Plus className="h-4 w-4" /> Add item
         </Button>
+        <div className="rounded-lg border border-line bg-paper/50 p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={taxEnabled}
+                onChange={(e) => onTaxEnabled(e.target.checked)}
+                className="h-4 w-4 accent-[var(--color-accent)]"
+              />
+              Tax
+            </label>
+            <div className="flex items-center justify-between gap-2">
+              <Input
+                inputMode="decimal"
+                value={taxRate}
+                onChange={(e) => onTaxRate(e.target.value)}
+                disabled={!taxEnabled}
+                className="!w-24 text-right"
+                aria-label="Tax rate"
+              />
+              <span className="text-sm text-ink-faint">% = {fmtMoney(taxCents, currency)}</span>
+            </div>
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={tipEnabled}
+                onChange={(e) => onTipEnabled(e.target.checked)}
+                className="h-4 w-4 accent-[var(--color-accent)]"
+              />
+              Tip
+            </label>
+            <div className="flex items-center justify-between gap-2">
+              <Input
+                inputMode="decimal"
+                value={tipRate}
+                onChange={(e) => onTipRate(e.target.value)}
+                disabled={!tipEnabled}
+                className="!w-24 text-right"
+                aria-label="Tip rate"
+              />
+              <span className="text-sm text-ink-faint">% = {fmtMoney(tipCents, currency)}</span>
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-sm">
+            <span className="text-ink-faint">Subtotal</span>
+            <span className="text-ink-faint">Adjustments</span>
+            <span className="text-right font-semibold">Total</span>
+            <span className="tnum">{fmtMoney(subtotalCents, currency)}</span>
+            <span className="tnum">{fmtMoney(taxCents + tipCents, currency)}</span>
+            <span className="tnum text-right font-semibold">{fmtMoney(totalCents, currency)}</span>
+          </div>
+        </div>
       </div>
     </fieldset>
   );

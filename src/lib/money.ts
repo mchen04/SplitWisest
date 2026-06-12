@@ -111,17 +111,27 @@ export function computeShares(
 // total share is the sum across items. Item amounts must sum to the total.
 export function computeItemizedShares(
   totalCents: number,
-  items: { amountCents: number; participantIds: number[] }[]
+  items: { amountCents: number; participantIds: number[] }[],
+  adjustments: { taxCents?: number; tipCents?: number } = {}
 ): Map<number, number> {
   const itemSum = items.reduce((s, i) => s + i.amountCents, 0);
-  if (itemSum !== totalCents) {
-    throw new Error(`Item amounts must add up to the total (got ${itemSum}, expected ${totalCents})`);
+  const adjustmentTotal = Math.round(adjustments.taxCents ?? 0) + Math.round(adjustments.tipCents ?? 0);
+  if (itemSum + adjustmentTotal !== totalCents) {
+    throw new Error(`Item amounts plus tax and tip must add up to the total (got ${itemSum + adjustmentTotal}, expected ${totalCents})`);
   }
   const out = new Map<number, number>();
   for (const item of items) {
     if (item.participantIds.length === 0) throw new Error("Each item needs at least one participant");
     const split = splitEqual(item.amountCents, item.participantIds);
     for (const [uid, cents] of split) out.set(uid, (out.get(uid) ?? 0) + cents);
+  }
+  if (adjustmentTotal > 0) {
+    if (itemSum <= 0) throw new Error("Item subtotal must be positive when tax or tip is added");
+    const adjustmentShares = distributeProportional(
+      adjustmentTotal,
+      [...out.entries()].map(([userId, weight]) => ({ userId, weight }))
+    );
+    for (const [uid, cents] of adjustmentShares) out.set(uid, (out.get(uid) ?? 0) + cents);
   }
   return out;
 }
