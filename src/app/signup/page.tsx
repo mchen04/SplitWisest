@@ -31,46 +31,47 @@ export default function SignupPage() {
 
   return (
     <AuthFrame>
-      <h1 className="font-display text-2xl font-bold">Create your account</h1>
-      <p className="mt-1 text-sm text-ink-soft">
-        Have an invite code from a friend or group? It connects you automatically — but you can also join without
-        one.
-      </p>
-      <form onSubmit={submit} className="mt-6 space-y-4">
-        <Field label="Display name" hint="How friends will see you">
-          <Input value={form.displayName} onChange={set("displayName")} autoFocus required maxLength={50} />
+      <h1 className="font-display text-[22px] font-semibold">Create your account</h1>
+      <p className="mt-1 text-sm text-ink-soft">Private expense tracking for your friend group.</p>
+      <form onSubmit={submit} className="mt-6 space-y-[13px]">
+        <Field label="Display name">
+          <Input value={form.displayName} onChange={set("displayName")} placeholder="Alex Rivera" autoFocus required maxLength={50} />
         </Field>
-        <Field label="Username">
-          <Input
-            value={form.username}
-            onChange={set("username")}
-            autoComplete="username"
-            required
-            pattern="[A-Za-z0-9_]{3,30}"
-            title="3-30 letters, numbers, or underscores"
-          />
-        </Field>
-        <Field label="Password" hint="At least 8 characters">
-          <Input
-            type="password"
-            value={form.password}
-            onChange={set("password")}
-            autoComplete="new-password"
-            required
-            minLength={8}
-          />
-        </Field>
-        <Field label="Invite code (optional)" hint="A friend's code makes you friends; a group's code joins that group">
-          <Input value={form.inviteCode} onChange={set("inviteCode")} placeholder="Leave blank to skip" />
+        <div className="grid grid-cols-2 gap-[13px]">
+          <Field label="Username">
+            <Input
+              value={form.username}
+              onChange={set("username")}
+              placeholder="alex"
+              autoComplete="username"
+              required
+              pattern="[A-Za-z0-9_]{3,30}"
+              title="3-30 letters, numbers, or underscores"
+            />
+          </Field>
+          <Field label="Password">
+            <Input
+              type="password"
+              value={form.password}
+              onChange={set("password")}
+              placeholder="••••••"
+              autoComplete="new-password"
+              required
+              minLength={8}
+            />
+          </Field>
+        </div>
+        <Field label="Invite code — optional">
+          <Input value={form.inviteCode} onChange={set("inviteCode")} placeholder="MAYA-3X9P" className="font-mono" />
         </Field>
         <ErrorNote message={error} />
         <Button type="submit" busy={busy} className="w-full">
           Create account
         </Button>
       </form>
-      <p className="mt-5 text-center text-sm text-ink-soft">
+      <p className="mt-4 text-center text-[13px] text-ink-soft">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-accent hover:underline">
+        <Link href="/login" className="font-semibold text-accent hover:text-accent-dark">
           Log in
         </Link>
       </p>

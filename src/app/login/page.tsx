@@ -29,8 +29,8 @@ export default function LoginPage() {
 
   return (
     <AuthFrame>
-      <h1 className="font-display text-2xl font-bold">Welcome back</h1>
-      <p className="mt-1 text-sm text-ink-soft">Log in to see who owes who.</p>
+      <h1 className="font-display text-[22px] font-semibold">Welcome back</h1>
+      <p className="mt-1 text-sm text-ink-soft">Log in to settle up with your crew.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <Field label="Username">
           <Input
@@ -55,17 +55,14 @@ export default function LoginPage() {
           Log in
         </Button>
       </form>
-      <p className="mt-3 text-center text-sm">
-        <Link href="/recover" className="text-ink-soft hover:text-accent hover:underline">
-          Forgot your password?
+      <div className="mt-4 flex items-center justify-between text-[13px]">
+        <Link href="/recover" className="whitespace-nowrap text-ink-soft hover:text-accent">
+          Forgot password?
         </Link>
-      </p>
-      <p className="mt-5 text-center text-sm text-ink-soft">
-        New here?{" "}
-        <Link href="/signup" className="font-medium text-accent hover:underline">
-          Create an account
+        <Link href="/signup" className="whitespace-nowrap font-semibold text-accent hover:text-accent-dark">
+          Create account
         </Link>
-      </p>
+      </div>
     </AuthFrame>
   );
 }

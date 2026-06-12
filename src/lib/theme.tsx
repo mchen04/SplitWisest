@@ -10,7 +10,7 @@ const STORAGE_KEY = "splitwisest-theme";
  * Inline script injected before paint so the saved theme is applied with no
  * flash of the wrong palette. Falls back to the OS preference on first visit.
  */
-export const themeInitScript = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
+export const themeInitScript = `(function(){try{var t=localStorage.getItem('${STORAGE_KEY}')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
 
 function current(): Theme {
   if (typeof document === "undefined") return "light";

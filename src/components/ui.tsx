@@ -22,7 +22,7 @@ export function Button({
   }[variant];
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none min-h-10 ${styles} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-[10px] px-3.5 py-2 text-sm font-semibold transition-colors disabled:opacity-50 disabled:pointer-events-none min-h-[42px] ${styles} ${className}`}
       disabled={disabled || busy}
       {...rest}
     >
@@ -35,7 +35,7 @@ export function Button({
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft">{label}</span>
+      <span className="mb-1.5 block text-[11.5px] font-semibold uppercase tracking-wider text-ink-soft">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
     </label>
@@ -43,7 +43,7 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 const inputCls =
-  "w-full rounded-lg border border-line bg-card px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15 min-h-10";
+  "w-full rounded-[10px] border border-line bg-paper px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft min-h-[42px]";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputCls} ${props.className ?? ""}`} />;
@@ -162,11 +162,12 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md"
     .toUpperCase();
   const hue = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
   const cls = { sm: "h-7 w-7 text-[10px]", md: "h-9 w-9 text-xs", lg: "h-12 w-12 text-sm" }[size];
+  // design uses hsl(h 34% 42%) for deterministic avatar colors
   return (
     <span
       aria-hidden
       className={`inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white ${cls}`}
-      style={{ background: `hsl(${hue} 38% 42%)` }}
+      style={{ background: `hsl(${hue} 34% 42%)` }}
     >
       {initials || "?"}
     </span>
