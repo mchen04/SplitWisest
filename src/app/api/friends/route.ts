@@ -5,7 +5,7 @@ import { handler, badRequest, notFound } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { friendBalances } from "@/lib/balances";
 import { canRemoveFriend, canRequestFriendById, createFriendRequest, createFriendship, friendshipExists, removeFriendship } from "@/lib/relationships";
-import { logActivity } from "@/lib/activity";
+import { logUserActivity } from "@/lib/activity";
 
 export const GET = handler(async () => {
   const user = await requireUser();
@@ -42,6 +42,7 @@ export const GET = handler(async () => {
       displayName: f.display_name,
       username: f.username,
       netByCurrency: balanceByFriend.get(Number(f.id)) ?? {},
+      canRemoveFriend: Object.keys(balanceByFriend.get(Number(f.id)) ?? {}).length === 0,
       unreadMessages: Number(f.last_message_id) > Number(f.read_message_id) ? 1 : 0,
     })),
     incomingRequests: incoming.map((r) => ({
@@ -89,7 +90,13 @@ export const POST = handler(async (req: NextRequest) => {
     SELECT id FROM friend_requests WHERE from_id = ${friendId} AND to_id = ${user.id}`;
   if (reciprocal.length > 0) {
     await createFriendship(user.id, friendId);
-    await logActivity(null, user.id, "friend.added", `${user.displayName} and ${rows[0].display_name} are now friends`, {}, `and ${rows[0].display_name} are now friends`);
+    await logUserActivity({
+      actorId: user.id,
+      visibleUserIds: [user.id, friendId],
+      type: "friend.added",
+      summary: `${user.displayName} and ${rows[0].display_name} are now friends`,
+      actionText: `and ${rows[0].display_name} are now friends`,
+    });
     return NextResponse.json({ status: "accepted", id: friendId, displayName: rows[0].display_name });
   }
 
@@ -109,6 +116,12 @@ export const DELETE = handler(async (req: NextRequest) => {
   if (!(await canRemoveFriend(user.id, friendId))) badRequest("Settle up with this friend before removing them");
 
   await removeFriendship(user.id, friendId);
-  await logActivity(null, user.id, "friend.removed", `${user.displayName} removed a friend`, {}, "removed a friend");
+  await logUserActivity({
+    actorId: user.id,
+    visibleUserIds: [user.id, friendId],
+    type: "friend.removed",
+    summary: `${user.displayName} removed a friend`,
+    actionText: "removed a friend",
+  });
   return NextResponse.json({ ok: true });
 });

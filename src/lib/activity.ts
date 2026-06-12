@@ -13,6 +13,38 @@ export async function logActivity(
             VALUES (${groupId}, ${actorId}, ${type}, ${summary}, ${JSON.stringify(payload)})`;
 }
 
+export async function logGroupActivity(
+  groupId: number,
+  actorId: number,
+  type: string,
+  summary: string,
+  data: Record<string, unknown> = {},
+  actionText?: string
+) {
+  await logActivity(groupId, actorId, type, summary, data, actionText);
+}
+
+export async function logUserActivity({
+  actorId,
+  visibleUserIds,
+  type,
+  summary,
+  data = {},
+  actionText,
+}: {
+  actorId: number;
+  visibleUserIds: number[];
+  type: string;
+  summary: string;
+  data?: Record<string, unknown>;
+  actionText?: string;
+}) {
+  await logActivity(null, actorId, type, summary, {
+    ...data,
+    visibleUserIds: visibleUserIds.map(String),
+  }, actionText);
+}
+
 export function activityActionText(row: { summary: string; actorName: string; data?: unknown }): string {
   const data = row.data && typeof row.data === "object" ? row.data as Record<string, unknown> : {};
   if (typeof data.actionText === "string") return data.actionText;

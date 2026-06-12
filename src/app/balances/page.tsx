@@ -14,6 +14,7 @@ interface Friend {
   displayName: string;
   username: string;
   netByCurrency: Record<string, number>;
+  canRemoveFriend: boolean;
 }
 
 interface FriendRequest {
@@ -405,15 +406,17 @@ function FriendSection({
                         <span className="hidden sm:inline">Chat</span>
                       </Button>
                     </Link>
-                    <Button
-                      variant="secondary"
-                      className="!min-h-9 !px-2.5"
-                      onClick={() => onRemove(f)}
-                      title={`Remove ${f.displayName}`}
-                      aria-label={`Remove ${f.displayName}`}
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
+                    {f.canRemoveFriend && (
+                      <Button
+                        variant="secondary"
+                        className="!min-h-9 !px-2.5"
+                        onClick={() => onRemove(f)}
+                        title={`Remove ${f.displayName}`}
+                        aria-label={`Remove ${f.displayName}`}
+                      >
+                        <UserMinus className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 </li>
               );

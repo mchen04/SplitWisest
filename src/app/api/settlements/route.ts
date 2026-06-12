@@ -3,7 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest, forbidden } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { logActivity } from "@/lib/activity";
+import { logUserActivity } from "@/lib/activity";
 import { settlementFields, settlementSummary } from "@/lib/settlements";
 import { canSettleDirectly } from "@/lib/relationships";
 
@@ -57,9 +57,13 @@ export const POST = handler(async (req: NextRequest) => {
     VALUES (NULL, ${payerId}, ${recipientId}, ${body.amountCents}, ${body.currency},
       ${body.amountCents}, ${body.date}, ${body.note}, ${user.id})
     RETURNING id`;
-  await logActivity(null, user.id, "settlement.recorded",
-    await settlementSummary(payerId, recipientId, body.amountCents, body.currency),
-    { settlementId: Number(rows[0].id), visibleUserIds: [String(payerId), String(recipientId)] },
-    await settlementSummary(payerId, recipientId, body.amountCents, body.currency));
+  await logUserActivity({
+    actorId: user.id,
+    visibleUserIds: [payerId, recipientId],
+    type: "settlement.recorded",
+    summary: await settlementSummary(payerId, recipientId, body.amountCents, body.currency),
+    data: { settlementId: Number(rows[0].id) },
+    actionText: await settlementSummary(payerId, recipientId, body.amountCents, body.currency),
+  });
   return NextResponse.json({ id: Number(rows[0].id) });
 });

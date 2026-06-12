@@ -1,6 +1,7 @@
 import { sql } from "./db";
 import { pairwiseFriendBalance } from "./balances";
 import { loadRelationship, RelationshipState } from "./relationships";
+import { loadVisibleSettlementHistory } from "./settlements";
 
 export interface PersonProfile {
   person: {
@@ -103,43 +104,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     ORDER BY e.expense_date DESC, e.id DESC
     LIMIT 20`;
 
-  const recentPayments = isSelf ? await sql`
-    SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
-      s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
-      s.settled_date, s.note
-    FROM settlements s
-    LEFT JOIN groups g ON g.id = s.group_id
-    JOIN users p ON p.id = s.payer_id
-    JOIN users r ON r.id = s.recipient_id
-    WHERE s.payer_id = ${viewerId} OR s.recipient_id = ${viewerId}
-    ORDER BY s.settled_date DESC, s.id DESC
-    LIMIT 20`
-    : isFriend ? await sql`
-    SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
-      s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
-      s.settled_date, s.note
-    FROM settlements s
-    LEFT JOIN groups g ON g.id = s.group_id
-    JOIN users p ON p.id = s.payer_id
-    JOIN users r ON r.id = s.recipient_id
-    WHERE ((s.payer_id = ${viewerId} AND s.recipient_id = ${personId})
-       OR (s.payer_id = ${personId} AND s.recipient_id = ${viewerId}))
-      AND (s.group_id IS NULL OR (${groupIds.length} > 0 AND s.group_id = ANY(${groupIds})))
-    ORDER BY s.settled_date DESC, s.id DESC
-    LIMIT 20`
-    : await sql`
-    SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, p.display_name AS payer_name,
-      s.recipient_id, r.display_name AS recipient_name, s.amount_cents, s.currency,
-      s.settled_date, s.note
-    FROM settlements s
-    JOIN groups g ON g.id = s.group_id
-    JOIN users p ON p.id = s.payer_id
-    JOIN users r ON r.id = s.recipient_id
-    WHERE ((s.payer_id = ${viewerId} AND s.recipient_id = ${personId})
-       OR (s.payer_id = ${personId} AND s.recipient_id = ${viewerId}))
-      AND s.group_id = ANY(${groupIds})
-    ORDER BY s.settled_date DESC, s.id DESC
-    LIMIT 20`;
+  const recentPayments = await loadVisibleSettlementHistory({ viewerId, personId, isSelf, isFriend, groupIds });
 
   return {
     person,
@@ -162,19 +127,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       payerId: Number(e.payer_id),
       payerName: e.payer_name,
     })),
-    recentPayments: recentPayments.map((s) => ({
-      id: Number(s.id),
-      groupId: s.group_id ? Number(s.group_id) : null,
-      groupName: s.group_name,
-      payerId: Number(s.payer_id),
-      payerName: s.payer_name,
-      recipientId: Number(s.recipient_id),
-      recipientName: s.recipient_name,
-      amountCents: Number(s.amount_cents),
-      currency: s.currency,
-      date: s.settled_date,
-      note: s.note,
-    })),
+    recentPayments,
     ...capabilities(netByCurrency),
   };
 }
