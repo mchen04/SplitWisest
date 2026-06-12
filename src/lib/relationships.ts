@@ -2,6 +2,13 @@ import { sql } from "./db";
 import { pairwiseFriendBalance } from "./balances";
 
 export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
+export interface RelationshipCapabilities {
+  canChat: boolean;
+  canSettleDirectly: boolean;
+  canNudge: boolean;
+  canRequestFriend: boolean;
+  canRemoveFriend: boolean;
+}
 
 export function orderedPair(userId: number, otherId: number): [number, number] {
   return otherId < userId ? [otherId, userId] : [userId, otherId];
@@ -41,6 +48,7 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
   hasSharedGroup: boolean;
   hasPendingRequest: boolean;
   request: null | { id: number; direction: "incoming" | "outgoing"; createdAt: string };
+  capabilities: (netByCurrency: Record<string, number>) => RelationshipCapabilities;
 }> {
   const isSelf = viewerId === personId;
   const [friendship, sharedGroups, requestRows] = await Promise.all([
@@ -77,6 +85,13 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
       direction: Number(requestRows[0].from_id) === viewerId ? "outgoing" : "incoming",
       createdAt: requestRows[0].created_at,
     } : null,
+    capabilities: (netByCurrency) => ({
+      canChat: isFriend,
+      canSettleDirectly: isFriend,
+      canNudge: isFriend || hasSharedGroup,
+      canRequestFriend: hasSharedGroup && !isFriend && !hasPendingRequest,
+      canRemoveFriend: isFriend && Object.keys(netByCurrency).length === 0,
+    }),
   };
 }
 
@@ -113,24 +128,4 @@ export async function canSettleDirectly(userId: number, friendId: number): Promi
 export async function canRemoveFriend(userId: number, friendId: number): Promise<boolean> {
   return await friendshipExists(userId, friendId)
     && Object.keys(await pairwiseFriendBalance(userId, friendId)).length === 0;
-}
-
-export function relationshipCapabilities({
-  isFriend,
-  hasSharedGroup,
-  hasRequest,
-  netByCurrency,
-}: {
-  isFriend: boolean;
-  hasSharedGroup: boolean;
-  hasRequest: boolean;
-  netByCurrency: Record<string, number>;
-}) {
-  return {
-    canChat: isFriend,
-    canSettleDirectly: isFriend,
-    canNudge: isFriend || hasSharedGroup,
-    canRequestFriend: hasSharedGroup && !isFriend && !hasRequest,
-    canRemoveFriend: isFriend && Object.keys(netByCurrency).length === 0,
-  };
 }

@@ -101,13 +101,14 @@ export function useUnread(intervalMs = 5000): Unread {
 // Polls /api/sync and invokes onChange whenever a cursor advances. This is the
 // realtime backbone: cheap, serverless-friendly, no websockets to break.
 export function useSync(onChange: ((c: SyncCursors) => void) | undefined, intervalMs = 4000) {
+  const enabled = !!onChange;
   const last = useRef<SyncCursors | null>(null);
   const cb = useRef(onChange);
   useEffect(() => {
     cb.current = onChange;
   }, [onChange]);
   useEffect(() => {
-    if (!onChange) return;
+    if (!enabled) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout>;
     async function tick() {
@@ -129,7 +130,7 @@ export function useSync(onChange: ((c: SyncCursors) => void) | undefined, interv
       stopped = true;
       clearTimeout(timer);
     };
-  }, [intervalMs, onChange]);
+  }, [intervalMs, enabled]);
 }
 
 // Fetches `path`, refreshes on every sync tick, and exposes a manual reload.

@@ -1,6 +1,6 @@
 import { sql } from "./db";
 import { pairwiseFriendBalance } from "./balances";
-import { loadRelationship, relationshipCapabilities, RelationshipState } from "./relationships";
+import { loadRelationship, RelationshipState } from "./relationships";
 
 export interface PersonProfile {
   person: {
@@ -69,7 +69,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     JOIN group_members them ON them.group_id = g.id AND them.user_id = ${personId}
     ORDER BY g.name`;
 
-  const { relationship, isSelf, isFriend, hasSharedGroup, request } = await loadRelationship(viewerId, personId);
+  const { relationship, isSelf, isFriend, request, capabilities } = await loadRelationship(viewerId, personId);
 
   if (relationship === "none") return null;
 
@@ -135,13 +135,6 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     ORDER BY s.settled_date DESC, s.id DESC
     LIMIT 20`;
 
-  const capabilities = relationshipCapabilities({
-    isFriend,
-    hasSharedGroup,
-    hasRequest: !!request,
-    netByCurrency,
-  });
-
   return {
     person,
     relationship,
@@ -176,6 +169,6 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       date: s.settled_date,
       note: s.note,
     })),
-    ...capabilities,
+    ...capabilities(netByCurrency),
   };
 }

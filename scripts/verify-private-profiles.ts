@@ -3,6 +3,13 @@ import { assert, assertNoSecretText, cleanupQaUsers, request, signup, sql, Json 
 const password = "profile-qa-password";
 const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
+async function addSharedGroupOnlyMember(groupId: number, userId: number) {
+  await sql`
+    INSERT INTO group_members (group_id, user_id)
+    VALUES (${groupId}, ${userId})
+    ON CONFLICT DO NOTHING`;
+}
+
 async function main() {
   assert(process.env.DATABASE_URL, "DATABASE_URL is required");
   await cleanupQaUsers(suffix);
@@ -34,10 +41,8 @@ async function main() {
   });
   assert(group.res.status === 200, `create group failed: ${group.res.status}`);
   const groupId = Number(group.json.id);
-  await sql`
-    INSERT INTO group_members (group_id, user_id)
-    VALUES (${groupId}, ${friend.id}), (${groupId}, ${shared.id})
-    ON CONFLICT DO NOTHING`;
+  await addSharedGroupOnlyMember(groupId, friend.id);
+  await addSharedGroupOnlyMember(groupId, shared.id);
 
   const expense = await request(`/api/groups/${groupId}/expenses`, {
     cookie: viewer.cookie,
