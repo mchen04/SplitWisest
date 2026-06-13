@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, ApiClientError } from "@/lib/client";
@@ -12,6 +12,13 @@ export default function SignupPage() {
   const [form, setForm] = useState({ username: "", displayName: "", password: "", inviteCode: "" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Prefill the invite code from a shared "?invite=" link so connecting is one step.
+  useEffect(() => {
+    const invite = new URLSearchParams(window.location.search).get("invite");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (invite) setForm((f) => ({ ...f, inviteCode: invite }));
+  }, []);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -31,7 +38,7 @@ export default function SignupPage() {
 
   return (
     <AuthFrame>
-      <h1 className="font-display text-[22px] font-semibold">Create your account</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
       <p className="mt-1 text-sm text-ink-soft">Private expense tracking for your friend group.</p>
       <form onSubmit={submit} className="mt-6 space-y-[13px]">
         <Field label="Display name">
@@ -62,7 +69,7 @@ export default function SignupPage() {
           </Field>
         </div>
         <Field label="Invite code — optional">
-          <Input value={form.inviteCode} onChange={set("inviteCode")} placeholder="MAYA-3X9P" className="font-mono" />
+          <Input value={form.inviteCode} onChange={set("inviteCode")} placeholder="Paste an invite code" className="font-mono" />
         </Field>
         <ErrorNote message={error} />
         <Button type="submit" busy={busy} className="w-full">

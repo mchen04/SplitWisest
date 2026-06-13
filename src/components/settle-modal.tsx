@@ -91,7 +91,7 @@ export function SettleModal({
 
   return (
     <Modal open={open} onClose={onClose} title={existing ? "Edit recorded payment" : "Record a settlement"}>
-      <p className="mb-4 rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
+      <p className="mb-4 rounded-lg bg-subtle px-3 py-2 text-xs text-ink-soft">
         This records a payment that already happened offline (cash, bank transfer, etc.). SplitWisest never moves
         money.
       </p>

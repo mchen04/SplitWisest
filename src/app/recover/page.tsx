@@ -30,7 +30,7 @@ export default function RecoverPage() {
 
   return (
     <AuthFrame>
-      <h1 className="font-display text-[22px] font-semibold">Reset password</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Reset password</h1>
       <p className="mt-1 text-sm text-ink-soft">Enter your username and a recovery code to set a new password.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <Field label="Username">

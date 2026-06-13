@@ -22,7 +22,7 @@ export interface ItemRow {
   participantIds: number[];
 }
 
-const LEGEND = "mb-1 block text-xs font-semibold uppercase tracking-wide text-ink-soft";
+const LEGEND = "mb-1.5 block text-xs font-medium text-ink-soft";
 
 // Participant picker for equal/exact/percentage/shares: a checkbox per member
 // plus, for weighted methods, the per-member value input.
@@ -187,7 +187,7 @@ export function ItemizedSplit({
         >
           <Plus className="h-4 w-4" /> Add item
         </Button>
-        <div className="rounded-lg border border-line bg-paper/50 p-3">
+        <div className="rounded-lg border border-line bg-subtle/60 p-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input

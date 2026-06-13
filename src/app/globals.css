@@ -1,75 +1,106 @@
 @import "tailwindcss";
 
+/* ──────────────────────────────────────────────────────────────────────────
+   SplitWisest design tokens — single source of truth.
+   Direction: modern · clean · minimal. Flat, near-neutral surfaces, one sans
+   typeface with tabular figures for money, restrained green accent used as
+   signal, money semantics kept distinct from the brand. No texture, no serif
+   in the UI (the serif lives only in the wordmark via `.font-wordmark`).
+   Never hard-code hex in components — reference these tokens. The single
+   sanctioned exception is the deterministic Avatar hue.
+   ──────────────────────────────────────────────────────────────────────── */
+
 @theme {
-  --color-paper: #faf9f5;
-  --color-card: #ffffff;
-  --color-ink: #21302a;
-  --color-ink-soft: #5c6b63;
-  --color-ink-faint: #93a09a;
-  --color-line: #e6e3da;
-  --color-accent: #16735a;
-  --color-accent-soft: #e3efe9;
-  --color-accent-dark: #0e5443;
+  /* ─── Surfaces (light) — flat, near-neutral, a whisper of warmth ─── */
+  --color-paper: #f5f6f7;        /* app canvas */
+  --color-card: #ffffff;         /* cards, sheets, menus */
+  --color-subtle: #eef0f2;       /* input fills, hover wash, quiet chips */
+  --color-ink: #181b1f;          /* primary text */
+  --color-ink-soft: #545b63;     /* secondary text — AA on card + canvas */
+  --color-ink-faint: #6c747d;    /* metadata — AA on card */
+  --color-line: #e5e7ea;         /* hairline borders */
+  --color-line-strong: #d2d6db;  /* stronger dividers */
+
+  /* ─── Brand / accent (green) — buttons, active nav, links ─── */
+  --color-accent: #15795f;
+  --color-accent-soft: #e7f1ed;  /* active-nav pill, subtle fills */
+  --color-accent-dark: #0f5a46;  /* hover / pressed */
   --color-on-accent: #ffffff;
-  --color-owe: #b4540a;
-  --color-owe-soft: #f9ede1;
-  --color-owed: #16735a;
-  --color-owed-soft: #e3efe9;
-  --color-danger: #b3362b;
-  --color-danger-soft: #f9e8e6;
+
+  /* ─── Money semantics (intentionally distinct from the brand green) ─── */
+  --color-owed: #0e8a63;         /* you're owed / positive */
+  --color-owed-soft: #e6f3ed;
+  --color-owe: #c2540f;          /* you owe / negative — warm, not alarm-red */
+  --color-owe-soft: #fbeee3;
+  --color-danger: #d4342a;       /* destructive actions only */
+  --color-danger-soft: #fceae8;
   --color-on-danger: #ffffff;
-  --font-display: var(--font-fraunces), Georgia, serif;
+
+  /* ─── Type — one sans for everything; serif reserved for the wordmark ─── */
+  --font-display: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--font-instrument), ui-sans-serif, system-ui, sans-serif;
-  --shadow-card: 0 1px 2px rgba(33, 48, 42, 0.05), 0 5px 18px rgba(33, 48, 42, 0.045);
-  --shadow-pop: 0 6px 16px rgba(33, 48, 42, 0.14), 0 24px 60px rgba(33, 48, 42, 0.18);
+  --font-wordmark: var(--font-fraunces), Georgia, serif;
 
-  /* Density scale — dense-product type ramp (13px body) instead of the
-     16px consumer default. Components reference these via standard
-     text-* utilities so the whole app shares one ramp. */
-  --text-xs: 0.6875rem; /* 11px metadata */
-  --text-xs--line-height: 1.35;
-  --text-sm: 0.8125rem; /* 13px body */
-  --text-sm--line-height: 1.4;
-  --text-base: 0.875rem; /* 14px emphasized body / card headers */
-  --text-base--line-height: 1.45;
-  --text-lg: 1rem;
-  --text-lg--line-height: 1.4;
-  --text-xl: 1.125rem;
+  /* ─── Elevation — border-first; one soft shadow reserved for overlays ─── */
+  --shadow-card: 0 1px 2px rgba(20, 23, 28, 0.04);
+  --shadow-pop: 0 10px 30px rgba(20, 23, 28, 0.12), 0 2px 6px rgba(20, 23, 28, 0.06);
+
+  /* ─── Type ramp — eased off the old 13px floor for a calmer, modern read. */
+  --text-xs: 0.75rem;            /* 12 — metadata, labels */
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.8125rem;          /* 13 — dense secondary / list meta */
+  --text-sm--line-height: 1.45;
+  --text-base: 0.875rem;         /* 14 — body, row titles */
+  --text-base--line-height: 1.5;
+  --text-lg: 1rem;               /* 16 — card headers */
+  --text-lg--line-height: 1.45;
+  --text-xl: 1.1875rem;          /* 19 — section titles */
   --text-xl--line-height: 1.3;
-  --text-2xl: 1.375rem; /* page titles */
+  --text-2xl: 1.4375rem;         /* 23 — page titles */
   --text-2xl--line-height: 1.2;
-  --text-3xl: 1.625rem;
-  --text-3xl--line-height: 1.2;
+  --text-3xl: 1.875rem;          /* 30 — hero numbers */
+  --text-3xl--line-height: 1.1;
+  --text-4xl: 2.5rem;            /* 40 — primary hero balance */
+  --text-4xl--line-height: 1.05;
 
-  /* Control metrics — single source for interactive element height. */
-  --control-h: 2.125rem; /* 34px controls */
-  --control-h-sm: 1.75rem; /* 28px compact/inline controls */
-  --row-h: 2.75rem; /* 44px list rows with two lines */
+  /* ─── Control metrics — single source for interactive sizing ─── */
+  --control-h: 2.375rem;         /* 38 — buttons / inputs */
+  --control-h-sm: 2rem;          /* 32 — compact / inline */
+  --row-h: 2.875rem;             /* 46 — two-line list rows */
 }
 
-/* Dark mode — overrides the design tokens so every `bg-paper`, `text-ink`,
-   etc. utility flips automatically. Matches the Claude Design dark variant. */
+/* Dark mode — cool charcoal. Cards LIFT above the canvas (depth comes from a
+   surface-lightness step, not shadows, which are near-invisible in the dark).
+   Money + accent colors are re-tuned for ≥4.5:1 on the dark surface. */
 [data-theme="dark"] {
-  --color-paper: #131714;
-  --color-card: #1c211d;
-  --color-ink: #edf0e9;
-  --color-ink-soft: #a6b0a8;
-  --color-ink-faint: #6f7a72;
-  --color-line: #2a312b;
-  --color-accent: #5cb494;
-  --color-accent-soft: #1e342b;
-  --color-accent-dark: #82cbac;
-  --color-on-accent: #0f201a;
-  --color-owe: #e09462;
-  --color-owe-soft: #33271c;
-  --color-owed: #5cb494;
-  --color-owed-soft: #1e342b;
-  --color-danger: #e3877b;
-  --color-danger-soft: #342120;
-  --color-on-danger: #2a120f;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 5px 18px rgba(0, 0, 0, 0.28);
-  --shadow-pop: 0 6px 16px rgba(0, 0, 0, 0.4), 0 24px 60px rgba(0, 0, 0, 0.5);
+  --color-paper: #131619;
+  --color-card: #1c2024;
+  --color-subtle: #262b30;
+  --color-ink: #e9ecef;
+  --color-ink-soft: #aab3bc;
+  --color-ink-faint: #97a0aa;
+  --color-line: #2b3138;
+  --color-line-strong: #3a4149;
+
+  --color-accent: #3fb488;
+  --color-accent-soft: #1b362b;
+  --color-accent-dark: #63c79f;
+  --color-on-accent: #07130d;
+
+  --color-owed: #35d399;
+  --color-owed-soft: #173a2c;
+  --color-owe: #f0925b;
+  --color-owe-soft: #392619;
+  --color-danger: #f3766b;
+  --color-danger-soft: #3a211e;
+  --color-on-danger: #2a0f0c;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
+
+:root { color-scheme: light; }
+[data-theme="dark"] { color-scheme: dark; }
 
 html {
   background: var(--color-paper);
@@ -86,56 +117,52 @@ body {
   min-height: 100dvh;
 }
 
-.font-display {
-  font-family: var(--font-display);
+/* The wordmark is the only place the serif survives — a small mark of identity
+   against an otherwise all-sans, modern UI. */
+.font-wordmark {
+  font-family: var(--font-wordmark);
 }
 
+/* Money and any aligned figures sit on tabular figures so digits line up in
+   columns and never reflow as values change. */
 .tnum {
   font-variant-numeric: tabular-nums;
-}
-
-/* Subtle dotted grain so the ledger feel has some warmth */
-.paper-grain {
-  background-image: radial-gradient(rgba(33, 48, 42, 0.028) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-
-[data-theme="dark"] .paper-grain {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-}
-
-[data-theme="dark"] .skeleton {
-  background: linear-gradient(90deg, #232a25 25%, #2a312b 50%, #232a25 75%);
-  background-size: 800px 100%;
+  font-feature-settings: "tnum" 1;
 }
 
 ::selection {
   background: var(--color-accent-soft);
+  color: var(--color-accent-dark);
 }
 
 @keyframes rise-in {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.rise-in { animation: rise-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.rise-in { animation: rise-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-.fade-in { animation: fade-in 0.2s ease-out both; }
+.fade-in { animation: fade-in 0.18s ease-out both; }
 
 @keyframes shimmer {
   0% { background-position: -400px 0; }
   100% { background-position: 400px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #efede6 25%, #f7f5ef 50%, #efede6 75%);
+  background: linear-gradient(90deg, #eceef0 25%, #f4f5f6 50%, #eceef0 75%);
   background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite;
-  border-radius: 6px;
+  border-radius: 8px;
   color: transparent;
   user-select: none;
+}
+
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #21262b 25%, #2a3035 50%, #21262b 75%);
+  background-size: 800px 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

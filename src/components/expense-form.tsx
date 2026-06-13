@@ -83,6 +83,8 @@ export function ExpenseForm({
   const [tipRate, setTipRate] = useState("20");
   const [categories, setCategories] = useState<Category[]>([]);
   const [newCategory, setNewCategory] = useState("");
+  const [addingCat, setAddingCat] = useState(false);
+  const [showSplitOptions, setShowSplitOptions] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [savedAttachments, setSavedAttachments] = useState<ExistingExpense["attachments"]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +98,8 @@ export function ExpenseForm({
     setError(null);
     setBusy(false);
     setFiles([]);
+    setAddingCat(false);
+    setNewCategory("");
     setSavedAttachments(existing?.attachments ?? []);
     if (existing) {
       setTitle(existing.title);
@@ -106,6 +110,7 @@ export function ExpenseForm({
       setCategoryId(existing.categoryId ?? "");
       setNotes(existing.notes);
       setMethod(existing.splitMethod as Method);
+      setShowSplitOptions(existing.splitMethod !== "equal");
       setSelected(new Set(existing.shares.map((s) => s.userId)));
       const vals: Record<number, string> = {};
       for (const s of existing.shares) {
@@ -136,6 +141,7 @@ export function ExpenseForm({
       setCategoryId("");
       setNotes("");
       setMethod("equal");
+      setShowSplitOptions(false);
       setSelected(new Set(members.map((m) => m.id)));
       setValues({});
       setItems([]);
@@ -218,6 +224,7 @@ export function ExpenseForm({
       setCategories((cs) => [...cs, c]);
       setCategoryId(c.id);
       setNewCategory("");
+      setAddingCat(false);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Could not add category");
     }
@@ -314,7 +321,7 @@ export function ExpenseForm({
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Title">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="Dinner at Nopa" />
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="What was it for?" />
           </Field>
           <div className="grid grid-cols-[1fr_auto] gap-2">
             <Field label="Amount">
@@ -347,56 +354,72 @@ export function ExpenseForm({
           <Field label="Date">
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </Field>
-          <Field label="Category">
-            <Select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
-            >
-              <option value="">No category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                  {c.custom ? " (custom)" : ""}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="New custom category" hint="Optional — adds to your list">
-            <div className="flex gap-2">
-              <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="e.g. Ski trip" />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={addCategory}
-                disabled={!newCategory.trim()}
-                aria-label="Add custom category"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-          </Field>
         </div>
 
-        <Field label="Split method">
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Split method">
-            {(Object.keys(METHOD_LABELS) as Method[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={method === m}
-                onClick={() => setMethod(m)}
-                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                  method === m
-                    ? "border-accent bg-accent-soft text-accent-dark"
-                    : "border-line text-ink-soft hover:border-ink-faint"
-                }`}
-              >
-                {METHOD_LABELS[m]}
-              </button>
+        <Field label="Category">
+          <Select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
+          >
+            <option value="">No category</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+                {c.custom ? " (custom)" : ""}
+              </option>
             ))}
-          </div>
+          </Select>
+          {addingCat ? (
+            <div className="mt-2 flex gap-2">
+              <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="New category name" autoFocus />
+              <Button type="button" variant="secondary" onClick={addCategory} disabled={!newCategory.trim()}>Add</Button>
+              <Button type="button" variant="ghost" onClick={() => { setAddingCat(false); setNewCategory(""); }}>Cancel</Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingCat(true)}
+              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+            >
+              <Plus className="h-3.5 w-3.5" /> New category
+            </button>
+          )}
         </Field>
+
+        <div>
+          <span className="mb-1.5 block text-xs font-medium text-ink-soft">Split</span>
+          {!showSplitOptions ? (
+            <div className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-subtle px-3 py-2">
+              <span className="text-sm text-ink-soft">Split <span className="font-medium text-ink">equally</span> between everyone selected</span>
+              <button
+                type="button"
+                onClick={() => setShowSplitOptions(true)}
+                className="shrink-0 text-sm font-medium text-accent hover:underline"
+              >
+                Split differently
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Split method">
+              {(Object.keys(METHOD_LABELS) as Method[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={method === m}
+                  onClick={() => setMethod(m)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                    method === m
+                      ? "border-accent bg-accent-soft text-accent-dark"
+                      : "border-line text-ink-soft hover:border-line-strong"
+                  }`}
+                >
+                  {METHOD_LABELS[m]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {method !== "itemized" ? (
           <ParticipantSplit
@@ -446,7 +469,7 @@ export function ExpenseForm({
 
         <Field label="Receipts" hint="Uploaded after the expense is saved; images or PDF, up to 4 MB each">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:border-ink-faint">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:bg-subtle hover:text-ink">
               <Paperclip className="h-4 w-4" /> Attach file
               <input
                 type="file"
@@ -470,7 +493,7 @@ export function ExpenseForm({
             {savedAttachments.map((a) => (
               <span
                 key={a.id}
-                className="inline-flex items-center gap-1.5 rounded-full bg-paper px-2.5 py-1 text-xs text-ink-soft"
+                className="inline-flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-1 text-xs text-ink-soft"
               >
                 <a href={`/api/attachments/${a.id}`} target="_blank" className="underline">
                   {a.filename}

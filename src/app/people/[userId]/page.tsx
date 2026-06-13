@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { api, ApiClientError, fmtDate, fmtMoney, useApiData, useMe } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
-import { Avatar, Button, Card, CardHeader, EmptyState, Input } from "@/components/ui";
+import { Avatar, Button, Card, CardHeader, EmptyState, Input, Menu, MenuItem } from "@/components/ui";
 import { DirectPaymentsModal } from "@/components/direct-payments-modal";
 import { DirectSettleModal } from "@/components/direct-settle-modal";
 import type { PersonProfile } from "@/lib/people";
@@ -97,7 +97,7 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
             action={<ProfileActions profile={profile} onSettle={() => setSettleOpen(true)} onPayments={() => setPaymentsOpen(true)} onNudge={nudge} onRemove={removeFriend} onRequest={sendFriendRequest} />}
           />
 
-          {actionNote && <div className="mb-4 rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">{actionNote}</div>}
+          {actionNote && <div className="mb-4 rounded-lg bg-subtle px-3 py-2 text-sm text-ink-soft">{actionNote}</div>}
 
           {profile.request && (
             <Card className="mb-4 px-4 py-3">
@@ -110,11 +110,11 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
                 </p>
                 {profile.request.direction === "incoming" ? (
                   <>
-                    <Button className="!min-h-9 !px-3" onClick={() => respondRequest("accept")}>Accept</Button>
-                    <Button variant="secondary" className="!min-h-9 !px-3" onClick={() => respondRequest("decline")}>Decline</Button>
+                    <Button onClick={() => respondRequest("accept")}>Accept</Button>
+                    <Button variant="secondary" onClick={() => respondRequest("decline")}>Decline</Button>
                   </>
                 ) : (
-                  <Button variant="secondary" className="!min-h-9 !px-3" onClick={() => respondRequest("cancel")}>Cancel</Button>
+                  <Button variant="secondary" onClick={() => respondRequest("cancel")}>Cancel</Button>
                 )}
               </div>
             </Card>
@@ -158,13 +158,16 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
                     <p className="truncate text-sm text-ink-faint">@{profile.person.username}</p>
                   </div>
                 </div>
-                <div className="mt-4 space-y-2">
+                <div className="mt-4 border-t border-line pt-4">
                   {Object.entries(profile.netByCurrency).length === 0 ? (
-                    <p className="text-sm text-ink-faint">No open pairwise balance.</p>
+                    <p className="text-sm text-ink-faint">You&rsquo;re all settled up.</p>
                   ) : Object.entries(profile.netByCurrency).map(([cur, amt]) => (
-                    <p key={cur} className={`text-sm ${amt > 0 ? "text-owed" : "text-owe"}`}>
-                      {amt > 0 ? "Owes you" : "You owe"} <strong>{fmtMoney(Math.abs(amt), cur)}</strong>
-                    </p>
+                    <div key={cur}>
+                      <p className="text-xs text-ink-soft">{amt > 0 ? "Owes you" : "You owe"}</p>
+                      <p className={`text-2xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
+                        {fmtMoney(Math.abs(amt), cur)}
+                      </p>
+                    </div>
                   ))}
                 </div>
               </Card>
@@ -176,9 +179,11 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
                   <ul className="divide-y divide-line">
                     {profile.sharedGroups.map((g) => (
                       <li key={g.id}>
-                        <Link href={`/groups/${g.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm hover:bg-paper">
-                          <span className="truncate font-medium">{g.name}</span>
-                          <span className="text-xs text-ink-faint">{g.currency}</span>
+                        <Link href={`/groups/${g.id}`} className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-subtle">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                            <Users className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="min-w-0 flex-1 truncate font-medium">{g.name}</span>
                         </Link>
                       </li>
                     ))}
@@ -239,18 +244,36 @@ function ProfileActions({
   onRequest: () => void;
 }) {
   if (profile.relationship === "self") return null;
+  const nets = Object.values(profile.netByCurrency);
+  const theyOweMe = nets.some((v) => v > 0);
+  const iOweThem = nets.some((v) => v < 0);
+  const dmHref = `/chat?dm=${profile.person.id}`;
+
+  // One contextual primary tied to the relationship; everything else overflows.
+  let primary: React.ReactNode = null;
+  let used = "";
+  if (theyOweMe && profile.canNudge) {
+    primary = <Button onClick={onNudge}><Bell className="h-4 w-4" /> Remind</Button>; used = "nudge";
+  } else if (iOweThem && profile.canSettleDirectly) {
+    primary = <Button onClick={onSettle}><HandCoins className="h-4 w-4" /> Settle up</Button>; used = "settle";
+  } else if (profile.canChat) {
+    primary = <Link href={dmHref}><Button><MessageSquare className="h-4 w-4" /> Chat</Button></Link>; used = "chat";
+  } else if (profile.canRequestFriend) {
+    primary = <Button onClick={onRequest}><UserPlus className="h-4 w-4" /> Add friend</Button>; used = "request";
+  }
+
+  const items: React.ReactNode[] = [];
+  if (profile.canChat && used !== "chat") items.push(<MenuItem key="chat" icon={<MessageSquare className="h-4 w-4" />} onClick={() => { window.location.href = dmHref; }}>Chat</MenuItem>);
+  if (profile.canSettleDirectly && used !== "settle") items.push(<MenuItem key="settle" icon={<HandCoins className="h-4 w-4" />} onClick={onSettle}>Settle up</MenuItem>);
+  if (profile.canSettleDirectly) items.push(<MenuItem key="pay" icon={<Receipt className="h-4 w-4" />} onClick={onPayments}>Payment history</MenuItem>);
+  if (profile.canNudge && used !== "nudge") items.push(<MenuItem key="nudge" icon={<Bell className="h-4 w-4" />} onClick={onNudge}>Remind</MenuItem>);
+  if (profile.canRequestFriend && used !== "request") items.push(<MenuItem key="req" icon={<UserPlus className="h-4 w-4" />} onClick={onRequest}>Add friend</MenuItem>);
+  if (profile.canRemoveFriend) items.push(<MenuItem key="rm" icon={<UserMinus className="h-4 w-4" />} danger onClick={onRemove}>Remove friend</MenuItem>);
+
   return (
-    <div className="flex flex-wrap gap-2">
-      {profile.canChat && (
-        <Link href={`/chat?dm=${profile.person.id}`}>
-          <Button variant="secondary"><MessageSquare className="h-4 w-4" /> Chat</Button>
-        </Link>
-      )}
-      {profile.canSettleDirectly && <Button variant="secondary" onClick={onSettle}><HandCoins className="h-4 w-4" /> Settle</Button>}
-      {profile.canSettleDirectly && <Button variant="secondary" onClick={onPayments}><Receipt className="h-4 w-4" /> Payments</Button>}
-      {profile.canNudge && <Button variant="secondary" onClick={onNudge}><Bell className="h-4 w-4" /> Nudge</Button>}
-      {profile.canRequestFriend && <Button variant="secondary" onClick={onRequest}><UserPlus className="h-4 w-4" /> Add friend</Button>}
-      {profile.canRemoveFriend && <Button variant="danger" onClick={onRemove}><UserMinus className="h-4 w-4" /> Remove</Button>}
+    <div className="flex items-center gap-2">
+      {primary}
+      {items.length > 0 && <Menu label={`More actions for ${profile.person.displayName}`}>{items}</Menu>}
     </div>
   );
 }
@@ -279,7 +302,7 @@ function HistoryList({ profile, meId, query }: { profile: PersonProfile; meId: n
     <ul className="divide-y divide-line">
       {rows.map((row) => row.type === "expense" ? (
         <li key={row.key}>
-          <Link href={`/groups/${row.item.groupId}?expense=${row.item.id}`} className="block px-4 py-3 hover:bg-paper">
+          <Link href={`/groups/${row.item.groupId}?expense=${row.item.id}`} className="block px-4 py-3 hover:bg-subtle">
             <div className="flex items-center gap-3">
               <Receipt className="h-4 w-4 shrink-0 text-accent" />
               <span className="min-w-0 flex-1">

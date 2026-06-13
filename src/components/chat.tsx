@@ -207,7 +207,7 @@ export function ChatPane({
                 <div className={`max-w-[78%] ${mine ? "text-right" : ""}`}>
                   <div
                     className={`inline-block rounded-2xl px-3.5 py-2 text-left text-sm leading-relaxed ${
-                      mine ? "rounded-br-md bg-accent text-on-accent" : "rounded-bl-md bg-paper text-ink"
+                      mine ? "rounded-br-md bg-accent text-on-accent" : "rounded-bl-md bg-subtle text-ink"
                     }`}
                   >
                     <MessageBody text={m.body} />

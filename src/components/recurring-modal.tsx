@@ -108,7 +108,7 @@ export function RecurringModal({
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
           </Field>
         </div>
-        <p className="rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
+        <p className="rounded-lg bg-subtle px-3 py-2 text-xs text-ink-soft">
           Splits equally among all current group members each time it runs.
         </p>
         <ErrorNote message={error} />

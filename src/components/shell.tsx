@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { api, useApiData, useMe, useUnread, type Unread } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
-import { Avatar } from "./ui";
+import { Avatar, IconButton } from "./ui";
 
 interface GroupRef { id: number; name: string; unreadMessages?: number }
 
@@ -39,14 +39,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
   const unread = useUnread();
   const { theme, toggle } = useTheme();
-  // Mirror Home's behaviour: jump straight into the first group's add-expense
-  // flow, or fall back to the groups list when there's nowhere to add yet.
   const { data: groupsData } = useApiData<{ groups: GroupRef[] }>("/api/groups");
   const firstGroup = groupsData?.groups?.[0];
   const addExpenseHref = firstGroup ? `/groups/${firstGroup.id}?add=1` : "/groups";
 
-  // Collapsible quick-access group list under the Groups nav item. Hydration-
-  // safe: starts closed, then restores the persisted preference after mount.
   const [groupsOpen, setGroupsOpen] = useState(false);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -68,14 +64,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <div className="paper-grain min-h-dvh">
+    <div className="min-h-dvh">
       {/* Desktop / tablet sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[208px] flex-col border-r border-line bg-card md:flex">
-        <Link href="/" className="flex items-center gap-2 px-4 pb-2.5 pt-4">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[216px] flex-col border-r border-line bg-card md:flex">
+        <Link href="/" className="flex items-center gap-2 px-4 pb-3 pt-4">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
           </span>
-          <span className="font-display text-lg font-bold tracking-tight">SplitWisest</span>
+          <span className="font-wordmark text-lg font-semibold tracking-tight">SplitWisest</span>
         </Link>
         <div className="px-3 pb-2">
           <Link
@@ -85,17 +81,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Plus className="h-4 w-4" /> Add expense
           </Link>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-1">
           {NAV.map(({ href, label, icon: Icon, badge }) => (
             <div key={href}>
               <div
                 className={`flex items-center rounded-lg transition-colors ${
                   isActive(href)
                     ? "bg-accent-soft text-accent-dark"
-                    : "text-ink-soft hover:bg-paper hover:text-ink"
+                    : "text-ink-soft hover:bg-subtle hover:text-ink"
                 }`}
               >
-                <Link href={href} className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-1.5 text-sm font-medium">
+                <Link href={href} className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-sm font-medium">
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1 truncate">{label}</span>
                   {badge && <Badge count={unread[badge]} />}
@@ -117,10 +113,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Link
                       key={g.id}
                       href={`/groups/${g.id}`}
-                      className={`flex items-center gap-2 rounded-lg py-1 pl-9 pr-2.5 text-sm transition-colors ${
+                      className={`flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-2.5 text-sm transition-colors ${
                         pathname === `/groups/${g.id}`
                           ? "bg-accent-soft font-medium text-accent-dark"
-                          : "text-ink-soft hover:bg-paper hover:text-ink"
+                          : "text-ink-soft hover:bg-subtle hover:text-ink"
                       }`}
                     >
                       <span className="min-w-0 flex-1 truncate">{g.name}</span>
@@ -135,81 +131,60 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="border-t border-line p-2.5">
           <button
             onClick={toggle}
-            className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium text-ink-soft hover:bg-paper hover:text-ink"
+            className="mb-1 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-ink-soft hover:bg-subtle hover:text-ink"
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             <span className="flex-1 text-left">{theme === "dark" ? "Light mode" : "Dark mode"}</span>
           </button>
           {me && (
-            <div className="flex items-center gap-2.5 px-2 py-1.5">
-              <Link href="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg hover:opacity-80">
+            <div className="flex items-center gap-1.5">
+              <Link href="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-subtle" title="Account settings">
                 <Avatar name={me.displayName} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{me.displayName}</p>
-                  <p className="truncate text-xs text-ink-faint">@{me.username}</p>
+                  <p className="truncate text-sm font-medium leading-tight">{me.displayName}</p>
+                  <p className="truncate text-xs text-ink-faint leading-tight">@{me.username}</p>
                 </div>
               </Link>
-              <Link
-                href="/settings"
-                aria-label="Settings"
-                title="Settings"
-                className="rounded-lg p-1.5 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
-              >
-                <Settings className="h-4 w-4" />
-              </Link>
-              <button
-                onClick={logout}
-                aria-label="Log out"
-                title="Log out"
-                className="rounded-lg p-1.5 text-ink-faint hover:bg-danger-soft hover:text-danger"
-              >
+              <IconButton label="Log out" variant="danger" onClick={logout}>
                 <LogOut className="h-4 w-4" />
-              </button>
+              </IconButton>
             </div>
           )}
         </div>
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-card/95 px-4 py-3 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-card/90 px-4 py-3 backdrop-blur md:hidden">
         <Link href="/" className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
           </span>
-          <span className="font-display text-base font-bold">SplitWisest</span>
+          <span className="font-wordmark text-base font-semibold">SplitWisest</span>
         </Link>
         <div className="flex items-center gap-1">
-          <button
-            onClick={toggle}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            className="rounded-lg p-2 text-ink-soft hover:bg-paper"
-          >
-            {theme === "dark" ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
-          </button>
+          <IconButton label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggle}>
+            {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+          </IconButton>
+          <Link href="/settings" aria-label="Settings" title="Settings" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle hover:text-ink">
+            <Settings className="h-[18px] w-[18px]" />
+          </Link>
           <Link
             href={addExpenseHref}
             aria-label="Add expense"
-            className="rounded-lg bg-accent-soft p-2 text-accent-dark"
+            className="flex h-9 items-center gap-1 rounded-lg bg-accent px-2.5 text-sm font-semibold text-on-accent"
           >
-            <Plus className="h-4.5 w-4.5" />
-          </Link>
-          <Link
-            href="/settings"
-            aria-label="Settings"
-            className="rounded-lg p-2 text-ink-soft hover:bg-paper"
-          >
-            <Settings className="h-4.5 w-4.5" />
+            <Plus className="h-[18px] w-[18px]" /> Add
           </Link>
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-4 sm:px-5 md:ml-[208px] md:h-dvh md:overflow-hidden md:pb-4 md:pt-4 lg:px-8">
+      <main className="px-4 pb-24 pt-5 sm:px-6 md:ml-[216px] md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0">{children}</div>
       </main>
 
       {/* Mobile bottom nav */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-card/95 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-card/90 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {NAV.map(({ href, label, icon: Icon, badge }) => (
@@ -217,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             className={`relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
-              isActive(href) ? "text-accent-dark" : "text-ink-faint"
+              isActive(href) ? "text-accent" : "text-ink-faint"
             }`}
           >
             <span className="relative">
@@ -238,10 +213,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
+    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
       <div>
-        <h1 className="font-display text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-xs text-ink-soft">{subtitle}</p>}
+        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
       </div>
       {action}
     </div>

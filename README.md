@@ -14,10 +14,10 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 - Offline settlement recording (group or direct between friends)
 - Recurring expenses (weekly/monthly, lazily materialized)
 - Search & filtering by group, friend, date, category, payer, text
-- Activity log (calm timestamped rows), CSV export, SVG charts
+- Activity log (grouped by day), CSV export, SVG charts
 - Group chat + direct friend chat with link rendering and search
 - Realtime via lightweight polling sync cursor (serverless-friendly)
-- Light + dark theme (warm "ledger paper" / dim variant); toggle in the sidebar, mobile header, and Settings — persists and respects OS preference
+- Modern, clean, minimal UI from a single design-token system — flat surfaces, one sans typeface, tabular money; light + dark theme toggle in the sidebar, mobile header, and Settings — persists and respects OS preference
 - PWA manifest, responsive from small phones to ultrawide
 
 ## Stack

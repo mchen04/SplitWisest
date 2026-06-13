@@ -67,7 +67,7 @@ function DirectSettleForm({
 
   return (
     <Modal open onClose={onClose} title={existing ? `Edit payment with ${friend.displayName}` : `Settle with ${friend.displayName}`}>
-      <p className="mb-4 rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
+      <p className="mb-4 rounded-lg bg-subtle px-3 py-2 text-xs text-ink-soft">
         Records an offline payment between just the two of you. SplitWisest never moves money.
       </p>
       <form onSubmit={submit} className="space-y-4">

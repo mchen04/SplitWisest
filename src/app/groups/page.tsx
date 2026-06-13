@@ -85,7 +85,7 @@ export default function GroupsPage() {
           <ul className="divide-y divide-line">
             {groups.map((g) => (
               <li key={g.id}>
-                <Link href={`/groups/${g.id}`} className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-2 hover:bg-paper">
+                <Link href={`/groups/${g.id}`} className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-2 hover:bg-subtle">
                   <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-dark">
                     <Users className="h-5 w-5" />
                   </span>
