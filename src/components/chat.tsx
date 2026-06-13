@@ -13,14 +13,23 @@ interface Message {
   createdAt: string;
 }
 
-// Renders message text, turning URLs into links.
-function MessageBody({ text }: { text: string }) {
+// Renders message text, turning URLs into links. `mine` messages sit on an
+// accent-filled bubble, so their links must inherit the on-accent color —
+// using text-accent there would paint the link the same green as its bubble
+// and the URL would vanish. Other bubbles are neutral, so accent reads fine.
+function MessageBody({ text, mine }: { text: string; mine: boolean }) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
   return (
     <>
       {parts.map((p, i) =>
         /^https?:\/\//.test(p) ? (
-          <a key={i} href={p} target="_blank" rel="noopener noreferrer" className="break-all text-accent underline">
+          <a
+            key={i}
+            href={p}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`break-all underline ${mine ? "text-on-accent" : "text-accent"}`}
+          >
             {p}
           </a>
         ) : (
@@ -210,7 +219,7 @@ export function ChatPane({
                       mine ? "rounded-br-md bg-accent text-on-accent" : "rounded-bl-md bg-subtle text-ink"
                     }`}
                   >
-                    <MessageBody text={m.body} />
+                    <MessageBody text={m.body} mine={mine} />
                   </div>
                   <p className="mt-0.5 text-[11px] text-ink-faint">
                     {!mine && <span className="font-medium">{m.senderName} · </span>}
