@@ -7,6 +7,20 @@ import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Button } from "@/components/ui";
 import { ActivitySummary } from "@/components/activity-summary";
 
+// Calendar-day bucket for the feed, so events scan by day instead of as one wall.
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric",
+    year: d.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
+}
+
 interface Activity {
   id: number;
   groupId: number | null;
@@ -51,16 +65,26 @@ export default function ActivityPage() {
           ) : activity.length === 0 ? (
             <EmptyState icon={<ScrollText className="h-8 w-8" />} title="Nothing yet" hint="Expenses, settlements, and group changes will show up here." />
           ) : (
-            <ul className="divide-y divide-line">
-              {activity.map((a) => (
-                <li key={a.id} className="px-3.5 py-1.5">
-                  <ActivitySummary activity={a} />
-                  <p className="mt-0.5 text-xs text-ink-faint">
-                    {a.groupName ? `${a.groupName} · ` : ""}
-                    {fmtTime(a.createdAt)}
-                  </p>
-                </li>
-              ))}
+            <ul>
+              {activity.map((a, i) => {
+                const showDay = i === 0 || dayLabel(a.createdAt) !== dayLabel(activity[i - 1].createdAt);
+                return (
+                  <li key={a.id} className="border-b border-line last:border-0">
+                    {showDay && (
+                      <p className="bg-subtle px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                        {dayLabel(a.createdAt)}
+                      </p>
+                    )}
+                    <div className="px-4 py-2.5">
+                      <ActivitySummary activity={a} />
+                      <p className="mt-0.5 text-xs text-ink-faint">
+                        {a.groupName ? `${a.groupName} · ` : ""}
+                        {fmtTime(a.createdAt)}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
           {activity && activity.length > 0 && hasMore && (

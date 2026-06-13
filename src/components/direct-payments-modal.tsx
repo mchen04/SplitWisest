@@ -69,7 +69,7 @@ export function DirectPaymentsModal({
   return (
     <>
       <Modal open onClose={onClose} title={`Payments with ${friend.displayName}`}>
-        <p className="mb-4 rounded-lg bg-paper px-3 py-2 text-xs text-ink-soft">
+        <p className="mb-4 rounded-lg bg-subtle px-3 py-2 text-xs text-ink-soft">
           Offline payments recorded directly between the two of you, outside any group.
         </p>
         {error && <p role="alert" className="mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}

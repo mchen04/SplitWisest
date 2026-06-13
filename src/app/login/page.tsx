@@ -29,7 +29,7 @@ export default function LoginPage() {
 
   return (
     <AuthFrame>
-      <h1 className="font-display text-[22px] font-semibold">Welcome back</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Welcome back</h1>
       <p className="mt-1 text-sm text-ink-soft">Log in to settle up with your crew.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <Field label="Username">

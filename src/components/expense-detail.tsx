@@ -148,7 +148,7 @@ export function ExpenseDetailModal({
           {detail.notes.trim() && (
             <div>
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft">Notes</p>
-              <p className="whitespace-pre-wrap rounded-lg bg-paper px-3 py-2 text-sm text-ink-soft">{detail.notes}</p>
+              <p className="whitespace-pre-wrap rounded-lg bg-subtle px-3 py-2 text-sm text-ink-soft">{detail.notes}</p>
             </div>
           )}
 

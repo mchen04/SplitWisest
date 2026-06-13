@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
-  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, Check, ChevronDown, Users,
+  RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, ChevronDown, Users,
 } from "lucide-react";
 import { api, apiCached, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
-import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal } from "@/components/ui";
+import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal, Menu, MenuItem } from "@/components/ui";
 import { ExpenseForm } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
 import { RecurringModal, ExistingRecurring } from "@/components/recurring-modal";
@@ -53,8 +53,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [editingRecurring, setEditingRecurring] = useState<ExistingRecurring | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [codeCopied, setCodeCopied] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
+
+  function copyInviteLink() {
+    if (!detail) return;
+    navigator.clipboard.writeText(`${window.location.origin}/signup?invite=${detail.group.inviteCode}`).catch(() => {});
+  }
 
   // Reset to the first page whenever the filters change.
   useEffect(() => {
@@ -138,45 +142,26 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <AppShell>
-      <div className="mb-3 flex flex-wrap items-center gap-2.5 md:shrink-0">
-        <Link href="/groups" aria-label="Back to groups" className="rounded-lg p-2 text-ink-soft hover:bg-accent-soft">
+      <div className="mb-4 flex flex-wrap items-center gap-2.5 md:shrink-0">
+        <Link href="/groups" aria-label="Back to groups" className="rounded-lg p-2 text-ink-soft hover:bg-subtle hover:text-ink">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="min-w-0 flex-1">
           {detail ? (
             <>
               <GroupSwitcher currentId={groupId} currentName={detail.group.name} />
-              <p className="flex items-center gap-1.5 text-xs text-ink-faint">
-                {detail.members.length} members · {detail.group.currency} · invite code
-                <button
-                  onClick={() => {
-                    navigator.clipboard.writeText(detail.group.inviteCode).then(() => {
-                      setCodeCopied(true);
-                      setTimeout(() => setCodeCopied(false), 1500);
-                    });
-                  }}
-                  title="Copy invite code"
-                  aria-label="Copy invite code"
-                  className="inline-flex items-center gap-1 rounded bg-paper px-1.5 py-0.5 font-medium text-ink-soft hover:text-accent"
-                >
-                  {detail.group.inviteCode}
-                  {codeCopied ? <Check className="h-3 w-3 text-owed" /> : <Copy className="h-3 w-3" />}
-                </button>
+              <p className="text-xs text-ink-faint">
+                {detail.members.length} {detail.members.length === 1 ? "member" : "members"} · {detail.group.currency}
               </p>
             </>
           ) : (
             <div className="space-y-1.5">
               <div className="skeleton h-7 w-48" />
-              <div className="skeleton h-3.5 w-64" />
+              <div className="skeleton h-3.5 w-40" />
             </div>
           )}
         </div>
-        <div className="flex gap-2">
-          <a href={`/api/groups/${groupId}/export`} download>
-            <Button variant="secondary" title="Export CSV" aria-label="Export CSV">
-              <Download className="h-4 w-4" /> <span className="hidden sm:inline">CSV</span>
-            </Button>
-          </a>
+        <div className="flex items-center gap-2">
           <Button
             variant="secondary"
             disabled={(detail?.members.length ?? 0) < 2}
@@ -189,15 +174,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           <Button aria-label="Add expense" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
             <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add expense</span>
           </Button>
-          <Button
-            variant="secondary"
-            disabled={!detail}
-            title="Group settings"
-            aria-label="Group settings"
-            onClick={() => setSettingsOpen(true)}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          <Menu label="Group menu">
+            <MenuItem icon={<Copy className="h-4 w-4" />} onClick={copyInviteLink}>Copy invite link</MenuItem>
+            <MenuItem icon={<Download className="h-4 w-4" />} onClick={() => { window.location.href = `/api/groups/${groupId}/export`; }}>Export CSV</MenuItem>
+            <MenuItem icon={<Settings className="h-4 w-4" />} onClick={() => setSettingsOpen(true)}>Group settings</MenuItem>
+          </Menu>
         </div>
       </div>
 
@@ -231,7 +212,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             <ul className="divide-y divide-line">
               {visibleBalances.map((b) => (
                 <li key={b.userId}>
-                  <Link href={`/people/${b.userId}`} className="flex items-center gap-2 px-3 py-1.5 hover:bg-paper">
+                  <Link href={`/people/${b.userId}`} className="flex items-center gap-2 px-3 py-1.5 hover:bg-subtle">
                     <Avatar name={b.displayName} size="sm" />
                     <span className="min-w-0 flex-1 truncate text-sm font-medium">{b.displayName}</span>
                     <span className="tnum text-xs font-semibold">
@@ -259,7 +240,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             </div>
           ) : (
             detail.balances.map((b) => (
-              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-28 flex-1 flex-col justify-center gap-0.5 px-3 py-1.5 hover:bg-paper">
+              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-28 flex-1 flex-col justify-center gap-0.5 px-3 py-1.5 hover:bg-subtle">
                 <span className="flex items-center gap-1.5 truncate text-xs text-ink-soft">
                   <Avatar name={b.displayName} size="sm" /> {b.displayName}
                 </span>
@@ -286,7 +267,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:flex-1 ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -380,7 +361,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         </p>
                         <p className="truncate text-xs text-ink-faint">
                           <span className="sm:hidden">{fmtDate(e.date)} · </span>
-                          {e.payerName} paid · {e.categoryName ?? "Uncategorized"} · {e.splitMethod}
+                          {e.payerName} paid{e.categoryName ? ` · ${e.categoryName}` : ""} · split {e.splitMethod}
                           {e.currency !== detail?.group.currency && ` · ${fmtMoney(e.amountCents, e.currency)}`}
                         </p>
                       </div>
@@ -751,7 +732,7 @@ function GroupSwitcher({ currentId, currentName }: { currentId: number; currentN
                 href={`/groups/${g.id}`}
                 role="option"
                 aria-selected={false}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium hover:bg-paper"
+                className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium hover:bg-subtle"
               >
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
                   <Users className="h-3.5 w-3.5" />
@@ -761,7 +742,7 @@ function GroupSwitcher({ currentId, currentName }: { currentId: number; currentN
               </Link>
             ))
           )}
-          <Link href="/groups" className="mt-1 block border-t border-line px-3 py-2 text-sm font-medium text-accent hover:bg-paper">
+          <Link href="/groups" className="mt-1 block border-t border-line px-3 py-2 text-sm font-medium text-accent hover:bg-subtle">
             All groups
           </Link>
         </div>

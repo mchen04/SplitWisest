@@ -25,7 +25,7 @@ export function BarChart({
               <span className="truncate text-ink-soft" title={d.label}>
                 {d.label}
               </span>
-              <div className="h-4 rounded-full bg-paper">
+              <div className="h-4 rounded-full bg-subtle">
                 <div
                   className="h-4 rounded-full bg-accent/80 transition-[width] duration-300"
                   style={{ width: `${Math.max((d.value / max) * 100, 2)}%` }}

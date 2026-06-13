@@ -86,6 +86,16 @@ function ChatPageInner() {
     setRefreshKey((k) => k + 1);
   });
 
+  // On desktop, open the most recent conversation by default rather than
+  // landing on an empty pane. Mobile keeps the list-first view.
+  useEffect(() => {
+    if (selectedKey || !conversations || conversations.length === 0) return;
+    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return;
+    const top = [...conversations].sort((a, b) => b.lastId - a.lastId)[0];
+    if (top) router.replace(top.kind === "group" ? `/chat?g=${top.id}` : `/chat?dm=${top.id}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations, selectedKey]);
+
   function togglePin(c: Conversation) {
     setPins((prev) => {
       const key = convKey(c);
@@ -166,7 +176,7 @@ function ChatPageInner() {
                     onClick={() => open(c)}
                     aria-current={active ? "true" : undefined}
                     className={`flex w-full items-center gap-2.5 py-2 pl-3 pr-10 text-left transition-colors md:pr-3 ${
-                      active ? "bg-accent-soft" : "hover:bg-paper"
+                      active ? "bg-accent-soft" : "hover:bg-subtle"
                     }`}
                   >
                     {c.kind === "group" ? (
@@ -188,7 +198,9 @@ function ChatPageInner() {
                       <span className="flex items-center gap-1.5">
                         {pinned && <Pin className="h-3 w-3 shrink-0 text-ink-faint" aria-label="Pinned" />}
                         <span className={`truncate text-xs ${c.unread ? "font-semibold text-ink" : "text-ink-faint"}`}>
-                          {c.lastBody ? `${c.lastSender}: ${c.lastBody}` : c.subtitle}
+                          {c.lastBody
+                            ? c.kind === "dm" ? c.lastBody : `${c.lastSender}: ${c.lastBody}`
+                            : c.subtitle}
                         </span>
                         {c.unread && (
                           <span className="ml-auto h-2 w-2 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />
@@ -221,7 +233,7 @@ function ChatPageInner() {
             <button
               onClick={() => router.replace("/chat", { scroll: false })}
               aria-label="Back to all chats"
-              className="rounded-lg p-1.5 text-ink-soft hover:bg-paper md:hidden"
+              className="rounded-lg p-1.5 text-ink-soft hover:bg-subtle md:hidden"
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
@@ -284,7 +296,7 @@ function ChatPageInner() {
     <AppShell>
       <div className="mb-4 hidden items-end justify-between md:flex md:shrink-0">
         <div>
-          <h1 className="font-display text-xl font-bold tracking-tight sm:text-2xl">Messages</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Chat</h1>
           <p className="mt-1 text-sm text-ink-soft">Group conversations and direct messages.</p>
         </div>
       </div>

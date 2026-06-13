@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
 import { apiCached, fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
-import { Card, EmptyState, Input, Select, Button } from "@/components/ui";
+import { Card, EmptyState, Input, Select, Button, Chip } from "@/components/ui";
 
 interface Expense {
   id: number;
@@ -57,7 +57,7 @@ export default function ExpensesPage() {
     <AppShell>
       <PageTitle title="All expenses" subtitle="Search and filter across every group you're in." />
 
-      <Card className="mb-2.5 p-2 md:shrink-0">
+      <Card className="mb-4 p-2 md:shrink-0">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
           <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
@@ -72,7 +72,7 @@ export default function ExpensesPage() {
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
           <Select value={filters.friendId} onChange={setFilter("friendId")} aria-label="Filter by friend">
-            <option value="">Any friend involved</option>
+            <option value="">Any friend</option>
             {friends.map((f) => <option key={f.id} value={f.id}>{f.displayName}</option>)}
           </Select>
           <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
@@ -102,11 +102,14 @@ export default function ExpensesPage() {
           <ul className="divide-y divide-line">
             {expenses.map((e) => (
               <li key={e.id}>
-                <Link href={`/groups/${e.groupId}`} className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-1.5 hover:bg-paper">
+                <Link href={`/groups/${e.groupId}?expense=${e.id}`} className="flex min-h-[var(--row-h)] items-center gap-3 px-4 py-2.5 hover:bg-subtle">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{e.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-medium">{e.title}</p>
+                      <Chip className="shrink-0">{e.groupName}</Chip>
+                    </div>
                     <p className="truncate text-xs text-ink-faint">
-                      {fmtDate(e.date)} · {e.groupName} · {e.payerName} paid · {e.categoryName ?? "Uncategorized"}
+                      {fmtDate(e.date)} · {e.payerName} paid{e.categoryName ? ` · ${e.categoryName}` : ""}
                     </p>
                   </div>
                   <span className="tnum font-semibold">{fmtMoney(e.amountCents, e.currency)}</span>

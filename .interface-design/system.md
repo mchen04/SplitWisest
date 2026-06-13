@@ -1,92 +1,124 @@
 # SplitWisest Interface Design System
 
-Direction: **Warmth & Trust** — a calm, finance-adjacent social utility. Warm paper
-neutrals + deep green accent, serif display type for headings/money, quiet metadata.
-Consistency beats perfection; these decisions compound — follow them, don't rediscover.
+Direction: **modern · clean · minimal** — the register of Linear / Stripe / Mercury /
+Things. Flat near-neutral surfaces, one sans typeface with tabular figures for money,
+a restrained green accent used as *signal* (not decoration), and generous, consistent
+space. Personality comes from sharp typography and the green — not from texture or
+ornament. Consistency beats novelty; these decisions compound — follow them.
+
+> Pivoted from the earlier "warm paper + serif" direction after a four-judge design
+> review: serif-everywhere + dotted grain + warm cream read editorial/cozy, not modern.
+> We kept the bones (layout, green brand, logo, icon set, nav) and replaced the three
+> foundational choices: **serif → sans, texture → flat, warm cream → cool neutral.**
 
 ## Foundation
 
-- Light: paper `#faf9f5`, card `#ffffff`, ink `#21302a` (greenish-black), line `#e6e3da`.
-- Dark: paper `#131714`, card `#1c211d`; same token names flip via `[data-theme="dark"]`.
-- Accent: green `#16735a` (light) / `#5cb494` (dark). Money semantics: `owed` = green
-  (positive, you are owed), `owe` = warm orange `#b4540a` (negative), `danger` = red.
-- All colors are Tailwind theme tokens in `src/app/globals.css` (`--color-*`). Never
-  hard-code hex in components; the only exception is the deterministic Avatar hue.
-- Depth: 1px `border-line` + `shadow-card` on cards; `shadow-pop` reserved for modals
-  and floating menus. No other shadows.
-- Texture: `.paper-grain` dotted background on the app shell only.
+- All color, type, spacing, elevation are tokens in `src/app/globals.css` (`@theme`).
+  **Never hard-code hex in components** — the only exception is the deterministic
+  Avatar hue.
+- Light: canvas `paper #f5f6f7`, `card #ffffff`, `subtle #eef0f2` (fills/hover),
+  `ink #181b1f`, `ink-soft #545b63`, `ink-faint #6c747d`, `line #e5e7ea`.
+- Dark: `[data-theme="dark"]` flips the same token names. Cards **lift** above the
+  canvas (`paper #131619` → `card #1c2024`) — depth is a surface-lightness step, not a
+  shadow (shadows are invisible in dark UIs).
+- Accent: green `#15795f` (light) / `#3fb488` (dark) — brand, primary buttons, active
+  nav, links. `accent-soft` is the active-nav pill / subtle fill.
+- **Money semantics are distinct from the brand:** `owed` green `#0e8a63` (you're
+  owed / +), `owe` warm `#c2540f` (you owe / −), `danger` red `#d4342a` (destructive
+  only). Never let "you owe" and "delete" share a color.
+- Depth: 1px `border-line` is the primary separator; cards carry a near-invisible
+  `shadow-card`. `shadow-pop` is reserved for modals / floating menus. No other shadows.
+- **No texture.** The dotted grain is gone; surfaces are flat.
 
 ## Typography
 
-- Display: Fraunces (`font-display`) — page titles, card headers, money amounts.
-- Body: Instrument Sans — everything else.
-- Dense type ramp — the `text-*` utilities are overridden in `globals.css`:
-  `xs` 11px, `sm` 13px (body), `base` 14px, `lg` 16px, `xl` 18px, `2xl` 22px, `3xl` 26px.
-- Roles: page title `text-xl/2xl font-bold`; card header `text-base font-semibold`;
-  row title `text-sm font-medium` (bold when unread); metadata `text-xs text-ink-faint`;
-  KPI money `text-xl font-display`; form label
-  `text-[11.5px] font-semibold uppercase tracking-wider text-ink-soft`.
-- Numbers in money contexts use `.tnum` (tabular-nums).
+- One typeface: **Instrument Sans** (`--font-body`) for *everything* — body, headings,
+  labels, and money. `.font-display` maps to the same sans; hierarchy comes from
+  **size + weight + color**, never from a second typeface.
+- The serif (**Fraunces**) survives **only** in the wordmark via `.font-wordmark`.
+  Do not reintroduce it anywhere else.
+- Money & aligned figures use `.tnum` (tabular figures) so columns line up and digits
+  don't reflow as values change.
+- Ramp (overridden in `globals.css`): `xs` 12, `sm` 13, `base` 14 (body), `lg` 16,
+  `xl` 19, `2xl` 23 (page title), `3xl` 30 (hero number), `4xl` 40 (primary hero).
+- Roles: page title `text-2xl font-semibold tracking-tight`; card header
+  `text-base font-semibold`; row title `text-sm/base font-medium` (semibold when
+  unread); metadata `text-xs text-ink-faint`; hero money `text-3xl/4xl font-semibold
+  tnum`; form label `text-xs font-medium text-ink-soft` (**sentence case**, not
+  uppercase — reserve uppercase only for true section dividers).
 
 ## Spacing & density
 
-4px base, dense-product scale. Control metrics live in `globals.css` as tokens:
-`--control-h` 34px (all buttons/inputs), `--control-h-sm` 28px (compact/inline),
-`--row-h` 44px (two-line list rows, `min-h-[var(--row-h)]`).
-Common roles: row padding `px-3.5 py-1.5`, card section padding `px-3.5`,
-modal padding `px-4 py-3`, page section gap `mb-2.5/3`, grid gaps `gap-2.5`,
-list rows divided by `divide-line` (no gaps between rows inside a card).
-Rule of thumb: 4–8px between related items, 8–12px between groups; never reintroduce
-the old 16–24px consumer paddings.
+4px base; a calm-but-efficient scale: **4 · 8 · 12 · 16 · 24 · 32 · 48**.
+Control metrics are tokens: `--control-h` 38px (buttons/inputs),
+`--control-h-sm` 32px (compact), `--row-h` 46px (two-line rows).
+Common roles: card padding `p-4`/`px-4 py-3`, row padding `px-4 py-2.5`, section gap
+`gap-4`/`space-y-4`, grid gaps `gap-4`. 8–12px between related items, 16–24px between
+groups. **No "no-scroll" mandate** — let content size to content and pages scroll;
+never stretch a card to viewport height around a few rows (that produces the dead-space
+voids the review flagged).
 
 ## Radius scale
 
 - `rounded-[10px]` — interactive controls: Button, Input, Select, Textarea.
-- `rounded-lg` (8px) — small/icon buttons, nav rows, inline chips.
-- `rounded-xl` (12px) — Cards and tab strips.
-- `rounded-2xl` (16px) — Modal panels (and chat bubbles).
+- `rounded-lg` (8px) — icon buttons, nav rows, inline chips.
+- `rounded-xl` (12px) — Cards, tab strips.
+- `rounded-2xl` (16px) — Modal panels, auth card, chat bubbles.
 - `rounded-full` — avatars, badges, pills.
-Never introduce other radius values. (One sanctioned exception: the auth hero card
-uses `rounded-[18px]` per the design handoff.)
+Never introduce other radius values.
 
 ## Component patterns (`src/components/ui.tsx` is the source of truth)
 
-- **Button**: `min-h-[var(--control-h)]` (34px), `px-3 py-1.5`, `text-sm font-semibold`,
-  variants primary/secondary/ghost/danger. Destructive actions use the `danger` variant
-  and are never visually dominant.
-- **Input/Select/Textarea**: same 34px control height; focus = `border-accent` +
-  3px `ring-accent-soft`. Compact variant (search-in-pane) overrides with
-  `!min-h-9 !py-1.5` and a leading `Search` icon at `left-2.5`.
-- **Card**: `border-line` + `shadow-card`, header `CardHeader` with `min-h-10`.
+- **Button**: `min-h-[var(--control-h)]`, `px-3.5`, `text-sm font-semibold`, variants
+  primary / secondary / ghost / danger. **One primary per surface** — destructive uses
+  `danger` and is never visually dominant. Secondary actions collapse into an
+  `IconButton` group or a `Menu` (overflow `⋯`), never a row of 4–5 equal buttons.
+- **IconButton / Menu**: icon-only actions carry an `aria-label` + tooltip and a
+  ≥38px hit area. Use `Menu` for secondary/overflow actions.
+- **Input / Select / Textarea**: 38px height; `bg-subtle`; focus = `border-accent` +
+  3px `ring-accent-soft`. `Select` renders a custom chevron (no raw native arrow).
+- **Card**: `border-line` + `shadow-card`, content-sized (never full-height filler).
+  `CardHeader` `min-h-11`, sentence-case header, optional single action link.
 - **Modal**: bottom-sheet on mobile (`rounded-t-2xl items-end`), centered on `sm+`;
-  focus-trapped; Escape closes.
-- **Avatar**: deterministic `hsl(hash 34% 42%)`, initials, sizes sm 24 / md 32 / lg 40.
-- **Unread**: `bg-accent` dot (or count badge in nav); bold row title. **Selected**:
-  `bg-accent-soft` (+ `text-accent-dark` for nav). **Pinned**: small `Pin` glyph.
-- **Empty/loading/error**: `EmptyState`, `.skeleton` shimmer blocks, `ErrorNote`.
+  focus-trapped; Escape closes; primary action in a sticky footer.
+- **Avatar**: deterministic `hsl(hash 52% 45%)`, initials, sizes sm 24 / md 32 / lg 40.
+  The current user is colored like everyone else (never a black/empty circle).
+- **Money**: `tnum`; when signed, pair color **and** an explicit `+ / −` and, in
+  balances, the word ("you're owed" / "you owe") — never color alone.
+- **Empty / loading / error**: `EmptyState`, `.skeleton` shimmer, `ErrorNote`.
 
 ## Interaction states
 
-- Hover: `hover:bg-paper` on rows, `hover:bg-accent-dark` on primary.
-- Focus: every interactive element must show a visible ring —
+- Hover: `hover:bg-subtle` on rows, `hover:bg-accent-dark` on primary.
+- Focus: every interactive element shows a visible ring —
   `focus-visible:ring-[3px] focus-visible:ring-accent-soft` (built into Button/inputs).
 - Disabled: `opacity-50 pointer-events-none`. Busy buttons show a spinner and disable.
 
 ## Layout shell
 
-- Desktop/tablet (`md+`): fixed 208px sidebar (logo, Add expense CTA, nav with unread
-  badges, theme toggle, profile) + `max-w-6xl` main column; main is `h-dvh` with panes
-  scrolling internally (no-scroll bias: summary screens must fit 1366×768 with zero
-  document scroll — verify with a screenshot before shipping layout changes).
-- Home is a three-column glance surface (Groups / Friends / Activity) over a KPI strip;
-  friend balances are visible without navigating to Balances.
-- Mobile: sticky top bar + 6-item bottom nav with safe-area padding; full-page flows.
-- Master-detail surfaces (Messages) use a left list pane (`md:w-80`) + detail pane
-  inside one Card; mobile shows list first, conversation full-screen with back arrow.
-- Switchers, not back-outs: group page title is a group-switcher dropdown; chat rows
-  switch in place.
+- Desktop/tablet (`md+`): fixed 216px sidebar (wordmark, single Add-expense CTA, nav
+  with unread badges, theme toggle, profile) + `max-w-5xl/6xl` main column. The sidebar
+  owns the persistent "Add expense" — pages don't duplicate a second primary of equal
+  weight.
+- Home is a glance surface: **one** hero net-balance number + a contextual next step,
+  then groups / friends / a short activity peek.
+- Mobile: sticky top bar + bottom nav with safe-area padding; full-page flows; primary
+  actions thumb-reachable. Headers never expose raw invite hashes or clip the title.
+- Master-detail (Messages): left list pane (`md:w-80`) + detail in one Card; desktop
+  auto-selects the most recent conversation; mobile shows list, then full-screen thread.
+- Switchers, not back-outs: group title is a switcher dropdown.
+
+## Content & copy rules
+
+- **Never show raw invite hashes.** Invites are a "Share invite" action (link + QR +
+  short human code). The 32-char token lives in the URL, never in the UI.
+- Omit empty filler: no "Uncategorized" segment when there's no category; no repeated
+  "USD" when everything is one currency.
+- One verb per concept: **"Settle up"** (not Settle/Payments mixed); nav "Chat",
+  scoped group tab "Group chat".
 
 ## Non-goals
 
-No decorative hero sections, no marketing styling, no novel one-off controls — reuse
-the patterns above or extend this file deliberately when a new pattern is needed.
+No texture, no serif in the UI, no decorative hero sections, no marketing styling, no
+row of competing CTAs, no novel one-off controls. Reuse the patterns above or extend
+this file deliberately when a new pattern is genuinely needed.
