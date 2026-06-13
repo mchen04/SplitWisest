@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler } from "@/lib/api";
+import { handler, intParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 
 // Cross-group expense search for the current user.
@@ -8,13 +8,13 @@ export const GET = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const q = req.nextUrl.searchParams;
   const text = q.get("q") || null;
-  const groupId = q.get("groupId") ? Number(q.get("groupId")) : null;
-  const categoryId = q.get("categoryId") ? Number(q.get("categoryId")) : null;
-  const payerId = q.get("payerId") ? Number(q.get("payerId")) : null;
-  const friendId = q.get("friendId") ? Number(q.get("friendId")) : null;
+  const groupId = intParam(q.get("groupId"));
+  const categoryId = intParam(q.get("categoryId"));
+  const payerId = intParam(q.get("payerId"));
+  const friendId = intParam(q.get("friendId"));
   const from = q.get("from") || null;
   const to = q.get("to") || null;
-  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 1000);
+  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 200);
 
   const rows = await sql`
     SELECT e.id, e.group_id, g.name AS group_name, e.title, e.amount_cents, e.currency,

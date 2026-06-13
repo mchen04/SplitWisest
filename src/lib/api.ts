@@ -49,3 +49,14 @@ export function forbidden(msg = "Not allowed"): never {
 export function badRequest(msg: string): never {
   throw new ApiError(msg, 400);
 }
+
+// Parse an integer query param. Returns null for absent/blank/non-integer input so
+// a malformed filter (e.g. ?categoryId=abc) is ignored instead of binding NaN into
+// a ::bigint cast and surfacing as an opaque 500.
+export function intParam(v: string | null): number | null {
+  if (v === null) return null;
+  const t = v.trim();
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isInteger(n) ? n : null;
+}

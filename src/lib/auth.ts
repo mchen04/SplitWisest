@@ -109,7 +109,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   const rows = await sql`
     SELECT u.id, u.username, u.display_name, u.invite_code
     FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.token = ${token} AND s.expires_at > now()`;
+    WHERE s.token = ${token} AND s.expires_at > now() AND u.deleted_at IS NULL`;
   if (rows.length === 0) return null;
   const r = rows[0];
   return {

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { sql } from "./db";
 import { computeShares, computeItemizedShares, fmtMoney, SplitMethod } from "./money";
 import { convert, CURRENCIES } from "./fx";
+import { currencyStep } from "./currencies";
 import { ApiError, badRequest, forbidden, notFound } from "./api";
 import { loadGroupMemberIds } from "./balances";
 import { activityData } from "./activity";
@@ -79,7 +80,14 @@ function validateExpenseShares(memberIds: Set<number>, input: ExpenseInput) {
       tipCents: input.itemizedTipCents,
     });
   } else {
-    shares = computeShares(input.splitMethod as SplitMethod, input.amountCents, input.participants);
+    // Zero-decimal currencies (JPY/KRW) have no sub-unit: snap the amount to a
+    // whole unit and split in whole units so no unsettleable sub-yen/sub-won
+    // share is produced. Mutating input.amountCents here keeps the stored amount,
+    // the FX conversion, and the share sum consistent (the same input object is
+    // used for storage and convert()). step === 1 leaves 2-decimal flows untouched.
+    const step = currencyStep(input.currency);
+    if (step !== 1) input.amountCents = Math.round(input.amountCents / step) * step;
+    shares = computeShares(input.splitMethod as SplitMethod, input.amountCents, input.participants, step);
   }
   return shares;
 }
@@ -514,6 +522,10 @@ export async function createRecurringExpenseWithActivity(
   }
 ): Promise<number> {
   await validateExpenseActors(groupId, user.id, body);
+  // Keep zero-decimal (JPY/KRW) recurring amounts on a whole unit so every
+  // materialized expense and its equal-split shares stay whole units.
+  const step = currencyStep(body.currency);
+  if (step !== 1) body.amountCents = Math.round(body.amountCents / step) * step;
   const summary = `${user.displayName} set up a ${body.cadence} recurring expense "${body.title}"`;
   const [, rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
@@ -581,6 +593,8 @@ export async function updateRecurringExpenseWithActivity(
   }
 ) {
   await validateExpenseActors(groupId, user.id, body);
+  const step = currencyStep(body.currency);
+  if (step !== 1) body.amountCents = Math.round(body.amountCents / step) * step;
   const summary = `${user.displayName} updated the recurring expense "${body.title}"`;
   const [, rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,

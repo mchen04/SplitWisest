@@ -40,7 +40,11 @@ export interface FriendBalance {
 async function accumulatePairBalances(userId: number, onlyFriendId?: number): Promise<Map<number, Record<string, number>>> {
   const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
 
-  const groupRows = await sql`
+  // The shared-group balances and the direct (group-less) settlements are
+  // independent reads — run them as one parallel level instead of a serial
+  // waterfall over the Neon HTTP driver.
+  const [groupRows, direct] = await Promise.all([
+    sql`
     WITH relevant_groups AS (
       SELECT g.id, g.currency
       FROM groups g
@@ -56,7 +60,15 @@ async function accumulatePairBalances(userId: number, onlyFriendId?: number): Pr
     SELECT rg.id AS group_id, rg.currency, b.user_id, b.display_name, b.net_cents AS net
     FROM relevant_groups rg
     CROSS JOIN LATERAL group_balance_rows(rg.id) b
-    ORDER BY rg.id, b.display_name, b.user_id`;
+    ORDER BY rg.id, b.display_name, b.user_id`,
+    sql`
+    SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
+    FROM settlements
+    WHERE group_id IS NULL
+      AND (payer_id = ${userId} OR recipient_id = ${userId})
+      AND (${onlyFriendId ?? null}::bigint IS NULL OR payer_id = ${onlyFriendId ?? null} OR recipient_id = ${onlyFriendId ?? null})
+    GROUP BY payer_id, recipient_id, currency`,
+  ]);
 
   const byGroup = new Map<number, { currency: string; balances: MemberBalance[] }>();
   for (const row of groupRows) {
@@ -82,13 +94,6 @@ async function accumulatePairBalances(userId: number, onlyFriendId?: number): Pr
     }
   }
 
-  const direct = await sql`
-    SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
-    FROM settlements
-    WHERE group_id IS NULL
-      AND (payer_id = ${userId} OR recipient_id = ${userId})
-      AND (${onlyFriendId ?? null}::bigint IS NULL OR payer_id = ${onlyFriendId ?? null} OR recipient_id = ${onlyFriendId ?? null})
-    GROUP BY payer_id, recipient_id, currency`;
   for (const s of direct) {
     const friendId = Number(s.payer_id) === userId ? Number(s.recipient_id) : Number(s.payer_id);
     const signed = Number(s.payer_id) === userId ? Number(s.amt) : -Number(s.amt);

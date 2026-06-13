@@ -3,6 +3,7 @@ import { z } from "zod";
 import { sql } from "@/lib/db";
 import { handler, badRequest } from "@/lib/api";
 import { requireUser, hashPassword, verifyPassword, revokeOtherSessions } from "@/lib/auth";
+import { assertAuthRateLimit, clearAuthRateLimit } from "@/lib/rate-limit";
 
 const Body = z.object({
   currentPassword: z.string().min(1, "Current password is required"),
@@ -13,6 +14,9 @@ const Body = z.object({
 // Other sessions are revoked; the caller's own session is preserved.
 export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
+  // Rate-limit currentPassword guessing so a stolen session can't be escalated to
+  // a full password takeover faster than the login flow allows (keyed on user id).
+  await assertAuthRateLimit(req, "password", String(user.id));
   const { currentPassword, newPassword } = Body.parse(await req.json());
   const rows = await sql`SELECT password_hash FROM users WHERE id = ${user.id}`;
   if (rows.length === 0 || !verifyPassword(currentPassword, rows[0].password_hash)) {
@@ -20,5 +24,6 @@ export const POST = handler(async (req: NextRequest) => {
   }
   await sql`UPDATE users SET password_hash = ${hashPassword(newPassword)} WHERE id = ${user.id}`;
   await revokeOtherSessions(user.id);
+  await clearAuthRateLimit("password", String(user.id));
   return NextResponse.json({ ok: true });
 });

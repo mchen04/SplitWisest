@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler } from "@/lib/api";
+import { handler, intParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { createExpenseWithActivity, ExpenseBody } from "@/lib/expenses";
 import { parseGroupId, requireGroupMember } from "@/lib/groups";
@@ -15,13 +15,13 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
 
   const q = req.nextUrl.searchParams;
   const text = q.get("q") || null;
-  const categoryId = q.get("categoryId") ? Number(q.get("categoryId")) : null;
-  const payerId = q.get("payerId") ? Number(q.get("payerId")) : null;
+  const categoryId = intParam(q.get("categoryId"));
+  const payerId = intParam(q.get("payerId"));
   const from = q.get("from") || null;
   const to = q.get("to") || null;
   // Pagination: bounded page (default 50, max 200) with offset. Fetch one extra
   // row to tell the client whether more pages remain.
-  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 1000);
+  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 200);
   const offset = Math.max(Number(q.get("offset")) || 0, 0);
 
   const rows = await sql`
@@ -30,10 +30,19 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
       p.display_name AS payer_name, c.name AS category_name, c.icon AS category_icon,
       (SELECT COUNT(*) FROM attachments a WHERE a.expense_id = e.id) AS attachment_count,
-      (SELECT json_agg(json_build_object('userId', es.user_id, 'shareCents', es.share_cents,
-        'convertedShareCents', CASE WHEN e.amount_cents = 0 THEN 0
-          ELSE ROUND(es.share_cents::numeric * e.converted_cents / e.amount_cents) END))
-        FROM expense_shares es WHERE es.expense_id = e.id) AS shares
+      (SELECT json_agg(json_build_object('userId', a.user_id, 'shareCents', a.share_cents,
+        'convertedShareCents', a.converted_share_cents))
+        FROM (
+          -- Per-expense largest-remainder allocation so displayed converted shares
+          -- sum EXACTLY to converted_cents (matches group_balance_rows()).
+          SELECT es.user_id, es.share_cents,
+            (div(es.share_cents::numeric * e.converted_cents, e.amount_cents)
+              + CASE WHEN row_number() OVER (
+                    ORDER BY mod(es.share_cents::numeric * e.converted_cents, e.amount_cents) DESC, es.user_id)
+                  <= e.converted_cents - sum(div(es.share_cents::numeric * e.converted_cents, e.amount_cents)) OVER ()
+                THEN 1 ELSE 0 END)::bigint AS converted_share_cents
+          FROM expense_shares es WHERE es.expense_id = e.id
+        ) a) AS shares
     FROM expenses e
     JOIN users p ON p.id = e.payer_id
     LEFT JOIN categories c ON c.id = e.category_id

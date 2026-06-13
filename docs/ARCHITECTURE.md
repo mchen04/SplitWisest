@@ -16,14 +16,15 @@
 ## Money
 
 - All amounts are integer cents. Splits use floor + largest-remainder distribution so shares always sum exactly to the total (`src/lib/money.ts`, covered by Vitest).
-- Each expense stores `amount_cents` in its own currency plus `converted_cents` in the group currency, converted at entry time (`fx_rate` snapshot). Later rate changes never alter recorded balances.
-- Group balance per member = paid − owed + settlements paid − settlements received, all in group currency. Share conversion rounding drift (a few cents at most) is absorbed into the largest balance so nets always sum to zero.
+- Each expense stores `amount_cents` in its own currency plus `converted_cents` in the group currency, converted at entry time (`fx_rate` snapshot). Later rate changes never alter recorded balances. `getRatesPerUsd` merges the static fallback under cached/live rates so a code missing from the upstream feed still resolves instead of failing conversion.
+- Zero-decimal currencies (JPY/KRW) have no minor unit: amounts are snapped to whole units at entry and in `convert()`, and splits distribute whole units, so a share is never an unpayable fraction of a yen/won. Exact splits reject fractional-cent inputs rather than silently rounding.
+- Group balance per member = paid − owed + settlements paid − settlements received, all in group currency, computed by the `group_balance_rows(group_id)` SQL function. The owed side allocates each expense's `converted_cents` across its shares with a per-expense largest-remainder pass (exact integer `div`/`mod`), so converted shares sum exactly to the expense total and no cross-currency rounding residual is misattributed to one member; a whole-group residual-absorption step remains as a defensive backstop. The invariant `SUM(share_cents) = amount_cents` is enforced at the DB by a deferred constraint trigger.
 - Debt simplification (`simplifyDebts`) greedily matches largest debtor to largest creditor, yielding ≤ n−1 transfers.
 - Friend balances mirror the app's simplified settle-up suggestions across shared groups, plus direct settlements, reported per currency without cross-currency netting. Pair balances are aggregated across all relevant groups in one set-based query before per-group debt simplification, avoiding one full balance query per shared group.
 
 ## Settlements
 
-Settlements are ledger rows only (payer, recipient, amount, date, note) — no money movement. Group settlements convert to group currency; direct friend settlements stay in their own currency. Mutating a direct settlement requires being a payer or recipient; mutating a group settlement requires current group membership plus being the payer, recipient, or creator.
+Settlements are ledger rows only (payer, recipient, amount, date, note) — no money movement. Group settlements convert to group currency; direct friend settlements stay in their own currency. Recording any settlement (group or direct) requires the actor to be the payer or recipient, so a member can't fabricate a payment between two other people. Mutating a direct settlement requires being a payer or recipient; mutating a group settlement requires current group membership plus being the payer, recipient, or creator.
 
 ## Activity visibility
 
@@ -31,11 +32,11 @@ Group activity is visible through group membership. User-scoped activity, such a
 
 ## Attachments
 
-Receipt uploads are limited to images/PDFs under 4 MB. Stored filenames are canonicalized to remove path separators, quotes, and control characters; downloads emit a safe `Content-Disposition` header with both `filename` and `filename*`.
+Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byte signature (not just the declared MIME), so a script payload posing as an image is rejected at upload. Stored filenames are canonicalized to remove path separators, quotes, and control characters; downloads emit a safe `Content-Disposition` header with both `filename` and `filename*`, are served inline for in-app preview, and carry `X-Content-Type-Options: nosniff` so the browser can't MIME-sniff one into executable HTML.
 
 ## Realtime
 
-`GET /api/sync` returns visible cursors for activity, messages, nudges, and friend requests, plus unread counts for messages, activity, nudges, requests, and the aggregate Balances badge. The client polls every 4s (16s when the tab is hidden) via `useSync`; when any cursor advances, affected views refetch and chat panes fetch messages `since` their last id. Activity and message scopes clear through `read_state`; nudges clear via `seen_at`; friend requests clear when accepted/declined/canceled. No websockets — reliable on serverless, no connection state to break.
+`GET /api/sync` returns visible cursors for activity, messages, nudges, and friend requests, plus unread counts for messages, activity, nudges, requests, and the aggregate Balances badge — all in a single query (cursors computed in a CTE and reused by the unread expressions). The client polls every 4s (16s when the tab is hidden) via `useSync`; when any cursor advances, affected views refetch and chat panes fetch messages `since` their last id. Activity and message scopes clear through `read_state`; nudges clear via `seen_at`; friend requests clear when accepted/declined/canceled. No websockets — reliable on serverless, no connection state to break.
 
 ## Chat
 
@@ -49,6 +50,14 @@ Receipt uploads are limited to images/PDFs under 4 MB. Stored filenames are cano
 
 The design system is codified in `.interface-design/system.md` and ships from a single source of truth: the design tokens in `src/app/globals.css` (`@theme`). The direction is modern/clean/minimal — flat, cool-neutral surfaces (no texture), one sans typeface (Instrument Sans) for all UI and money with tabular figures, the serif (Fraunces) reserved only for the wordmark, and a restrained green accent with money semantics (`owed`/`owe`) kept distinct from the brand and from `danger`. Two palettes share the same token names: light is the default; dark is defined under `[data-theme="dark"]`, which overrides the `--color-*` tokens (and `--shadow-*`, skeleton) so every `bg-paper`/`text-ink`/`bg-accent` utility flips automatically — no per-component dark variants. In dark mode cards lift above the canvas (depth comes from a surface-lightness step, not shadows). Accent and danger backgrounds use dedicated `--color-on-accent` / `--color-on-danger` foreground tokens so text stays legible in both themes. `src/lib/theme.tsx` exposes `useTheme()` (toggle wired into the sidebar, mobile header, and Settings → Appearance) and `themeInitScript`, an inline `<head>` script that applies the saved theme (or the OS `prefers-color-scheme`) before first paint to avoid a flash. The choice persists in `localStorage`.
 
+## Performance
+
+Over the Neon HTTP driver every `sql` tagged-template is its own network round-trip, so read paths are shaped to minimize both round-trips and full-table scans:
+
+- The hot money tables carry secondary indexes (see `docs/DATABASE.md`), so `group_balance_rows()` index-scans one group instead of sequentially scanning all expenses/settlements.
+- The dashboard group list folds each group's balance into one `LEFT JOIN LATERAL group_balance_rows()` query (no per-group N+1); `/api/sync` is a single query; `/api/friends`, `/api/conversations`, and the person profile run their mutually-independent reads with `Promise.all`.
+- List endpoints (expenses, settlements) are capped at 200 rows, and malformed numeric query params are ignored rather than turned into errors.
+
 ## Deployment
 
-Vercel serverless. Neon over HTTP (`@neondatabase/serverless`), so write paths prefer single-statement CTEs where atomicity matters and otherwise order writes so a mid-sequence failure leaves either a complete record or a cleanly absent one.
+Vercel serverless. Neon over HTTP (`@neondatabase/serverless`), so write paths prefer single-statement CTEs where atomicity matters and otherwise order writes so a mid-sequence failure leaves either a complete record or a cleanly absent one. Run `scripts/migrate.ts` before deploying new code (it is idempotent and ledger-gated; the code depends on columns/indexes it adds).

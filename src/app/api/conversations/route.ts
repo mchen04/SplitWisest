@@ -9,7 +9,10 @@ import { requireUser } from "@/lib/auth";
 export const GET = handler(async () => {
   const user = await requireUser();
 
-  const groupRows = await sql`
+  // Group-chat and DM-chat lists are independent (both only need user.id) — fetch
+  // them concurrently instead of back-to-back.
+  const [groupRows, dmRows] = await Promise.all([
+    sql`
     SELECT g.id, g.name,
       (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) AS member_count,
       lm.id AS last_id, lm.body AS last_body, lm.created_at AS last_at,
@@ -25,9 +28,8 @@ export const GET = handler(async () => {
       WHERE m.channel = 'group' AND m.group_id = g.id
       ORDER BY m.id DESC LIMIT 1
     ) lm ON TRUE
-    LEFT JOIN users lu ON lu.id = lm.sender_id`;
-
-  const dmRows = await sql`
+    LEFT JOIN users lu ON lu.id = lm.sender_id`,
+    sql`
     SELECT u.id, u.display_name, u.username,
       lm.id AS last_id, lm.body AS last_body, lm.created_at AS last_at,
       lu.display_name AS last_sender, lm.sender_id AS last_sender_id,
@@ -44,7 +46,8 @@ export const GET = handler(async () => {
       ORDER BY m.id DESC LIMIT 1
     ) lm ON TRUE
     LEFT JOIN users lu ON lu.id = lm.sender_id
-    WHERE f.user_a = ${user.id} OR f.user_b = ${user.id}`;
+    WHERE f.user_a = ${user.id} OR f.user_b = ${user.id}`,
+  ]);
 
   const conversations = [
     ...groupRows.map((g) => ({

@@ -3,6 +3,7 @@ import { sql } from "@/lib/db";
 import { handler } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { parseGroupId, requireGroupMember } from "@/lib/groups";
+import { currencyFractionDigits } from "@/lib/currencies";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -33,9 +34,9 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
     lines.push([
       r.expense_date,
       csvCell(r.title),
-      (Number(r.amount_cents) / 100).toFixed(2),
+      (Number(r.amount_cents) / 100).toFixed(currencyFractionDigits(r.currency as string)),
       r.currency,
-      (Number(r.converted_cents) / 100).toFixed(2),
+      (Number(r.converted_cents) / 100).toFixed(currencyFractionDigits(group.currency)),
       csvCell(r.payer),
       csvCell(r.category ?? ""),
       r.split_method,

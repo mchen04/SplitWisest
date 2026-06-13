@@ -45,6 +45,10 @@ export async function recordGroupSettlement(
     note: string;
   }
 ): Promise<{ id: number; updatedAt: string }> {
+  // The recorder must be a party to the payment. Without this, any group member
+  // could fabricate/alter a settlement between two OTHER members and silently
+  // shift their money-bearing balance (mirrors the guard in recordDirectSettlement).
+  if (createdBy !== body.payerId && createdBy !== body.recipientId) forbidden("You can't record this settlement");
   const { cents: convertedCents } = await convert(body.amountCents, body.currency, groupCurrency);
   const summary = await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency);
   const [, rows] = await sql.transaction((tx) => [

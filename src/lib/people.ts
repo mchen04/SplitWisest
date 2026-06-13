@@ -53,8 +53,12 @@ export interface PersonProfile {
 }
 
 export async function loadPersonProfile(viewerId: number, personId: number): Promise<PersonProfile | null> {
-  const users = await sql`
-    SELECT id, display_name, username FROM users WHERE id = ${personId}`;
+  // The user row and the relationship both depend only on the two ids — load them
+  // in parallel instead of serially.
+  const [users, rel] = await Promise.all([
+    sql`SELECT id, display_name, username FROM users WHERE id = ${personId}`,
+    loadRelationship(viewerId, personId),
+  ]);
   if (users.length === 0) return null;
 
   const person = {
@@ -63,7 +67,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     username: users[0].username,
   };
 
-  const { relationship, isSelf, isFriend, request, sharedGroups, capabilities } = await loadRelationship(viewerId, personId);
+  const { relationship, isSelf, isFriend, request, sharedGroups, capabilities } = rel;
 
   if (relationship === "none") return null;
 
@@ -84,10 +88,13 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     };
   }
 
-  const netByCurrency = isSelf ? {} : await pairwiseFriendBalance(viewerId, personId);
   const groupIds = sharedGroups.map((g) => Number(g.id));
 
-  const recentExpenses = groupIds.length === 0 ? [] : await sql`
+  // Pairwise balance, recent shared expenses, and settlement history are mutually
+  // independent once the shared-group set is known — fetch them concurrently.
+  const [netByCurrency, recentExpenses, recentPayments] = await Promise.all([
+    isSelf ? Promise.resolve({} as Record<string, number>) : pairwiseFriendBalance(viewerId, personId),
+    groupIds.length === 0 ? Promise.resolve([] as Record<string, unknown>[]) : sql`
     SELECT e.id, e.group_id, g.name AS group_name, e.title, e.converted_cents, g.currency,
       e.expense_date, e.payer_id, p.display_name AS payer_name
     FROM expenses e
@@ -102,9 +109,9 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
         )
       )
     ORDER BY e.expense_date DESC, e.id DESC
-    LIMIT 20`;
-
-  const recentPayments = await loadVisibleSettlementHistory({ viewerId, personId, isSelf, isFriend, groupIds });
+    LIMIT 20`,
+    loadVisibleSettlementHistory({ viewerId, personId, isSelf, isFriend, groupIds }),
+  ]);
 
   return {
     person,

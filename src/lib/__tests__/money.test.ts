@@ -51,6 +51,31 @@ describe("splitExact", () => {
   it("rejects negative shares", () => {
     expect(() => splitExact(100, [{ userId: 1, value: -50 }, { userId: 2, value: 150 }])).toThrow();
   });
+  it("rejects fractional-cent exact amounts instead of silently rounding", () => {
+    expect(() =>
+      splitExact(21, [{ userId: 1, value: 10.5 }, { userId: 2, value: 10.5 }])
+    ).toThrow();
+  });
+});
+
+describe("zero-decimal currencies (step = 100, JPY/KRW)", () => {
+  const whole = (m: Map<number, number>) => [...m.values()].every((v) => v % 100 === 0);
+  it("splits equally in whole units with no sub-yen share", () => {
+    // ¥15 between two people => ¥8 + ¥7 (stored as 800 + 700), never ¥7.50.
+    const m = splitEqual(1500, [1, 2], 100);
+    expect([...m.values()].sort((a, b) => a - b)).toEqual([700, 800]);
+    expect(sum(m)).toBe(1500);
+    expect(whole(m)).toBe(true);
+  });
+  it("splits by shares in whole units summing exactly", () => {
+    const m = splitShares(1000, [{ userId: 1, value: 1 }, { userId: 2, value: 1 }, { userId: 3, value: 1 }], 100);
+    expect(sum(m)).toBe(1000);
+    expect(whole(m)).toBe(true);
+  });
+  it("accepts whole-unit exact amounts and rejects sub-unit ones", () => {
+    expect(sum(splitExact(1500, [{ userId: 1, value: 700 }, { userId: 2, value: 800 }], 100))).toBe(1500);
+    expect(() => splitExact(1500, [{ userId: 1, value: 750 }, { userId: 2, value: 750 }], 100)).toThrow();
+  });
 });
 
 describe("splitPercentage", () => {

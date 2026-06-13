@@ -12,24 +12,35 @@ export interface SplitInput {
   value?: number;
 }
 
-export function splitEqual(totalCents: number, userIds: number[]): Map<number, number> {
+// `step` is the currency's smallest representable unit in stored cents (1 for
+// 2-decimal currencies, 100 for zero-decimal JPY/KRW). Splits distribute whole
+// `step` increments so a JPY split never produces an unpayable sub-yen share.
+// step defaults to 1, leaving all 2-decimal behavior unchanged.
+export function splitEqual(totalCents: number, userIds: number[], step = 1): Map<number, number> {
   if (userIds.length === 0) invalidInput("No participants");
-  const base = Math.floor(totalCents / userIds.length);
-  let remainder = totalCents - base * userIds.length;
+  const units = Math.round(totalCents / step);
+  const base = Math.floor(units / userIds.length);
+  let remainder = units - base * userIds.length;
   const out = new Map<number, number>();
   for (const id of userIds) {
-    out.set(id, base + (remainder > 0 ? 1 : 0));
+    out.set(id, (base + (remainder > 0 ? 1 : 0)) * step);
     if (remainder > 0) remainder--;
   }
   return out;
 }
 
-export function splitExact(totalCents: number, inputs: SplitInput[]): Map<number, number> {
+export function splitExact(totalCents: number, inputs: SplitInput[], step = 1): Map<number, number> {
   if (inputs.length === 0) throw new Error("No participants");
   const out = new Map<number, number>();
   let sum = 0;
   for (const { userId, value } of inputs) {
-    const cents = Math.round(value ?? 0);
+    const cents = value ?? 0;
+    // Exact amounts must be whole representable units — reject fractional cents
+    // (previously silently rounded, which could flip the add-up check) and, for
+    // zero-decimal currencies, reject sub-unit amounts.
+    if (!Number.isInteger(cents) || cents % step !== 0) {
+      invalidInput(step === 1 ? "Exact amounts must be whole cents" : "Exact amounts must be whole units for this currency");
+    }
     if (cents < 0) invalidInput("Negative share");
     out.set(userId, cents);
     sum += cents;
@@ -40,7 +51,7 @@ export function splitExact(totalCents: number, inputs: SplitInput[]): Map<number
   return out;
 }
 
-export function splitPercentage(totalCents: number, inputs: SplitInput[]): Map<number, number> {
+export function splitPercentage(totalCents: number, inputs: SplitInput[], step = 1): Map<number, number> {
   if (inputs.length === 0) invalidInput("No participants");
   if (inputs.some((i) => (i.value ?? 0) < 0)) invalidInput("Percentages must be positive");
   const totalPct = inputs.reduce((s, i) => s + (i.value ?? 0), 0);
@@ -49,35 +60,39 @@ export function splitPercentage(totalCents: number, inputs: SplitInput[]): Map<n
   }
   return distributeProportional(
     totalCents,
-    inputs.map((i) => ({ userId: i.userId, weight: i.value ?? 0 }))
+    inputs.map((i) => ({ userId: i.userId, weight: i.value ?? 0 })),
+    step
   );
 }
 
-export function splitShares(totalCents: number, inputs: SplitInput[]): Map<number, number> {
+export function splitShares(totalCents: number, inputs: SplitInput[], step = 1): Map<number, number> {
   if (inputs.length === 0) invalidInput("No participants");
   if (inputs.some((i) => (i.value ?? 0) < 0)) invalidInput("Shares must be positive");
   const totalShares = inputs.reduce((s, i) => s + (i.value ?? 0), 0);
   if (totalShares <= 0) invalidInput("Total shares must be positive");
   return distributeProportional(
     totalCents,
-    inputs.map((i) => ({ userId: i.userId, weight: i.value ?? 0 }))
+    inputs.map((i) => ({ userId: i.userId, weight: i.value ?? 0 })),
+    step
   );
 }
 
-// Largest-remainder method: floor each proportional share, then hand out the
-// leftover cents to the largest fractional remainders.
+// Largest-remainder method: floor each proportional share (in whole `step`
+// units), then hand out the leftover units to the largest fractional remainders.
 function distributeProportional(
   totalCents: number,
-  weights: { userId: number; weight: number }[]
+  weights: { userId: number; weight: number }[],
+  step = 1
 ): Map<number, number> {
   const totalWeight = weights.reduce((s, w) => s + w.weight, 0);
   if (totalWeight <= 0) invalidInput("Total weight must be positive");
+  const totalUnits = Math.round(totalCents / step);
   const rows = weights.map(({ userId, weight }) => {
-    const raw = (totalCents * weight) / totalWeight;
+    const raw = (totalUnits * weight) / totalWeight;
     const floor = Math.floor(raw);
     return { userId, floor, frac: raw - floor };
   });
-  let leftover = totalCents - rows.reduce((s, r) => s + r.floor, 0);
+  let leftover = totalUnits - rows.reduce((s, r) => s + r.floor, 0);
   const byFrac = [...rows].sort((a, b) => b.frac - a.frac);
   const bonus = new Map<number, number>();
   for (const r of byFrac) {
@@ -85,24 +100,25 @@ function distributeProportional(
     if (leftover > 0) leftover--;
   }
   const out = new Map<number, number>();
-  for (const r of rows) out.set(r.userId, r.floor + (bonus.get(r.userId) ?? 0));
+  for (const r of rows) out.set(r.userId, (r.floor + (bonus.get(r.userId) ?? 0)) * step);
   return out;
 }
 
 export function computeShares(
   method: SplitMethod,
   totalCents: number,
-  inputs: SplitInput[]
+  inputs: SplitInput[],
+  step = 1
 ): Map<number, number> {
   switch (method) {
     case "equal":
-      return splitEqual(totalCents, inputs.map((i) => i.userId));
+      return splitEqual(totalCents, inputs.map((i) => i.userId), step);
     case "exact":
-      return splitExact(totalCents, inputs);
+      return splitExact(totalCents, inputs, step);
     case "percentage":
-      return splitPercentage(totalCents, inputs);
+      return splitPercentage(totalCents, inputs, step);
     case "shares":
-      return splitShares(totalCents, inputs);
+      return splitShares(totalCents, inputs, step);
     case "itemized":
       // itemized expenses compute shares from items; handled by caller
       invalidInput("Itemized shares are computed from items");

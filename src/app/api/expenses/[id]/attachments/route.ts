@@ -3,7 +3,7 @@ import { sql } from "@/lib/db";
 import { handler, notFound, forbidden, badRequest } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { isGroupMember } from "@/lib/balances";
-import { safeAttachmentFilename } from "@/lib/attachments";
+import { safeAttachmentFilename, attachmentBytesMatchMime } from "@/lib/attachments";
 import { insertExpenseAttachment } from "@/lib/attachment-writes";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -26,6 +26,7 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   if (file.size > MAX_BYTES) badRequest("File too large (max 4 MB)");
 
   const buf = Buffer.from(await file.arrayBuffer());
+  if (!attachmentBytesMatchMime(buf, file.type)) badRequest("File content does not match its type");
   const filename = safeAttachmentFilename(file.name);
   const insertedId = await insertExpenseAttachment({
     expenseId: id,

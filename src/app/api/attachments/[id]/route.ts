@@ -34,6 +34,9 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
       "Content-Type": a.mime,
       "Content-Disposition": attachmentContentDisposition(a.filename),
       "Cache-Control": "private, max-age=3600",
+      // Receipts are served inline for in-app preview; stop the browser from
+      // MIME-sniffing a mislabeled upload into executable HTML (stored-XSS guard).
+      "X-Content-Type-Options": "nosniff",
     },
   });
 });

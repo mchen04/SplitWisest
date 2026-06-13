@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { handler } from "@/lib/api";
 import { requireUser, newRecoveryCode, hashRecoveryCode } from "@/lib/auth";
+import { assertAuthRateLimit } from "@/lib/rate-limit";
 
 const CODE_COUNT = 8;
 
@@ -14,8 +15,11 @@ export const GET = handler(async () => {
 
 // Regenerate the full set. Invalidates any prior codes and returns the fresh
 // plaintext codes ONCE — they are never retrievable again.
-export const POST = handler(async () => {
+export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
+  // Cap regeneration so an attacker holding a session can't spam-rotate (and thus
+  // invalidate) the victim's printed recovery codes (keyed on user id).
+  await assertAuthRateLimit(req, "recovery", String(user.id));
   const codes = Array.from({ length: CODE_COUNT }, () => newRecoveryCode());
   const rows = codes.map((code) => ({ code_hash: hashRecoveryCode(code) }));
   await sql.transaction((tx) => [
