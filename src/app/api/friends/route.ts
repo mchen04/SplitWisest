@@ -30,16 +30,16 @@ export const GET = handler(async () => {
     FROM friendships f
     JOIN users u ON u.id = CASE WHEN f.user_a = ${user.id} THEN f.user_b ELSE f.user_a END
     WHERE f.user_a = ${user.id} OR f.user_b = ${user.id}
-    ORDER BY u.display_name`,
+    ORDER BY u.display_name LIMIT 1000`,
     friendBalances(user.id),
     sql`
     SELECT fr.id, u.id AS user_id, u.display_name, u.username, fr.created_at
     FROM friend_requests fr JOIN users u ON u.id = fr.from_id
-    WHERE fr.to_id = ${user.id} ORDER BY fr.id DESC`,
+    WHERE fr.to_id = ${user.id} ORDER BY fr.id DESC LIMIT 500`,
     sql`
     SELECT fr.id, u.id AS user_id, u.display_name, u.username, fr.created_at
     FROM friend_requests fr JOIN users u ON u.id = fr.to_id
-    WHERE fr.from_id = ${user.id} ORDER BY fr.id DESC`,
+    WHERE fr.from_id = ${user.id} ORDER BY fr.id DESC LIMIT 500`,
   ]);
   const balanceByFriend = new Map(balances.map((b) => [b.friendId, b.netByCurrency]));
 

@@ -42,24 +42,26 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Everything else (pages, icons): network-first so behavior matches the live app,
-  // falling back to cache / offline page when the network is down.
+  // Everything else: network-first so behavior matches the live app. We deliberately
+  // do NOT cache navigation HTML — a cached app shell can reference a previous
+  // deploy's chunk hashes and fail a dynamic import after an update; offline
+  // navigations fall back to the precached offline page instead. Only icons are
+  // cached (immutable enough, and used by the manifest/install UI).
   event.respondWith(
     fetch(request)
       .then((res) => {
-        if (res.ok && (request.mode === "navigate" || url.pathname.startsWith("/icon"))) {
+        if (res.ok && url.pathname.startsWith("/icon")) {
           const copy = res.clone();
           caches.open(CACHE).then((cache) => cache.put(request, copy));
         }
         return res;
       })
       .catch(async () => {
-        const cached = await caches.match(request);
-        if (cached) return cached;
         if (request.mode === "navigate") {
           return caches.match(OFFLINE_URL);
         }
-        return Response.error();
+        const cached = await caches.match(request);
+        return cached || Response.error();
       })
   );
 });

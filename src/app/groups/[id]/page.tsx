@@ -115,6 +115,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       await api(`/api/expenses/${deleting.id}?expectedUpdatedAt=${encodeURIComponent(deleting.updatedAt)}`, { method: "DELETE" });
       setDeleting(null);
       refreshAll();
+    } catch (err) {
+      // A concurrent edit (stale version → 400), a delete by another member (404),
+      // or a network error must surface — otherwise the modal just sits there.
+      window.alert(err instanceof ApiClientError ? err.message : "Could not delete this expense");
+      refreshAll();
     } finally {
       setDeleteBusy(false);
     }

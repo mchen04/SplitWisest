@@ -2,15 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Paperclip, Plus } from "lucide-react";
-import { api, apiCached, ApiClientError, fmtMoney, todayStr, CURRENCIES } from "@/lib/client";
+import { api, apiCached, ApiClientError, fmtMoney, todayStr, CURRENCIES, amountInputToCents } from "@/lib/client";
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
 import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
 
 const CALIFORNIA_TAX_RATE = "7.25";
 
+// Comma-decimal aware (so a "12,34" locale entry isn't truncated to 12 by parseFloat).
 function amountToCents(value: string): number {
-  const n = Math.round(parseFloat(value || "0") * 100);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  return amountInputToCents(value) ?? 0;
 }
 
 export interface Member {
@@ -182,7 +182,7 @@ export function ExpenseForm({
   const splitStatus = useMemo(() => {
     if (method === "equal" || effectiveAmountCents === 0) return null;
     if (method === "exact") {
-      const sum = participantList.reduce((s, m) => s + Math.round(parseFloat(values[m.id] || "0") * 100), 0);
+      const sum = participantList.reduce((s, m) => s + (amountInputToCents(values[m.id] || "0") ?? 0), 0);
       const diff = amountCents - sum;
       return diff === 0
         ? { ok: true, msg: "Amounts match the total" }
@@ -242,7 +242,7 @@ export function ExpenseForm({
         method === "equal"
           ? undefined
           : method === "exact"
-            ? Math.round(parseFloat(values[m.id] || "0") * 100)
+            ? amountInputToCents(values[m.id] || "0") ?? 0
             : parseFloat(values[m.id] || "0") || 0,
     }));
   }
@@ -270,7 +270,7 @@ export function ExpenseForm({
         method === "itemized"
           ? items.map((i) => ({
               name: i.name.trim() || "Item",
-              amountCents: Math.round(parseFloat(i.amount || "0") * 100),
+              amountCents: amountInputToCents(i.amount || "0") ?? 0,
               participantIds: i.participantIds,
             }))
           : undefined,

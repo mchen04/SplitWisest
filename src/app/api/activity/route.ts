@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler } from "@/lib/api";
+import { handler, intParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { activityActionText } from "@/lib/activity";
 
 export const GET = handler(async (req: NextRequest) => {
   const user = await requireUser();
-  const since = Number(req.nextUrl.searchParams.get("since") ?? 0);
   const q = req.nextUrl.searchParams;
-  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 1000);
-  const offset = Math.max(Number(q.get("offset")) || 0, 0);
+  // Guard cursor/paging params so a malformed ?since=abc is ignored rather than
+  // binding NaN into the id comparison (empty result / opaque 500).
+  const since = intParam(q.get("since")) ?? 0;
+  const limit = Math.min(Math.max(intParam(q.get("limit")) ?? 50, 1), 200);
+  const offset = Math.max(intParam(q.get("offset")) ?? 0, 0);
   const rows = await sql`
     SELECT a.id, a.group_id, g.name AS group_name, a.actor_id, u.display_name AS actor_name,
       a.type, a.summary, a.data, a.created_at

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "@/lib/db";
-import { handler, badRequest, forbidden } from "@/lib/api";
+import { handler, badRequest, forbidden, intParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { recordDirectSettlement, settlementFields } from "@/lib/settlements";
 import { canSettleDirectly } from "@/lib/relationships";
@@ -11,8 +11,7 @@ import { versionToken } from "@/lib/versions";
 // narrowed to a single friend. Group settlements are listed per-group instead.
 export const GET = handler(async (req: NextRequest) => {
   const user = await requireUser();
-  const friendIdParam = req.nextUrl.searchParams.get("friendId");
-  const friendId = friendIdParam ? Number(friendIdParam) : null;
+  const friendId = intParam(req.nextUrl.searchParams.get("friendId"));
   const rows = await sql`
     SELECT s.id, s.payer_id, s.recipient_id, s.amount_cents, s.currency, s.settled_date, s.note, s.updated_at,
       to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,

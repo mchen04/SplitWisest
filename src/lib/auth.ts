@@ -29,11 +29,13 @@ export function newToken(): string {
   return randomBytes(32).toString("hex");
 }
 
-// Recovery codes are short, human-typable, and shown to the user exactly once.
-// We store only their scrypt hash, so a DB leak can't reveal them.
+// Recovery codes are human-typable and shown to the user exactly once. We store
+// only their scrypt hash, so a DB leak can't reveal them. 64 bits of entropy
+// (16 hex chars, grouped) keeps them infeasible to guess even though the recover
+// endpoint is only throttled by the shared per-account auth rate limit.
 export function newRecoveryCode(): string {
-  const raw = randomBytes(5).toString("hex").toUpperCase(); // 10 hex chars
-  return `${raw.slice(0, 5)}-${raw.slice(5)}`;
+  const raw = randomBytes(8).toString("hex").toUpperCase(); // 16 hex chars = 64 bits
+  return raw.replace(/(.{4})(?=.)/g, "$1-"); // XXXX-XXXX-XXXX-XXXX
 }
 
 export function hashRecoveryCode(code: string): string {

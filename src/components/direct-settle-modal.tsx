@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, fmtMoney, todayStr, useFormState } from "@/lib/client";
+import { api, fmtMoney, todayStr, useFormState, amountInputToCents } from "@/lib/client";
 import { Button, ErrorNote, Field, Modal, Select } from "./ui";
 import { SettleFields } from "./settle-fields";
 
@@ -47,8 +47,8 @@ function DirectSettleForm({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const amountCents = Math.round(parseFloat(amount || "0") * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
+    const amountCents = amountInputToCents(amount) ?? 0;
+    if (amountCents <= 0) return setError("Enter a positive amount");
     run(async () => {
       if (existing) {
         await api(`/api/settlements/${existing.id}`, {
@@ -94,7 +94,7 @@ function DirectSettleForm({
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
           <Button type="submit" busy={busy}>
-            {existing ? "Save changes" : amount ? `Record ${fmtMoney(Math.round(parseFloat(amount || "0") * 100) || 0, currency)}` : "Record payment"}
+            {existing ? "Save changes" : amount ? `Record ${fmtMoney(amountInputToCents(amount) ?? 0, currency)}` : "Record payment"}
           </Button>
         </div>
       </form>

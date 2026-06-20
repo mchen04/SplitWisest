@@ -208,16 +208,22 @@ export function fmtMoney(cents: number, currency: string): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
 
-export function parseAmountToCents(input: string): number {
-  // Treat a comma followed by 1-2 trailing digits as a decimal separator
-  // ("12,34" → 12.34); otherwise commas are thousands separators.
-  const normalized = /,\d{1,2}$/.test(input.trim()) && !input.includes(".")
-    ? input.replace(/,(\d{1,2})$/, ".$1")
-    : input;
+// Normalize a typed money string to cents, or null if it isn't a positive amount.
+// Treats a comma followed by 1-2 trailing digits as a decimal separator
+// ("12,34" → 1234 cents) so comma-decimal locales don't silently truncate via
+// raw parseFloat ("12,34" → 12); other commas are thousands separators.
+export function amountInputToCents(input: string): number | null {
+  const t = (input ?? "").trim();
+  const normalized = /,\d{1,2}$/.test(t) && !t.includes(".") ? t.replace(/,(\d{1,2})$/, ".$1") : t;
   const cleaned = normalized.replace(/[^0-9.]/g, "");
-  if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) invalidInput("Invalid amount");
+  if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) return null;
   const cents = Math.round(parseFloat(cleaned) * 100);
-  if (!Number.isFinite(cents) || cents <= 0) invalidInput("Amount must be positive");
-  if (cents > 100_000_000_000) invalidInput("Amount too large");
+  if (!Number.isFinite(cents) || cents <= 0 || cents > 100_000_000_000) return null;
+  return cents;
+}
+
+export function parseAmountToCents(input: string): number {
+  const cents = amountInputToCents(input);
+  if (cents === null) invalidInput("Enter a valid positive amount");
   return cents;
 }

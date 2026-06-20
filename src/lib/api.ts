@@ -50,7 +50,12 @@ export function handler<T extends unknown[]>(
       if (e instanceof DomainError) {
         return NextResponse.json({ error: e.message }, { status: e.status });
       }
-      console.error(e);
+      // Log only the error name + message, never the raw error object: a Neon
+      // driver error carries the failing SQL text and its bound params (which can
+      // include password / recovery-code hashes), and we must not leak those into
+      // server logs. Clients already get a generic message.
+      const detail = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+      console.error("Unhandled route error:", detail);
       return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
     }
   };

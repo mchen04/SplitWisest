@@ -7,6 +7,7 @@ import {
   computeItemizedShares,
   simplifyDebts,
   parseAmountToCents,
+  amountInputToCents,
 } from "../money";
 
 const sum = (m: Map<number, number>) => [...m.values()].reduce((a, b) => a + b, 0);
@@ -209,5 +210,25 @@ describe("parseAmountToCents", () => {
   it("rejects garbage and non-positive", () => {
     expect(() => parseAmountToCents("abc")).toThrow();
     expect(() => parseAmountToCents("0")).toThrow();
+  });
+});
+
+describe("amountInputToCents (comma-decimal aware)", () => {
+  it("parses dot and comma decimals to the same cents", () => {
+    expect(amountInputToCents("12.34")).toBe(1234);
+    expect(amountInputToCents("12,34")).toBe(1234); // de-DE/fr-FR — must NOT truncate to 1200
+    expect(amountInputToCents("1234,56")).toBe(123456); // comma decimal
+  });
+  it("treats other commas as thousands separators", () => {
+    expect(amountInputToCents("$1,000.50")).toBe(100050);
+    expect(amountInputToCents("1,000")).toBe(100000);
+  });
+  it("returns null for blank/garbage/non-positive instead of throwing", () => {
+    expect(amountInputToCents("")).toBeNull();
+    expect(amountInputToCents("abc")).toBeNull();
+    expect(amountInputToCents("0")).toBeNull();
+  });
+  it("strips stray symbols (a leading minus can't make a negative amount)", () => {
+    expect(amountInputToCents("-5")).toBe(500); // sign stripped; server still requires > 0
   });
 });

@@ -7,13 +7,16 @@ const IP_LIMIT = 120;
 const ACCOUNT_LIMIT = 8;
 
 export function clientIp(req: NextRequest): string {
-  // Prefer platform-set, non-forgeable client-IP headers over the raw
-  // `x-forwarded-for` left-most token, which is attacker-controlled (a client can
-  // send any XFF; Vercel/most proxies APPEND the real IP rather than replacing it,
-  // so the left-most value is spoofable and would hand out a fresh IP rate-limit
-  // bucket per request). Vercel strips inbound `x-vercel-forwarded-for` and sets it
-  // to the verified client IP, so it is trustworthy on the deployment target; fall
-  // back to `x-real-ip`, then the right-most XFF hop, then the left-most.
+  // On the deployment target (Vercel) `x-vercel-forwarded-for` is set by the edge
+  // and inbound copies are stripped, so it is a trustworthy, non-forgeable client
+  // IP — preferred here. The raw `x-forwarded-for` LEFT-most token is fully
+  // attacker-controlled (Vercel/most proxies append the real IP, so a client can
+  // forge the left value and mint a fresh IP bucket per request); we avoid it.
+  // IMPORTANT: off a trusted proxy (self-host / direct access), neither
+  // `x-real-ip` nor any XFF position is guaranteed, so the IP limiter is
+  // best-effort there. The real protection against credential attacks is the
+  // PER-ACCOUNT limiter (keyed on the normalized username, which an attacker
+  // cannot vary), which this IP path never substitutes for.
   const vercel = req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
   if (vercel) return vercel;
   const realIp = req.headers.get("x-real-ip")?.trim();

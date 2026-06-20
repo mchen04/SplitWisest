@@ -1,6 +1,6 @@
 import { sql } from "./db";
 import { orderedPair } from "./relationships";
-import { likeEscape } from "./api";
+import { likeEscape, intParam } from "./api";
 
 export function mapMessages(rows: Record<string, unknown>[]) {
   return [...rows]
@@ -16,8 +16,8 @@ export function mapMessages(rows: Record<string, unknown>[]) {
 
 function messageQueryParams(params: URLSearchParams) {
   return {
-    since: Number(params.get("since") ?? 0),
-    before: Number(params.get("before") ?? 0),
+    since: Math.max(intParam(params.get("since")) ?? 0, 0),
+    before: Math.max(intParam(params.get("before")) ?? 0, 0),
     q: likeEscape(params.get("q")),
   };
 }

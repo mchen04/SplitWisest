@@ -526,6 +526,10 @@ async function main() {
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS friend_requests_pair_idx
     ON friend_requests (LEAST(from_id, to_id), GREATEST(from_id, to_id))`;
+  // The 4s sync poller and the friends list probe `to_id = X` (incoming requests
+  // + the MAX(id) cursor); the pair index leads with LEAST/GREATEST and can't
+  // serve a bare `to_id` lookup, so this is the one un-indexed hot-path predicate.
+  await sql`CREATE INDEX IF NOT EXISTS friend_requests_to_idx ON friend_requests (to_id, id)`;
 
   // Dedupe categories on the same case-insensitive key enforced by routes.
   // Repoint references to the lowest id per owner/name key, delete the rest,
