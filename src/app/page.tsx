@@ -97,18 +97,26 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                {/* Each currency nets separately (never summed across currencies),
+                    and each carries an explicit owed/owe word so direction never
+                    relies on color alone. */}
+                <div className="mt-1 flex flex-wrap items-end gap-x-7 gap-y-2">
                   {currencies.map(([cur, amt]) => (
-                    <p key={cur} className={`text-4xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
-                      <Money cents={amt} currency={cur} signed />
-                    </p>
+                    <div key={cur} className="min-w-0">
+                      <p className={`text-4xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
+                        <Money cents={amt} currency={cur} signed />
+                      </p>
+                      <p className={`mt-0.5 text-xs font-medium ${amt > 0 ? "text-owed" : "text-owe"}`}>
+                        {amt > 0 ? "owed to you" : "you owe"}{currencies.length > 1 ? ` · ${cur}` : ""}
+                      </p>
+                    </div>
                   ))}
                 </div>
-                {singleCur && (owedTotal > 0 || oweTotal > 0) && (
+                {singleCur && owedTotal > 0 && oweTotal > 0 && (
                   <p className="mt-1.5 text-sm text-ink-faint">
-                    {owedTotal > 0 && <span className="text-owed">{fmtMoney(owedTotal, singleCur)} owed to you</span>}
-                    {owedTotal > 0 && oweTotal > 0 && " · "}
-                    {oweTotal > 0 && <span className="text-owe">{fmtMoney(oweTotal, singleCur)} you owe</span>}
+                    <span className="text-owed">{fmtMoney(owedTotal, singleCur)} owed to you</span>
+                    {" · "}
+                    <span className="text-owe">{fmtMoney(oweTotal, singleCur)} you owe</span>
                   </p>
                 )}
               </>
@@ -174,7 +182,7 @@ export default function Dashboard() {
                         <Users className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{g.name}</span>
+                        <span className="block truncate text-sm font-medium" title={g.name}>{g.name}</span>
                         <span className="block text-xs text-ink-faint">
                           {g.memberCount} {g.memberCount === 1 ? "member" : "members"} · {g.expenseCount}{" "}
                           {g.expenseCount === 1 ? "expense" : "expenses"}
@@ -221,7 +229,7 @@ export default function Dashboard() {
                     <li key={f.id}>
                       <Link href={`/people/${f.id}`} className="flex min-h-[var(--row-h)] items-center gap-3 px-4 py-2.5 hover:bg-subtle">
                         <Avatar name={f.displayName} size="sm" />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{f.displayName}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium" title={f.displayName}>{f.displayName}</span>
                         <span className="text-right text-sm font-medium">
                           {nets.length === 0 ? (
                             <span className="text-ink-faint">settled</span>

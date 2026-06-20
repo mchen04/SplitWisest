@@ -288,6 +288,10 @@ export default function BalancesPage() {
         </div>
       </Card>
 
+      <p className="mt-3 text-center text-xs text-ink-faint md:shrink-0">
+        Settling up records a payment made offline — SplitWisest tracks who owes who, it never moves money.
+      </p>
+
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add a friend">
         <form onSubmit={addFriend} className="space-y-4">
           <Field label="Friend's invite code" hint="We'll send them a request — you become friends once they accept.">
@@ -361,7 +365,7 @@ function FriendSection({
                       <span className="text-ink-faint">settled up</span>
                     ) : (
                       entries.map(([cur, amt]) => (
-                        <span key={cur} className={amt > 0 ? "text-owed" : "text-owe"}>
+                        <span key={cur} className={`block ${amt > 0 ? "text-owed" : "text-owe"}`}>
                           {amt > 0 ? "owes you " : "you owe "}
                           <span className="tnum font-semibold">{fmtMoney(Math.abs(amt), cur)}</span>
                         </span>

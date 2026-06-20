@@ -156,6 +156,30 @@ describe("computeItemizedShares", () => {
   it("rejects tax and tip when the total does not match", () => {
     expect(() => computeItemizedShares(1100, [{ amountCents: 1000, participantIds: [1] }], { taxCents: 50 })).toThrow();
   });
+  it("splits zero-decimal (JPY/KRW) items in whole units with no sub-yen share", () => {
+    // ¥15 item between two people => ¥8 + ¥7 (stored 800 + 700), never ¥7.50.
+    const m = computeItemizedShares(1500, [{ amountCents: 1500, participantIds: [1, 2] }], {}, 100);
+    expect([...m.values()].every((v) => v % 100 === 0)).toBe(true);
+    expect(sum(m)).toBe(1500);
+  });
+  it("allocates zero-decimal tax/tip in whole units summing exactly", () => {
+    const m = computeItemizedShares(
+      2200,
+      [{ amountCents: 1000, participantIds: [1] }, { amountCents: 1000, participantIds: [2] }],
+      { taxCents: 100, tipCents: 100 },
+      100
+    );
+    expect([...m.values()].every((v) => v % 100 === 0)).toBe(true);
+    expect(sum(m)).toBe(2200);
+  });
+  it("rejects sub-unit item amounts for zero-decimal currencies", () => {
+    expect(() => computeItemizedShares(1550, [{ amountCents: 1550, participantIds: [1, 2] }], {}, 100)).toThrow(/whole units/);
+  });
+  it("rejects sub-unit tax/tip for zero-decimal currencies", () => {
+    expect(() =>
+      computeItemizedShares(1050, [{ amountCents: 1000, participantIds: [1] }], { taxCents: 50 }, 100)
+    ).toThrow(/whole units/);
+  });
 });
 
 describe("simplifyDebts", () => {

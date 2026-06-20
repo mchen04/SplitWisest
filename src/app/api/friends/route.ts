@@ -81,23 +81,44 @@ const Body = z.object({
 export const POST = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const { code, userId } = Body.parse(await req.json());
-  if (code) await assertAuthRateLimit(req, "invite", code);
-  const rows = userId
-    ? await sql`SELECT id, display_name FROM users WHERE id = ${userId}`
-    : await sql`SELECT id, display_name FROM users WHERE invite_code = ${code}`;
+
+  if (userId) {
+    // Friend-by-id is only allowed between people who already share a group.
+    // Return ONE uniform error for every disallowed case (no such user, a
+    // stranger, yourself, already friends) so this endpoint can't be used to
+    // enumerate which numeric user ids exist.
+    if (!(await canRequestFriendById(user.id, userId))) {
+      badRequest("Use an invite code to add this person");
+    }
+    const found = await sql`SELECT display_name FROM users WHERE id = ${userId}`;
+    if (found.length === 0) badRequest("Use an invite code to add this person");
+    const status = await requestOrAcceptFriendship({
+      actorId: user.id,
+      actorName: user.displayName,
+      friendId: userId,
+      friendName: found[0].display_name as string,
+      requireSharedGroup: true,
+    });
+    if (status === "already-friends") badRequest("You are already friends");
+    if (status === "shared-group-required") badRequest("Use an invite code to add this person");
+    return NextResponse.json({ status, id: userId, displayName: found[0].display_name });
+  }
+
+  // Add by invite code: a 128-bit secret, so revealing code validity is not an
+  // enumeration risk, and the attempt is rate-limited.
+  await assertAuthRateLimit(req, "invite", code!);
+  const rows = await sql`SELECT id, display_name FROM users WHERE invite_code = ${code}`;
   if (rows.length === 0) badRequest("No user found for that invite code");
-  if (code) await clearAuthRateLimit("invite", code);
+  await clearAuthRateLimit("invite", code!);
   const friendId = Number(rows[0].id);
   if (friendId === user.id) badRequest("That is your own invite code");
-
-  if (userId && !(await canRequestFriendById(user.id, friendId))) badRequest("Use an invite code to add this person");
 
   const status = await requestOrAcceptFriendship({
     actorId: user.id,
     actorName: user.displayName,
     friendId,
-    friendName: rows[0].display_name,
-    requireSharedGroup: !!userId,
+    friendName: rows[0].display_name as string,
+    requireSharedGroup: false,
   });
   if (status === "already-friends") badRequest("You are already friends");
   if (status === "shared-group-required") badRequest("Use an invite code to add this person");

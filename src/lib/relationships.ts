@@ -204,7 +204,14 @@ export async function removeFriendshipWithActivity(user: { id: number; displayNa
     )
     SELECT count(*) FROM group_locks`,
     tx`
-    WITH direct_totals AS (
+    WITH my_groups AS (
+      SELECT me.group_id, g.currency
+      FROM group_members me
+      JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${friendId}
+      JOIN groups g ON g.id = me.group_id
+      WHERE me.user_id = ${user.id}
+    ),
+    direct_totals AS (
       SELECT currency,
         SUM(CASE WHEN payer_id = ${user.id} THEN converted_cents ELSE -converted_cents END) AS net_cents
       FROM settlements
@@ -213,72 +220,58 @@ export async function removeFriendshipWithActivity(user: { id: number; displayNa
           OR (payer_id = ${friendId} AND recipient_id = ${user.id}))
       GROUP BY currency
     ),
-    shared_groups AS (
-      SELECT me.group_id, g.currency
-      FROM group_members me
-      JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${friendId}
-      JOIN groups g ON g.id = me.group_id
-      WHERE me.user_id = ${user.id}
+    -- TRUE pairwise balance between the two users (same per-expense largest-
+    -- remainder allocation as group_balance_rows), so the unfriend gate matches
+    -- exactly what the friend balance UI shows — no phantom or hidden debt.
+    relevant_exp AS (
+      SELECT e.id, e.payer_id, e.converted_cents, e.amount_cents, mg.currency AS group_currency
+      FROM expenses e
+      JOIN my_groups mg ON mg.group_id = e.group_id
     ),
-    adjusted_nets AS (
-      SELECT sg.group_id, b.user_id, b.net_cents
-      FROM shared_groups sg
-      CROSS JOIN LATERAL group_balance_rows(sg.group_id) b
+    alloc AS (
+      SELECT es.expense_id, es.user_id, re.payer_id, re.group_currency,
+        div(es.share_cents::numeric * re.converted_cents, re.amount_cents) AS floor_cents,
+        mod(es.share_cents::numeric * re.converted_cents, re.amount_cents) AS remainder,
+        re.converted_cents AS exp_converted
+      FROM expense_shares es
+      JOIN relevant_exp re ON re.id = es.expense_id
     ),
-    creditors AS (
-      SELECT group_id, user_id, net_cents AS amount
-      FROM adjusted_nets
-      WHERE net_cents > 0
+    ranked AS (
+      SELECT a.expense_id, a.user_id, a.payer_id, a.group_currency, a.floor_cents,
+        a.exp_converted - sum(a.floor_cents) OVER (PARTITION BY a.expense_id) AS leftover,
+        row_number() OVER (PARTITION BY a.expense_id ORDER BY a.remainder DESC, a.user_id) AS rr
+      FROM alloc a
     ),
-    debtors AS (
-      SELECT group_id, user_id, -net_cents AS amount
-      FROM adjusted_nets
-      WHERE net_cents < 0
+    share_alloc AS (
+      SELECT expense_id, user_id, payer_id, group_currency,
+        (floor_cents + CASE WHEN rr <= leftover THEN 1 ELSE 0 END)::bigint AS converted_share
+      FROM ranked
     ),
-    creditor_intervals AS (
-      SELECT group_id, user_id,
-        COALESCE(SUM(amount) OVER (
-          PARTITION BY group_id ORDER BY amount DESC, user_id
-          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-        ), 0) AS start_cents,
-        SUM(amount) OVER (
-          PARTITION BY group_id ORDER BY amount DESC, user_id
-          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS end_cents
-      FROM creditors
+    group_pairs AS (
+      SELECT sa.group_currency AS currency, sa.converted_share AS net_cents
+      FROM share_alloc sa
+      WHERE sa.payer_id = ${user.id} AND sa.user_id = ${friendId}
+      UNION ALL
+      SELECT sa.group_currency AS currency, -sa.converted_share AS net_cents
+      FROM share_alloc sa
+      WHERE sa.payer_id = ${friendId} AND sa.user_id = ${user.id}
+      UNION ALL
+      SELECT mg.currency,
+        CASE WHEN s.payer_id = ${user.id} THEN s.converted_cents ELSE -s.converted_cents END AS net_cents
+      FROM settlements s
+      JOIN my_groups mg ON mg.group_id = s.group_id
+      WHERE (s.payer_id = ${user.id} AND s.recipient_id = ${friendId})
+         OR (s.payer_id = ${friendId} AND s.recipient_id = ${user.id})
     ),
-    debtor_intervals AS (
-      SELECT group_id, user_id,
-        COALESCE(SUM(amount) OVER (
-          PARTITION BY group_id ORDER BY amount DESC, user_id
-          ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-        ), 0) AS start_cents,
-        SUM(amount) OVER (
-          PARTITION BY group_id ORDER BY amount DESC, user_id
-          ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-        ) AS end_cents
-      FROM debtors
-    ),
-    group_pair_transfers AS (
-      SELECT sg.currency,
-        CASE
-          WHEN d.user_id = ${user.id} AND c.user_id = ${friendId}
-            THEN -LEAST(d.end_cents, c.end_cents) + GREATEST(d.start_cents, c.start_cents)
-          ELSE LEAST(d.end_cents, c.end_cents) - GREATEST(d.start_cents, c.start_cents)
-        END AS net_cents
-      FROM debtor_intervals d
-      JOIN creditor_intervals c ON c.group_id = d.group_id
-      JOIN shared_groups sg ON sg.group_id = d.group_id
-      WHERE ((d.user_id = ${user.id} AND c.user_id = ${friendId})
-          OR (d.user_id = ${friendId} AND c.user_id = ${user.id}))
-        AND LEAST(d.end_cents, c.end_cents) > GREATEST(d.start_cents, c.start_cents)
+    group_balance AS (
+      SELECT currency, SUM(net_cents) AS net_cents FROM group_pairs GROUP BY currency HAVING SUM(net_cents) <> 0
     ),
     combined_balance AS (
       SELECT currency, SUM(net_cents) AS net_cents
       FROM (
         SELECT currency, net_cents FROM direct_totals
         UNION ALL
-        SELECT currency, net_cents FROM group_pair_transfers
+        SELECT currency, net_cents FROM group_pairs
       ) balances
       GROUP BY currency
       HAVING SUM(net_cents) <> 0
@@ -299,7 +292,7 @@ export async function removeFriendshipWithActivity(user: { id: number; displayNa
     SELECT
       (SELECT count(*) FROM deleted)::int AS deleted,
       (SELECT count(*) FROM direct_totals WHERE net_cents <> 0)::int AS direct_balance_count,
-      (SELECT count(*) FROM group_pair_transfers WHERE net_cents <> 0)::int AS shared_group_balance_count,
+      (SELECT count(*) FROM group_balance)::int AS shared_group_balance_count,
       (SELECT count(*) FROM combined_balance)::int AS combined_balance_count`,
   ]);
   const rows = results[results.length - 1];

@@ -33,6 +33,10 @@ pnpm tsx scripts/migrate.ts  # create tables (idempotent)
 pnpm dev
 ```
 
+No hosted Neon account? You can run entirely against a local Postgres via a small
+Neon-HTTP proxy — see **docs/DATABASE.md → "Local Postgres"** (the `NEON_LOCAL_PROXY`
+escape hatch, inert in production).
+
 ### Environment variables
 
 | Variable | Purpose |

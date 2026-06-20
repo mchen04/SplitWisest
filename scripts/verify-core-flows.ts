@@ -472,6 +472,82 @@ async function main() {
   const logout = await request("/api/auth/logout", { cookie: newLogin.cookie, method: "POST" });
   assert(logout.res.status === 200, `logout returned ${logout.res.status}`);
 
+  // --- True pairwise friend balances (not a group-wide simplified plan) ---------
+  // A three-person chain where A's GROUP net is zero but A genuinely owes B and is
+  // owed by C. The friend/people balance must show the real two-party nets, never
+  // hide them (the old simplified-plan logic showed A settled with everyone).
+  const triA = await signup("tria", suffix, password, "core");
+  const triB = await signup("trib", suffix, password, "core");
+  const triC = await signup("tric", suffix, password, "core");
+  const triGroup = await request("/api/groups", { cookie: triA.cookie, body: { name: `Core Flow Tri ${suffix}`, currency: "USD" } });
+  assert(triGroup.res.status === 200, `tri group create returned ${triGroup.res.status}`);
+  const triGroupId = Number(triGroup.json.id);
+  const triInvite = String(triGroup.json.inviteCode);
+  // Joining by code makes the joiner friends with existing members.
+  assert((await request("/api/groups/join", { cookie: triB.cookie, body: { code: triInvite } })).res.status === 200, "triB join failed");
+  assert((await request("/api/groups/join", { cookie: triC.cookie, body: { code: triInvite } })).res.status === 200, "triC join failed");
+  // B pays $100 split A,B -> A owes B $50.
+  assert((await request(`/api/groups/${triGroupId}/expenses`, { cookie: triB.cookie, body: {
+    title: `Tri B paid ${suffix}`, amountCents: 10000, currency: "USD", date: today, payerId: triB.id, categoryId: null, notes: "",
+    splitMethod: "equal", participants: [{ userId: triA.id }, { userId: triB.id }],
+  } })).res.status === 200, "tri expense B failed");
+  // A pays $100 split A,C -> C owes A $50. Net: A=0, B=+50, C=-50.
+  assert((await request(`/api/groups/${triGroupId}/expenses`, { cookie: triA.cookie, body: {
+    title: `Tri A paid ${suffix}`, amountCents: 10000, currency: "USD", date: today, payerId: triA.id, categoryId: null, notes: "",
+    splitMethod: "equal", participants: [{ userId: triA.id }, { userId: triC.id }],
+  } })).res.status === 200, "tri expense A failed");
+  const triANet = Number((await sql`SELECT net_cents FROM group_balance_rows(${triGroupId}) WHERE user_id = ${triA.id}`)[0]?.net_cents);
+  assert(triANet === 0, `tri A group net should be zero, got ${triANet}`);
+  const triBProfile = jsonObject((await request(`/api/people/${triB.id}`, { cookie: triA.cookie })).json.profile, "tri B profile");
+  const triCProfile = jsonObject((await request(`/api/people/${triC.id}`, { cookie: triA.cookie })).json.profile, "tri C profile");
+  assert(jsonNumber(jsonObject(triBProfile.netByCurrency, "tri B net").USD, "tri B USD") === -5000, "A should owe B $50 (true pairwise)");
+  assert(jsonNumber(jsonObject(triCProfile.netByCurrency, "tri C net").USD, "tri C USD") === 5000, "C should owe A $50 (true pairwise)");
+
+  // --- FX snapshot immutability on settlement note edit (M2) --------------------
+  // A cross-currency group settlement's converted_cents must not be re-derived at
+  // today's rate when only the note/date is edited.
+  const fxSettle = await request(`/api/groups/${triGroupId}/settlements`, { cookie: triA.cookie, body: {
+    payerId: triA.id, recipientId: triB.id, amountCents: 5000, currency: "EUR", date: today, note: "fx snapshot original",
+  } });
+  assert(fxSettle.res.status === 200, `fx settlement returned ${fxSettle.res.status}`);
+  const fxSettleId = Number(fxSettle.json.id);
+  const convertedBefore = Number((await sql`SELECT converted_cents FROM settlements WHERE id = ${fxSettleId}`)[0]?.converted_cents);
+  await sql`INSERT INTO fx_rates (currency, rate_per_usd, fetched_at) VALUES ('EUR', 0.5, now())
+    ON CONFLICT (currency) DO UPDATE SET rate_per_usd = 0.5, fetched_at = now()`;
+  const noteEdit = await request(`/api/settlements/${fxSettleId}`, { cookie: triA.cookie, method: "PATCH", body: {
+    amountCents: 5000, currency: "EUR", date: today, note: "fx snapshot edited note only", expectedUpdatedAt: jsonString(fxSettle.json.updatedAt, "fx updatedAt"),
+  } });
+  assert(noteEdit.res.status === 200, `fx note edit returned ${noteEdit.res.status}`);
+  const convertedAfter = Number((await sql`SELECT converted_cents FROM settlements WHERE id = ${fxSettleId}`)[0]?.converted_cents);
+  assert(convertedBefore === convertedAfter, `editing only the note must not re-snapshot FX (was ${convertedBefore}, now ${convertedAfter})`);
+  // Restore the shared rate cache so this probe leaves no global FX state behind.
+  await sql`DELETE FROM fx_rates WHERE currency = 'EUR'`;
+
+  // --- Itemized item participant must be a declared expense participant (M5) ----
+  const craftedItemized = await request(`/api/groups/${triGroupId}/expenses`, { cookie: triA.cookie, body: {
+    title: `Tri crafted ${suffix}`, amountCents: 1000, currency: "USD", date: today, payerId: triA.id, categoryId: null, notes: "",
+    splitMethod: "itemized", participants: [{ userId: triA.id }],
+    items: [{ name: "smuggled", amountCents: 1000, participantIds: [triA.id, triB.id] }],
+  } });
+  assert(craftedItemized.res.status === 400, `itemized item on a non-participant should be rejected, got ${craftedItemized.res.status}`);
+
+  // --- Due recurring materializes on group load without crashing -----------------
+  // Postgres DATE columns arrive as JS Date objects, so naive String(date).slice
+  // crashed materializeRecurring (group page 500) whenever a recurring rule was due.
+  const recurringDue = await request(`/api/groups/${triGroupId}/recurring`, { cookie: triA.cookie, body: {
+    title: `Tri rent ${suffix}`, amountCents: 6000, currency: "USD", payerId: triA.id, categoryId: null,
+    participantIds: [triA.id, triB.id], notes: "", cadence: "monthly", startDate: today,
+  } });
+  assert(recurringDue.res.status === 200, `create due recurring returned ${recurringDue.res.status}`);
+  const recurringDueId = Number(recurringDue.json.id);
+  // Loading the group triggers lazy materialization of the due rule.
+  const groupWithDueRecurring = await request(`/api/groups/${triGroupId}`, { cookie: triA.cookie });
+  assert(groupWithDueRecurring.res.status === 200, `group load with a due recurring returned ${groupWithDueRecurring.res.status} (materializeRecurring must not crash)`);
+  const materialized = await sql`SELECT count(*)::int AS n FROM expenses WHERE recurring_id = ${recurringDueId}`;
+  assert(Number(materialized[0].n) >= 1, "due recurring should have materialized at least one expense on group load");
+  const advancedRule = await sql`SELECT next_date > ${today}::date AS advanced FROM recurring_expenses WHERE id = ${recurringDueId}`;
+  assert(advancedRule[0]?.advanced === true, "recurring next_date should advance past today after materialization");
+
   console.log(`core flow QA passed for group ${groupId}`);
 }
 

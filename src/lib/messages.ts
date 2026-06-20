@@ -1,5 +1,6 @@
 import { sql } from "./db";
 import { orderedPair } from "./relationships";
+import { likeEscape } from "./api";
 
 export function mapMessages(rows: Record<string, unknown>[]) {
   return [...rows]
@@ -17,7 +18,7 @@ function messageQueryParams(params: URLSearchParams) {
   return {
     since: Number(params.get("since") ?? 0),
     before: Number(params.get("before") ?? 0),
-    q: params.get("q") || null,
+    q: likeEscape(params.get("q")),
   };
 }
 
@@ -49,7 +50,7 @@ async function loadMessagesInScope(
       WHERE m.id > ${since}
         AND ((${groupId}::bigint IS NOT NULL AND m.channel = 'group' AND m.group_id = ${groupId})
           OR (${dmA}::bigint IS NOT NULL AND m.channel = 'dm' AND m.dm_a = ${dmA} AND m.dm_b = ${dmB}))
-        AND (${q}::text IS NULL OR m.body ILIKE '%' || ${q} || '%')
+        AND (${q}::text IS NULL OR m.body ILIKE '%' || ${q} || '%' ESCAPE '\')
       ORDER BY m.id DESC LIMIT 200`;
     return { messages: mapMessages(rows) };
   }

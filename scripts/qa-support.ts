@@ -1,3 +1,4 @@
+import "../src/lib/neon-local";
 import { neon } from "@neondatabase/serverless";
 import { existsSync, readFileSync } from "fs";
 

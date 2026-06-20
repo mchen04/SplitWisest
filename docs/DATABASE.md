@@ -17,6 +17,34 @@ DATABASE_URL=... pnpm tsx scripts/migrate.ts
 **Run the migration before deploying the code** — `getSessionUser` references
 `users.deleted_at`, which the migration adds.
 
+## Local Postgres (development / CI without a hosted Neon account)
+
+The app talks to Neon over the SQL-over-HTTP driver, so a plain local Postgres
+needs a small proxy that speaks that protocol. `src/lib/neon-local.ts` is an
+env-gated escape hatch: when `NEON_LOCAL_PROXY` is set (to a proxy's `/sql`
+endpoint), the Neon driver is pointed at it. It is **inert in production** — with
+`NEON_LOCAL_PROXY` unset the driver behaves exactly as before, and the fail-closed
+`DATABASE_URL` check in `db.ts` is untouched.
+
+```bash
+# 1) a disposable Postgres + a Neon-HTTP proxy in front of it (Docker)
+docker run -d --name sw-pg --network sw-net \
+  -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=splitwisest \
+  -p 5433:5432 postgres:16
+docker run -d --name sw-neon-proxy --network sw-net \
+  -e PG_CONNECTION_STRING=postgres://postgres:postgres@sw-pg:5432/splitwisest \
+  -p 4444:4444 ghcr.io/timowilhelm/local-neon-http-proxy:main
+
+# 2) point the driver at the proxy (also works for migrate / verify scripts)
+export NEON_LOCAL_PROXY="http://localhost:4444/sql"
+export DATABASE_URL="postgres://postgres:postgres@localhost:5433/splitwisest"
+pnpm tsx scripts/migrate.ts
+pnpm dev   # or: pnpm build && pnpm start
+```
+
+Pass these on the command line for the `tsx` scripts (they read `.env.local`
+*after* the driver is configured, so the env must already be set).
+
 ## Tables
 
 | Table | Purpose |
@@ -48,7 +76,7 @@ DATABASE_URL=... pnpm tsx scripts/migrate.ts
 - Money is always integer cents (`BIGINT`); never floats.
 - Dates are `DATE` for business dates, `TIMESTAMPTZ` for event times.
 - Cascading deletes: removing an expense removes its shares/items/attachments; removing a group removes its expenses, members, messages, activity. User-referencing money FKs intentionally use the default `NO ACTION` (RESTRICT-like) — never cascade — so a user can't be hard-deleted out from under settled balances; erasure goes through `deleted_at`.
-- The Neon HTTP driver returns `BIGINT` as strings and `bytea` as `\x`-hex; API routes normalize with `Number(...)` / hex decode.
+- The Neon HTTP driver returns `BIGINT` as strings, `bytea` as `\x`-hex, and `DATE` columns as JS `Date` objects (parsed at local midnight); API routes normalize with `Number(...)` / hex decode, and server-side date math normalizes `Date`→`YYYY-MM-DD` (`toYmd`) rather than `String(date).slice(...)`, which would yield a locale string.
 - Attachment filenames are stored only after header/path sanitization; download responses still sanitize again before emitting `Content-Disposition`.
 
 ## Indexes & balance function

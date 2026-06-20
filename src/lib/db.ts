@@ -1,3 +1,4 @@
+import "./neon-local";
 import { neon } from "@neondatabase/serverless";
 
 if (!process.env.DATABASE_URL) {

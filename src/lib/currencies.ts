@@ -20,3 +20,14 @@ export function currencyStep(currency: string): number {
 export function currencyFractionDigits(currency: string): number {
   return ZERO_DECIMAL_CURRENCIES.has(currency) ? 0 : 2;
 }
+
+// Short, human currency symbols for compact input adornments (e.g. the per-person
+// exact-amount field). Falls back to the code itself for anything unmapped.
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$", EUR: "€", GBP: "£", CAD: "$", AUD: "$", JPY: "¥", INR: "₹",
+  MXN: "$", CNY: "¥", KRW: "₩", CHF: "Fr", SEK: "kr", NZD: "$", BRL: "R$",
+};
+
+export function currencySymbol(currency: string): string {
+  return CURRENCY_SYMBOLS[currency] ?? currency;
+}

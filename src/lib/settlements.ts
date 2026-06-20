@@ -277,6 +277,9 @@ export interface AuthorizedSettlement {
   payerId: number;
   recipientId: number;
   createdBy: number;
+  amountCents: number;
+  currency: string;
+  convertedCents: number;
   updatedAt: string;
 }
 
@@ -373,7 +376,7 @@ export async function loadVisibleSettlementHistory({
 export async function loadAuthorizedSettlementForMutation(id: number, userId: number): Promise<AuthorizedSettlement> {
   if (!Number.isInteger(id)) notFound();
   const rows = await sql`
-    SELECT id, group_id, payer_id, recipient_id, created_by,
+    SELECT id, group_id, payer_id, recipient_id, created_by, amount_cents, currency, converted_cents,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
     FROM settlements
     WHERE id = ${id}`;
@@ -386,6 +389,9 @@ export async function loadAuthorizedSettlementForMutation(id: number, userId: nu
     payerId: Number(raw.payer_id),
     recipientId: Number(raw.recipient_id),
     createdBy: Number(raw.created_by),
+    amountCents: Number(raw.amount_cents),
+    currency: raw.currency as string,
+    convertedCents: Number(raw.converted_cents),
     updatedAt: versionToken(raw.updated_at),
   };
   const isParticipant = settlement.payerId === userId || settlement.recipientId === userId;

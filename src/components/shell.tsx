@@ -119,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                           : "text-ink-soft hover:bg-subtle hover:text-ink"
                       }`}
                     >
-                      <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                      <span className="min-w-0 flex-1 truncate" title={g.name}>{g.name}</span>
                       {!!g.unreadMessages && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
                     </Link>
                   ))}
@@ -141,8 +141,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link href="/settings" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-subtle" title="Account settings">
                 <Avatar name={me.displayName} size="sm" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium leading-tight">{me.displayName}</p>
-                  <p className="truncate text-xs text-ink-faint leading-tight">@{me.username}</p>
+                  <p className="truncate text-sm font-medium leading-tight" title={me.displayName}>{me.displayName}</p>
+                  <p className="truncate text-xs text-ink-faint leading-tight" title={`@${me.username}`}>@{me.username}</p>
                 </div>
               </Link>
               <IconButton label="Log out" variant="danger" onClick={logout}>

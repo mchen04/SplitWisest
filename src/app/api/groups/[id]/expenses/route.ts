@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler, intParam } from "@/lib/api";
+import { handler, intParam, likeEscape, dateParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 import { createExpenseWithActivity, ExpenseBody } from "@/lib/expenses";
 import { parseGroupId, requireGroupMember } from "@/lib/groups";
@@ -14,11 +14,11 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   await requireGroupMember(groupId, user.id);
 
   const q = req.nextUrl.searchParams;
-  const text = q.get("q") || null;
+  const text = likeEscape(q.get("q"));
   const categoryId = intParam(q.get("categoryId"));
   const payerId = intParam(q.get("payerId"));
-  const from = q.get("from") || null;
-  const to = q.get("to") || null;
+  const from = dateParam(q.get("from"));
+  const to = dateParam(q.get("to"));
   // Pagination: bounded page (default 50, max 200) with offset. Fetch one extra
   // row to tell the client whether more pages remain.
   const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 200);
@@ -47,7 +47,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
     JOIN users p ON p.id = e.payer_id
     LEFT JOIN categories c ON c.id = e.category_id
     WHERE e.group_id = ${groupId}
-      AND (${text}::text IS NULL OR e.title ILIKE '%' || ${text} || '%' OR e.notes ILIKE '%' || ${text} || '%')
+      AND (${text}::text IS NULL OR e.title ILIKE '%' || ${text} || '%' ESCAPE '\' OR e.notes ILIKE '%' || ${text} || '%' ESCAPE '\')
       AND (${categoryId}::bigint IS NULL OR e.category_id = ${categoryId})
       AND (${payerId}::bigint IS NULL OR e.payer_id = ${payerId})
       AND (${from}::date IS NULL OR e.expense_date >= ${from}::date)
