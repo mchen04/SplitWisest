@@ -160,6 +160,13 @@ no settlement fabrication between non-parties, no cross-group attachment read, n
 bypass, no recovery-code brute/double-spend, no auth rate-limit bypass, no secret/
 stack-trace leak.
 
+## Convergence verdict (issue-driven gates)
+
+- **Security adversarial loop:** cycle-2 (security re-attack) clean, cycle-3 (final) clean except 1 LOW (fixed), **round-4 (fresh) CLEAN** — independently re-attacked the full surface with read-only `psql` reconciliation and by executing the real money functions; no remaining exploitable or correctness issue. **Converged (≥2 consecutive clean fresh passes), no deferrals.**
+- **Expense/balance/settlement/collaboration logic loop:** cycle-2 money reviewer CLEAN, cycle-3 CLEAN, criticality round-2 confirmed money-clean, **round-4 verified true-pairwise reconciliation empirically** (A↔B/A↔C nets sum to 0 per currency; net-zero-hiding case surfaces both debts; unfriend gate == UI balance). **Converged, no deferrals.**
+- **Criticality loop:** round-1 found ~16 (fixed), **round-2 converged** (no blocking/important; 3 minors fixed). **Converged.**
+- **Judge-based UI loops:** no blockers / no high-severity in any of 3 rounds; every concrete finding fixed; **numeric avg > 9.0 not certified** — one subjective aesthetic opinion + the mid-session `agent-browser` screenshot-tooling failure (see UI section) blocked a fresh re-judge of the final code-verified polish.
+
 ## Final command summary (all from repo root)
 
 | Command | Result |
