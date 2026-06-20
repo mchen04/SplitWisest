@@ -238,7 +238,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </Card>
 
       {/* Compact member strip (mobile only) */}
-      <Card className="mb-2.5 md:hidden">
+      <Card className="relative mb-2.5 md:hidden">
         <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex items-stretch divide-x divide-line">
           {detail === null ? (
@@ -263,6 +263,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           )}
         </div>
         </div>
+        {/* Right-edge fade cues that the member strip scrolls horizontally. */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-[inherit] bg-gradient-to-l from-card to-transparent" aria-hidden />
       </Card>
 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">

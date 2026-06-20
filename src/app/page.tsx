@@ -100,11 +100,11 @@ export default function Dashboard() {
                 {/* Each currency nets separately (never summed across currencies),
                     and each carries an explicit owed/owe word so direction never
                     relies on color alone. */}
-                <div className="mt-1 flex flex-wrap items-stretch gap-y-2">
+                <div className="mt-1 flex flex-wrap items-stretch gap-y-3">
                   {currencies.map(([cur, amt], i) => (
-                    // A divider between currency blocks so two side-by-side totals
-                    // never read as one summed figure (they net per-currency only).
-                    <div key={cur} className={`min-w-0 ${i > 0 ? "ml-6 border-l border-line pl-6" : ""}`}>
+                    // On desktop a vertical rule separates side-by-side currency
+                    // totals so they never read as one sum; on mobile they stack.
+                    <div key={cur} className={`min-w-0 ${i > 0 ? "sm:ml-6 sm:border-l sm:border-line sm:pl-6" : ""}`}>
                       <p className={`text-4xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
                         <Money cents={amt} currency={cur} signed />
                       </p>
@@ -190,11 +190,16 @@ export default function Dashboard() {
                           {g.expenseCount === 1 ? "expense" : "expenses"}
                         </span>
                       </span>
-                      <span className="text-sm font-medium">
+                      <span className="text-right text-sm font-medium">
                         {g.myNetCents === 0 ? (
                           <span className="text-ink-faint">settled</span>
                         ) : (
-                          <Money cents={g.myNetCents} currency={g.currency} signed />
+                          // Word + color + amount so the per-group direction isn't
+                          // carried by color alone (matches the Friends list).
+                          <span className={g.myNetCents > 0 ? "text-owed" : "text-owe"}>
+                            <span className="mr-1 text-[11px] font-normal opacity-90">{g.myNetCents > 0 ? "owed" : "you owe"}</span>
+                            <span className="tnum">{fmtMoney(Math.abs(g.myNetCents), g.currency)}</span>
+                          </span>
                         )}
                       </span>
                     </Link>
@@ -237,8 +242,11 @@ export default function Dashboard() {
                             <span className="text-ink-faint">settled</span>
                           ) : (
                             nets.map(([cur, amt]) => (
-                              <span key={cur} className="block">
-                                <Money cents={amt} currency={cur} signed />
+                              // Word + color + amount (matches Balances) so direction
+                              // isn't carried by color alone.
+                              <span key={cur} className={`block ${amt > 0 ? "text-owed" : "text-owe"}`}>
+                                <span className="text-[11px] font-normal opacity-90">{amt > 0 ? "owes you " : "you owe "}</span>
+                                <span className="tnum">{fmtMoney(Math.abs(amt), cur)}</span>
                               </span>
                             ))
                           )}

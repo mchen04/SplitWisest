@@ -52,10 +52,12 @@ async function main() {
   const diego = await createUser("diego_romero", "Diego Romero");
   const priya = await createUser("priya_patel", "Priya Patel");
   const sam = await createUser("sam_okafor", "Sam Okafor");
+  const noah = await createUser("noah_kim", "Noah Kim");
   const all = [maya, diego, priya, sam];
 
-  for (const other of [diego, priya, sam]) await makeFriends(maya, other);
+  for (const other of [diego, priya, sam, noah]) await makeFriends(maya, other);
   await makeFriends(diego, priya);
+  await makeFriends(priya, noah);
 
   // 1) Lake Tahoe Trip — everyone, varied split methods.
   const tahoe = await createGroup(maya, "Lake Tahoe Trip", "USD", [diego, priya, sam]);
@@ -134,6 +136,35 @@ async function main() {
   await addExpense(tokyo, maya, {
     title: "Train passes", amountCents: 1200000, currency: "JPY", date: daysAgo(3), payerId: maya.id,
     categoryId: null, notes: "7-day JR pass", splitMethod: "equal", participants: mDiego,
+  });
+
+  // 4) Dinner Club — Maya + Diego + Priya + Noah, rotating dinners (fills the
+  //    dashboard with more real groups/friends so it isn't sparse).
+  const dinner = await createGroup(maya, "Dinner Club", "USD", [diego, priya, noah]);
+  const four = [maya, diego, priya, noah].map((u) => ({ userId: u.id }));
+  await addExpense(dinner, priya, {
+    title: "Tasting menu", amountCents: 32000, currency: "USD", date: daysAgo(9), payerId: priya.id,
+    categoryId: null, notes: "Chef's counter", splitMethod: "equal", participants: four,
+  });
+  await addExpense(dinner, noah, {
+    title: "Wine pairing", amountCents: 16800, currency: "USD", date: daysAgo(9), payerId: noah.id,
+    categoryId: null, notes: "", splitMethod: "equal", participants: four,
+  });
+  await addExpense(dinner, maya, {
+    title: "Taco night", amountCents: 9600, currency: "USD", date: daysAgo(2), payerId: maya.id,
+    categoryId: null, notes: "", splitMethod: "equal", participants: four,
+  });
+
+  // 5) Berlin 2026 — Maya + Noah, EUR (a second non-USD trip).
+  const berlin = await createGroup(maya, "Berlin 2026", "EUR", [noah]);
+  const mNoah = [{ userId: maya.id }, { userId: noah.id }];
+  await addExpense(berlin, noah, {
+    title: "Airbnb", amountCents: 42000, currency: "EUR", date: daysAgo(11), payerId: noah.id,
+    categoryId: null, notes: "4 nights, Kreuzberg", splitMethod: "equal", participants: mNoah,
+  });
+  await addExpense(berlin, maya, {
+    title: "BVG transit passes", amountCents: 7200, currency: "EUR", date: daysAgo(11), payerId: maya.id,
+    categoryId: null, notes: "", splitMethod: "equal", participants: mNoah,
   });
 
   // Chat + DMs (leave a couple unread for the demo user).
