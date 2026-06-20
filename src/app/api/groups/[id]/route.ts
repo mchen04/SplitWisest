@@ -14,12 +14,15 @@ export const GET = handler(async (_req: NextRequest, { params }: Ctx) => {
   const groupId = parseGroupId((await params).id);
   const group = await requireGroupMember(groupId, user.id);
 
+  // materializeRecurring writes (must run first); members + balances are then
+  // independent reads — run them as one parallel level over the Neon driver.
   await materializeRecurring(groupId);
-
-  const members = await sql`
-    SELECT u.id, u.display_name, u.username FROM group_members gm
-    JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ${groupId} ORDER BY u.display_name`;
-  const balances = await groupBalances(groupId);
+  const [members, balances] = await Promise.all([
+    sql`
+      SELECT u.id, u.display_name, u.username FROM group_members gm
+      JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ${groupId} ORDER BY u.display_name`,
+    groupBalances(groupId),
+  ]);
   const suggestions = suggestSettlements(balances);
 
   return NextResponse.json({

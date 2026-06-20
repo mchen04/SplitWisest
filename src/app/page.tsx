@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus, Users, ScrollText, Bell, HandCoins } from "lucide-react";
-import { apiCached, cacheGet, fmtTime, useMe, useSync } from "@/lib/client";
+import { apiCached, cacheGet, fmtMoney, fmtTime, useMe, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
 
@@ -286,10 +286,6 @@ export default function Dashboard() {
       </div>
     </AppShell>
   );
-}
-
-function fmtMoney(cents: number, currency: string) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
 
 function SkeletonRows({ n }: { n: number }) {

@@ -870,7 +870,9 @@ export async function materializeRecurring(groupId: number) {
         if (inserted === null) break;
         storedAnchorDay = effectiveAnchorDay;
       } catch (e) {
-        console.error(`recurring ${r.id} failed to materialize:`, e);
+        // Log only name+message — never the raw error object, which for a Neon
+        // SQL error carries the query text and bound params (matches api.ts).
+        console.error(`recurring ${r.id} failed to materialize:`, e instanceof Error ? `${e.name}: ${e.message}` : String(e));
         if (e instanceof ApiError && e.status === 400) {
           // Validation failures (e.g. payer left the group) won't heal on
           // retry: deactivate so the group view doesn't re-attempt forever.
