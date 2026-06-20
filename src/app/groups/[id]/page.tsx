@@ -402,10 +402,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       </div>
                       </button>
                       <div className="flex shrink-0 gap-0.5">
-                        <button onClick={() => openEdit(e.id)} aria-label={`Edit ${e.title}`} className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark">
+                        <button onClick={() => openEdit(e.id)} aria-label={`Edit ${e.title}`} className="rounded-lg p-2.5 text-ink-faint hover:bg-accent-soft hover:text-accent-dark">
                           <Pencil className="h-4 w-4" />
                         </button>
-                        <button onClick={() => setDeleting(e)} aria-label={`Delete ${e.title}`} className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger">
+                        <button onClick={() => setDeleting(e)} aria-label={`Delete ${e.title}`} className="rounded-lg p-2.5 text-ink-faint hover:bg-danger-soft hover:text-danger">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>

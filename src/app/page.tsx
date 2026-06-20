@@ -126,18 +126,22 @@ export default function Dashboard() {
           </div>
 
           {/* One contextual next step — the sidebar owns the persistent "Add
-              expense" primary, so the hero coaches the most useful action. */}
+              expense" primary, so the hero coaches the most useful action. When the
+              friend's balance spans multiple currencies, drop the single amount so
+              the CTA doesn't imply one payment clears a mixed-currency relationship. */}
           <div className="flex shrink-0 sm:justify-end">
             {topDebt ? (
               <Link href={`/people/${topDebt.f.id}`} className="w-full sm:w-auto">
                 <Button variant="secondary" className="w-full sm:w-auto">
-                  <HandCoins className="h-4 w-4" /> Settle up with {topDebt.f.displayName.split(" ")[0]} · <Money cents={-topDebt.amt} currency={topDebt.cur} />
+                  <HandCoins className="h-4 w-4" /> Settle up with {topDebt.f.displayName.split(" ")[0]}
+                  {Object.values(topDebt.f.netByCurrency).filter((v) => v !== 0).length === 1 && <> · <Money cents={-topDebt.amt} currency={topDebt.cur} /></>}
                 </Button>
               </Link>
             ) : topCreditor ? (
               <Link href={`/people/${topCreditor.f.id}`} className="w-full sm:w-auto">
                 <Button variant="secondary" className="w-full sm:w-auto">
-                  <Bell className="h-4 w-4" /> Remind {topCreditor.f.displayName.split(" ")[0]} · <Money cents={topCreditor.amt} currency={topCreditor.cur} />
+                  <Bell className="h-4 w-4" /> Remind {topCreditor.f.displayName.split(" ")[0]}
+                  {Object.values(topCreditor.f.netByCurrency).filter((v) => v !== 0).length === 1 && <> · <Money cents={topCreditor.amt} currency={topCreditor.cur} /></>}
                 </Button>
               </Link>
             ) : (
