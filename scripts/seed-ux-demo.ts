@@ -89,6 +89,13 @@ async function main() {
     ],
     itemizedTaxCents: 1300, itemizedTipCents: 1100,
   });
+  // Diego fronts the flights so Maya owes him on net in USD — gives the demo a
+  // realistic "you owe" balance alongside the "owed to you" ones (both directions).
+  await addExpense(tahoe, diego, {
+    title: "Flights to Tahoe", amountCents: 80000, currency: "USD", date: daysAgo(7), payerId: diego.id,
+    categoryId: null, notes: "Booked for Maya + me", splitMethod: "equal",
+    participants: [{ userId: maya.id }, { userId: diego.id }],
+  });
   await request(`/api/groups/${tahoe.id}/settlements`, {
     cookie: diego.cookie,
     body: { payerId: diego.id, recipientId: maya.id, amountCents: 12000, currency: "USD", date: daysAgo(2), note: "Venmo for the cabin" },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Paperclip, Plus } from "lucide-react";
+import { Paperclip, Plus, Check, AlertCircle } from "lucide-react";
 import { api, apiCached, ApiClientError, fmtMoney, todayStr, CURRENCIES, amountInputToCents } from "@/lib/client";
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
 import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
@@ -456,9 +456,11 @@ export function ExpenseForm({
 
         {splitStatus && (
           <p
-            className={`rounded-lg px-3 py-2 text-sm ${splitStatus.ok ? "bg-owed-soft text-owed" : "bg-owe-soft text-owe"}`}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm ${splitStatus.ok ? "bg-owed-soft text-owed" : "bg-owe-soft text-owe"}`}
             role="status"
           >
+            {/* Icon so the valid/incomplete state isn't conveyed by color alone. */}
+            {splitStatus.ok ? <Check className="h-4 w-4 shrink-0" /> : <AlertCircle className="h-4 w-4 shrink-0" />}
             {splitStatus.msg}
           </p>
         )}

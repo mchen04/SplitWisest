@@ -289,7 +289,7 @@ export default function BalancesPage() {
       </Card>
 
       <p className="mt-3 text-center text-xs text-ink-faint md:shrink-0">
-        Settling up records a payment made offline — SplitWisest tracks who owes who, it never moves money.
+        Settling up records a payment made offline — SplitWisest tracks who owes whom, it never moves money.
       </p>
 
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add a friend">

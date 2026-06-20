@@ -87,7 +87,7 @@ export default function Dashboard() {
       <Card className="mb-4 p-5 md:shrink-0">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-ink-soft">Net balance</p>
+            <p className="text-xs font-medium text-ink-soft">{currencies.length > 1 ? "Your balances" : "Net balance"}</p>
             {friends === null ? (
               <div className="skeleton mt-2 h-9 w-44" />
             ) : currencies.length === 0 ? (
@@ -100,9 +100,11 @@ export default function Dashboard() {
                 {/* Each currency nets separately (never summed across currencies),
                     and each carries an explicit owed/owe word so direction never
                     relies on color alone. */}
-                <div className="mt-1 flex flex-wrap items-end gap-x-7 gap-y-2">
-                  {currencies.map(([cur, amt]) => (
-                    <div key={cur} className="min-w-0">
+                <div className="mt-1 flex flex-wrap items-stretch gap-y-2">
+                  {currencies.map(([cur, amt], i) => (
+                    // A divider between currency blocks so two side-by-side totals
+                    // never read as one summed figure (they net per-currency only).
+                    <div key={cur} className={`min-w-0 ${i > 0 ? "ml-6 border-l border-line pl-6" : ""}`}>
                       <p className={`text-4xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
                         <Money cents={amt} currency={cur} signed />
                       </p>

@@ -13,8 +13,8 @@ export function AuthFrame({ children }: { children: React.ReactNode }) {
             </span>
             <span className="font-wordmark text-[25px] font-semibold tracking-tight">SplitWisest</span>
           </div>
-          <p className="text-center text-sm text-ink-soft">
-            Track shared expenses with friends — see who owes who, and settle up.
+          <p className="text-pretty px-2 text-center text-sm text-ink-soft [text-wrap:balance]">
+            A private shared-expense ledger for friends — see who owes whom and settle up offline.
           </p>
         </div>
         <div className="rounded-2xl border border-line bg-card p-[26px] shadow-card">{children}</div>
