@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, ChevronDown, Users,
+  SlidersHorizontal,
 } from "lucide-react";
 import { api, apiCached, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
@@ -54,6 +55,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [editingSettlement, setEditingSettlement] = useState<Settlement | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
 
   function copyInviteLink() {
     if (!detail) return;
@@ -112,6 +114,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     try {
       await api(`/api/expenses/${deleting.id}?expectedUpdatedAt=${encodeURIComponent(deleting.updatedAt)}`, { method: "DELETE" });
       setDeleting(null);
+      refreshAll();
+    } catch (err) {
+      // A concurrent edit (stale version → 400), a delete by another member (404),
+      // or a network error must surface — otherwise the modal just sits there.
+      window.alert(err instanceof ApiClientError ? err.message : "Could not delete this expense");
       refreshAll();
     } finally {
       setDeleteBusy(false);
@@ -214,7 +221,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 <li key={b.userId}>
                   <Link href={`/people/${b.userId}`} className="flex items-center gap-2 px-3 py-1.5 hover:bg-subtle">
                     <Avatar name={b.displayName} size="sm" />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{b.displayName}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium" title={b.displayName}>{b.displayName}</span>
                     <span className="tnum text-xs font-semibold">
                       {b.netCents === 0 ? (
                         <span className="font-normal text-ink-faint">settled</span>
@@ -231,8 +238,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </Card>
 
       {/* Compact member strip (mobile only) */}
-      <Card className="mb-2.5 md:hidden">
-        <div className="overflow-x-auto">
+      <Card className="relative mb-2.5 md:hidden">
+        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div className="flex items-stretch divide-x divide-line">
           {detail === null ? (
             <div className="flex flex-1 items-center gap-4 p-3">
@@ -256,11 +263,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           )}
         </div>
         </div>
+        {/* Right-edge fade cues that the member strip scrolls horizontally. */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-[inherit] bg-gradient-to-l from-card to-transparent" aria-hidden />
       </Card>
 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Tabs */}
-      <div role="tablist" aria-label="Group sections" className="mb-2.5 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-0.5 md:shrink-0">
+      <div role="tablist" aria-label="Group sections" className="mb-2.5 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-0.5 [scrollbar-width:none] md:shrink-0 [&::-webkit-scrollbar]:hidden">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
@@ -280,22 +289,38 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       {tab === "expenses" && (
         <div className="flex flex-col md:h-full md:min-h-0">
           <Card className="mb-2.5 p-2 md:shrink-0">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">
+            {/* Search is always visible; category/payer/date filters fold away so
+                they don't push the expense list down the first viewport. */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
                 <Input value={filters.q} onChange={setFilter("q")} placeholder="Search expenses" className="pl-8" aria-label="Search expenses" />
               </div>
-              <Select value={filters.cat} onChange={setFilter("cat")} aria-label="Filter by category">
-                <option value="">All categories</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </Select>
-              <Select value={filters.payer} onChange={setFilter("payer")} aria-label="Filter by payer">
-                <option value="">All payers</option>
-                {detail?.members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
-              </Select>
-              <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
-              <Input type="date" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
+              <Button
+                variant={showFilters || filtersActive ? "secondary" : "ghost"}
+                onClick={() => setShowFilters((v) => !v)}
+                aria-expanded={showFilters || filtersActive}
+                aria-label="Toggle filters"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span className="hidden sm:inline">Filters</span>
+                {filtersActive && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
+              </Button>
             </div>
+            {(showFilters || filtersActive) && (
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Select value={filters.cat} onChange={setFilter("cat")} aria-label="Filter by category">
+                  <option value="">All categories</option>
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </Select>
+                <Select value={filters.payer} onChange={setFilter("payer")} aria-label="Filter by payer">
+                  <option value="">All payers</option>
+                  {detail?.members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
+                </Select>
+                <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
+                <Input type="date" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
+              </div>
+            )}
             {filtersActive && (
               <button
                 onClick={resetFilters}
@@ -377,10 +402,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                       </div>
                       </button>
                       <div className="flex shrink-0 gap-0.5">
-                        <button onClick={() => openEdit(e.id)} aria-label={`Edit ${e.title}`} className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark">
+                        <button onClick={() => openEdit(e.id)} aria-label={`Edit ${e.title}`} className="rounded-lg p-2.5 text-ink-faint hover:bg-accent-soft hover:text-accent-dark">
                           <Pencil className="h-4 w-4" />
                         </button>
-                        <button onClick={() => setDeleting(e)} aria-label={`Delete ${e.title}`} className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger">
+                        <button onClick={() => setDeleting(e)} aria-label={`Delete ${e.title}`} className="rounded-lg p-2.5 text-ink-faint hover:bg-danger-soft hover:text-danger">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>

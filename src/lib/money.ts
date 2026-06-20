@@ -127,13 +127,28 @@ export function computeShares(
 
 // Items: each item's cost is split equally among its participants; a user's
 // total share is the sum across items. Item amounts must sum to the total.
+// `step` is the currency's smallest representable unit in stored cents (100 for
+// zero-decimal JPY/KRW): item amounts and tax/tip must be whole `step` units and
+// every per-item equal split distributes whole units, so an itemized JPY expense
+// can never produce an unpayable sub-yen share (mirrors the non-itemized path).
 export function computeItemizedShares(
   totalCents: number,
   items: { amountCents: number; participantIds: number[] }[],
-  adjustments: { taxCents?: number; tipCents?: number } = {}
+  adjustments: { taxCents?: number; tipCents?: number } = {},
+  step = 1
 ): Map<number, number> {
   const itemSum = items.reduce((s, i) => s + i.amountCents, 0);
-  const adjustmentTotal = Math.round(adjustments.taxCents ?? 0) + Math.round(adjustments.tipCents ?? 0);
+  const taxCents = Math.round(adjustments.taxCents ?? 0);
+  const tipCents = Math.round(adjustments.tipCents ?? 0);
+  const adjustmentTotal = taxCents + tipCents;
+  if (step !== 1) {
+    for (const item of items) {
+      if (item.amountCents % step !== 0) invalidInput("Item amounts must be whole units for this currency");
+    }
+    if (taxCents % step !== 0 || tipCents % step !== 0) {
+      invalidInput("Tax and tip must be whole units for this currency");
+    }
+  }
   if (itemSum + adjustmentTotal !== totalCents) {
     invalidInput(`Item amounts plus tax and tip must add up to the total (got ${itemSum + adjustmentTotal}, expected ${totalCents})`);
   }
@@ -143,14 +158,15 @@ export function computeItemizedShares(
     if (new Set(item.participantIds).size !== item.participantIds.length) {
       invalidInput("Duplicate item participants");
     }
-    const split = splitEqual(item.amountCents, item.participantIds);
+    const split = splitEqual(item.amountCents, item.participantIds, step);
     for (const [uid, cents] of split) out.set(uid, (out.get(uid) ?? 0) + cents);
   }
   if (adjustmentTotal > 0) {
     if (itemSum <= 0) invalidInput("Item subtotal must be positive when tax or tip is added");
     const adjustmentShares = distributeProportional(
       adjustmentTotal,
-      [...out.entries()].map(([userId, weight]) => ({ userId, weight }))
+      [...out.entries()].map(([userId, weight]) => ({ userId, weight })),
+      step
     );
     for (const [uid, cents] of adjustmentShares) out.set(uid, (out.get(uid) ?? 0) + cents);
   }
@@ -192,16 +208,22 @@ export function fmtMoney(cents: number, currency: string): string {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
 
-export function parseAmountToCents(input: string): number {
-  // Treat a comma followed by 1-2 trailing digits as a decimal separator
-  // ("12,34" → 12.34); otherwise commas are thousands separators.
-  const normalized = /,\d{1,2}$/.test(input.trim()) && !input.includes(".")
-    ? input.replace(/,(\d{1,2})$/, ".$1")
-    : input;
+// Normalize a typed money string to cents, or null if it isn't a positive amount.
+// Treats a comma followed by 1-2 trailing digits as a decimal separator
+// ("12,34" → 1234 cents) so comma-decimal locales don't silently truncate via
+// raw parseFloat ("12,34" → 12); other commas are thousands separators.
+export function amountInputToCents(input: string): number | null {
+  const t = (input ?? "").trim();
+  const normalized = /,\d{1,2}$/.test(t) && !t.includes(".") ? t.replace(/,(\d{1,2})$/, ".$1") : t;
   const cleaned = normalized.replace(/[^0-9.]/g, "");
-  if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) invalidInput("Invalid amount");
+  if (!cleaned || !/^\d*\.?\d*$/.test(cleaned)) return null;
   const cents = Math.round(parseFloat(cleaned) * 100);
-  if (!Number.isFinite(cents) || cents <= 0) invalidInput("Amount must be positive");
-  if (cents > 100_000_000_000) invalidInput("Amount too large");
+  if (!Number.isFinite(cents) || cents <= 0 || cents > 100_000_000_000) return null;
+  return cents;
+}
+
+export function parseAmountToCents(input: string): number {
+  const cents = amountInputToCents(input);
+  if (cents === null) invalidInput("Enter a valid positive amount");
   return cents;
 }

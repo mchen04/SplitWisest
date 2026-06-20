@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, todayStr, fmtMoney, useFormState } from "@/lib/client";
+import { api, todayStr, fmtMoney, useFormState, amountInputToCents } from "@/lib/client";
 import { Button, Field, Select, Modal, ErrorNote } from "./ui";
 import { SettleFields } from "./settle-fields";
 import { Member } from "./expense-form";
@@ -70,8 +70,8 @@ export function SettleModal({
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const amountCents = Math.round(parseFloat(amount || "0") * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
+    const amountCents = amountInputToCents(amount) ?? 0;
+    if (amountCents <= 0) return setError("Enter a positive amount");
     if (payerId === recipientId) return setError("Payer and recipient must be different");
     run(async () => {
       if (existing) {
@@ -129,7 +129,7 @@ export function SettleModal({
             Cancel
           </Button>
           <Button type="submit" busy={busy}>
-            {existing ? "Save changes" : `Record ${amount ? fmtMoney(Math.round(parseFloat(amount || "0") * 100) || 0, currency) : ""}`}
+            {existing ? "Save changes" : `Record ${amount ? fmtMoney(amountInputToCents(amount) ?? 0, currency) : ""}`}
           </Button>
         </div>
       </form>

@@ -3,6 +3,7 @@
 import { Dispatch, SetStateAction } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { fmtMoney } from "@/lib/client";
+import { currencySymbol } from "@/lib/currencies";
 import { Button, Input } from "./ui";
 import { Member } from "./expense-form";
 
@@ -72,8 +73,8 @@ export function ParticipantSplit({
                     aria-label={`${METHOD_LABELS[method]} for ${m.displayName}`}
                     placeholder={method === "exact" ? "0.00" : method === "percentage" ? "%" : "1"}
                   />
-                  <span className="w-4 text-xs text-ink-faint">
-                    {method === "percentage" ? "%" : method === "exact" ? currency.slice(0, 1) : "×"}
+                  <span className="min-w-4 text-xs text-ink-faint">
+                    {method === "percentage" ? "%" : method === "exact" ? currencySymbol(currency) : "×"}
                   </span>
                 </div>
               )}

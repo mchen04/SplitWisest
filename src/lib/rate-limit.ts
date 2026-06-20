@@ -7,8 +7,27 @@ const IP_LIMIT = 120;
 const ACCOUNT_LIMIT = 8;
 
 export function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || req.headers.get("x-real-ip")?.trim() || "unknown";
+  // On the deployment target (Vercel) `x-vercel-forwarded-for` is set by the edge
+  // and inbound copies are stripped, so it is a trustworthy, non-forgeable client
+  // IP — preferred here. The raw `x-forwarded-for` LEFT-most token is fully
+  // attacker-controlled (Vercel/most proxies append the real IP, so a client can
+  // forge the left value and mint a fresh IP bucket per request); we avoid it.
+  // IMPORTANT: off a trusted proxy (self-host / direct access), neither
+  // `x-real-ip` nor any XFF position is guaranteed, so the IP limiter is
+  // best-effort there. The real protection against credential attacks is the
+  // PER-ACCOUNT limiter (keyed on the normalized username, which an attacker
+  // cannot vary), which this IP path never substitutes for.
+  const vercel = req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
+  if (vercel) return vercel;
+  const realIp = req.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const hops = forwarded.split(",").map((h) => h.trim()).filter(Boolean);
+    // Right-most hop is the one closest to our infra and the hardest to spoof past.
+    if (hops.length > 0) return hops[hops.length - 1];
+  }
+  return "unknown";
 }
 
 export async function assertAuthRateLimit(req: NextRequest, action: string, accountKey: string) {

@@ -35,7 +35,12 @@ export function Button({
     : "min-h-[var(--control-h)] px-3.5 text-sm gap-1.5";
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-[10px] py-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:opacity-50 disabled:pointer-events-none ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
+      className={`inline-flex items-center justify-center rounded-[10px] py-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:pointer-events-none ${
+        // Busy keeps the variant color (with a spinner); a genuinely-disabled
+        // (invalid) button uses a readable neutral instead of a low-contrast 50%
+        // tint so its label stays legible.
+        busy ? "opacity-80" : "disabled:bg-subtle disabled:text-ink-soft disabled:shadow-none"
+      } ${sizing} ${BUTTON_VARIANTS[variant]} ${className}`}
       disabled={disabled || busy}
       {...rest}
     >

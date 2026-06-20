@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
-import { handler, intParam } from "@/lib/api";
+import { handler, intParam, likeEscape, dateParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
 
 // Cross-group expense search for the current user.
 export const GET = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const q = req.nextUrl.searchParams;
-  const text = q.get("q") || null;
+  const text = likeEscape(q.get("q"));
   const groupId = intParam(q.get("groupId"));
   const categoryId = intParam(q.get("categoryId"));
   const payerId = intParam(q.get("payerId"));
   const friendId = intParam(q.get("friendId"));
-  const from = q.get("from") || null;
-  const to = q.get("to") || null;
+  const from = dateParam(q.get("from"));
+  const to = dateParam(q.get("to"));
   const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 200);
 
   const rows = await sql`
@@ -25,7 +25,7 @@ export const GET = handler(async (req: NextRequest) => {
     JOIN users p ON p.id = e.payer_id
     LEFT JOIN categories c ON c.id = e.category_id
     WHERE e.group_id IN (SELECT group_id FROM group_members WHERE user_id = ${user.id})
-      AND (${text}::text IS NULL OR e.title ILIKE '%' || ${text} || '%' OR e.notes ILIKE '%' || ${text} || '%')
+      AND (${text}::text IS NULL OR e.title ILIKE '%' || ${text} || '%' ESCAPE '\' OR e.notes ILIKE '%' || ${text} || '%' ESCAPE '\')
       AND (${groupId}::bigint IS NULL OR e.group_id = ${groupId})
       AND (${categoryId}::bigint IS NULL OR e.category_id = ${categoryId})
       AND (${payerId}::bigint IS NULL OR e.payer_id = ${payerId})

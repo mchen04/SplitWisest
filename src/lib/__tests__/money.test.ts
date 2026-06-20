@@ -7,6 +7,7 @@ import {
   computeItemizedShares,
   simplifyDebts,
   parseAmountToCents,
+  amountInputToCents,
 } from "../money";
 
 const sum = (m: Map<number, number>) => [...m.values()].reduce((a, b) => a + b, 0);
@@ -156,6 +157,30 @@ describe("computeItemizedShares", () => {
   it("rejects tax and tip when the total does not match", () => {
     expect(() => computeItemizedShares(1100, [{ amountCents: 1000, participantIds: [1] }], { taxCents: 50 })).toThrow();
   });
+  it("splits zero-decimal (JPY/KRW) items in whole units with no sub-yen share", () => {
+    // ¥15 item between two people => ¥8 + ¥7 (stored 800 + 700), never ¥7.50.
+    const m = computeItemizedShares(1500, [{ amountCents: 1500, participantIds: [1, 2] }], {}, 100);
+    expect([...m.values()].every((v) => v % 100 === 0)).toBe(true);
+    expect(sum(m)).toBe(1500);
+  });
+  it("allocates zero-decimal tax/tip in whole units summing exactly", () => {
+    const m = computeItemizedShares(
+      2200,
+      [{ amountCents: 1000, participantIds: [1] }, { amountCents: 1000, participantIds: [2] }],
+      { taxCents: 100, tipCents: 100 },
+      100
+    );
+    expect([...m.values()].every((v) => v % 100 === 0)).toBe(true);
+    expect(sum(m)).toBe(2200);
+  });
+  it("rejects sub-unit item amounts for zero-decimal currencies", () => {
+    expect(() => computeItemizedShares(1550, [{ amountCents: 1550, participantIds: [1, 2] }], {}, 100)).toThrow(/whole units/);
+  });
+  it("rejects sub-unit tax/tip for zero-decimal currencies", () => {
+    expect(() =>
+      computeItemizedShares(1050, [{ amountCents: 1000, participantIds: [1] }], { taxCents: 50 }, 100)
+    ).toThrow(/whole units/);
+  });
 });
 
 describe("simplifyDebts", () => {
@@ -185,5 +210,25 @@ describe("parseAmountToCents", () => {
   it("rejects garbage and non-positive", () => {
     expect(() => parseAmountToCents("abc")).toThrow();
     expect(() => parseAmountToCents("0")).toThrow();
+  });
+});
+
+describe("amountInputToCents (comma-decimal aware)", () => {
+  it("parses dot and comma decimals to the same cents", () => {
+    expect(amountInputToCents("12.34")).toBe(1234);
+    expect(amountInputToCents("12,34")).toBe(1234); // de-DE/fr-FR — must NOT truncate to 1200
+    expect(amountInputToCents("1234,56")).toBe(123456); // comma decimal
+  });
+  it("treats other commas as thousands separators", () => {
+    expect(amountInputToCents("$1,000.50")).toBe(100050);
+    expect(amountInputToCents("1,000")).toBe(100000);
+  });
+  it("returns null for blank/garbage/non-positive instead of throwing", () => {
+    expect(amountInputToCents("")).toBeNull();
+    expect(amountInputToCents("abc")).toBeNull();
+    expect(amountInputToCents("0")).toBeNull();
+  });
+  it("strips stray symbols (a leading minus can't make a negative amount)", () => {
+    expect(amountInputToCents("-5")).toBe(500); // sign stripped; server still requires > 0
   });
 });

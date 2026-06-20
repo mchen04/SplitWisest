@@ -66,7 +66,7 @@ export function apiCached<T>(path: string): Promise<T> {
 
 // Money formatting lives in the framework-agnostic money lib so server routes
 // and client components share one implementation.
-export { fmtMoney } from "./money";
+export { fmtMoney, amountInputToCents } from "./money";
 
 export function fmtDate(d: string | Date): string {
   return new Date(typeof d === "string" && d.length === 10 ? d + "T00:00:00" : d).toLocaleDateString(

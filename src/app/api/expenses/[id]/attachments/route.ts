@@ -19,6 +19,14 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   if (rows.length === 0) notFound("Expense not found");
   if (!(await isGroupMember(Number(rows[0].group_id), user.id))) forbidden();
 
+  // Reject an oversized body via Content-Length BEFORE buffering it into memory
+  // with formData() (defense against a memory-spike DoS). The per-file size is
+  // still re-checked below; the 1 MB slack covers multipart framing overhead.
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_BYTES + 1024 * 1024) {
+    badRequest("File too large (max 4 MB)");
+  }
+
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) badRequest("No file uploaded");

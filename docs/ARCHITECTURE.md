@@ -12,6 +12,8 @@
 - Sessions: 32-byte random token in an httpOnly, SameSite=Lax cookie, stored server-side in `sessions` with 30-day expiry. Logout deletes the row.
 - Signup is open by default. If an invite code is supplied, it must match `SIGNUP_CODE`, another user's personal code, or a group invite code; personal and group codes also connect the new user to the inviter or group.
 - Password recovery consumes the one-time recovery code, updates the password hash, and invalidates existing sessions in one CTE-backed database statement; the replacement login session is created only after that atomic reset succeeds.
+- Auth endpoints are rate-limited by both IP and account (120 / 8 per 15-min window) via a single-statement upsert into `auth_rate_limits`; the account key is the normalized username (un-spoofable), and the client IP is read from the platform-trusted `x-vercel-forwarded-for` / `x-real-ip` headers (falling back to the right-most `x-forwarded-for` hop) so a forged left-most `x-forwarded-for` can't mint a fresh IP bucket per request.
+- Defense-in-depth CSRF: the shared `handler` wrapper rejects any non-GET request whose browser `Origin` header doesn't match the request host. `SameSite=Lax` already withholds the cookie cross-site; header-less server/API clients (no `Origin`) are unaffected.
 
 ## Money
 
@@ -20,7 +22,7 @@
 - Zero-decimal currencies (JPY/KRW) have no minor unit: amounts are snapped to whole units at entry and in `convert()`, and splits distribute whole units, so a share is never an unpayable fraction of a yen/won. Exact splits reject fractional-cent inputs rather than silently rounding.
 - Group balance per member = paid − owed + settlements paid − settlements received, all in group currency, computed by the `group_balance_rows(group_id)` SQL function. The owed side allocates each expense's `converted_cents` across its shares with a per-expense largest-remainder pass (exact integer `div`/`mod`), so converted shares sum exactly to the expense total and no cross-currency rounding residual is misattributed to one member; a whole-group residual-absorption step remains as a defensive backstop. The invariant `SUM(share_cents) = amount_cents` is enforced at the DB by a deferred constraint trigger.
 - Debt simplification (`simplifyDebts`) greedily matches largest debtor to largest creditor, yielding ≤ n−1 transfers.
-- Friend balances mirror the app's simplified settle-up suggestions across shared groups, plus direct settlements, reported per currency without cross-currency netting. Pair balances are aggregated across all relevant groups in one set-based query before per-group debt simplification, avoiding one full balance query per shared group.
+- Friend (and people-profile) balances are the **true two-party balance** between the viewer and each co-member: for every shared-group expense, each expense's `converted_cents` is allocated across its shares with the same per-expense largest-remainder pass `group_balance_rows()` uses, and the pair's net is "what the other owes me for expenses I paid" minus "what I owe them for expenses they paid", plus group settlements in group currency and direct settlements in their own currency — reported per currency with no cross-currency netting, in one set-based query. This is a real pairwise net, **not** a group-wide simplified settle-up plan, so it never invents a debt to a third party the pair never transacted with, nor hides a real debt to one friend that a credit from another happens to offset. The group page's "suggested settle-up" still uses `simplifyDebts` — the correct place for a transaction-minimizing plan. The friend-removal gate uses the same true-pairwise computation, so it blocks unfriending iff there is a real outstanding balance.
 
 ## Settlements
 
@@ -44,7 +46,7 @@ Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byt
 
 ## Recurring expenses
 
-`recurring_expenses` hold a template + `next_date`. When a group page is loaded, `materializeRecurring` creates concrete expenses for every elapsed period (capped) and advances `next_date` — no cron needed.
+`recurring_expenses` hold a template + `next_date`. When a group page is loaded, `materializeRecurring` creates concrete expenses for every elapsed period (capped at 24 per call so a long-dormant rule defers rather than skips periods) and advances `next_date` — no cron needed. Each period's `next_date` advance and the generated expense insert happen in one SQL statement, so process death can't claim a period without writing it. The Neon driver returns Postgres `DATE` columns as JS `Date` objects, so `materializeRecurring` normalizes them to a calendar `YYYY-MM-DD` string (`toYmd`) before any date math — a naive `String(date).slice(0,10)` yields a locale string and crashes the materializer.
 
 ## Theming
 

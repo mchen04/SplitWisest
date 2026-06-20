@@ -30,8 +30,9 @@ export function attachmentBytesMatchMime(buf: Buffer, mime: string): boolean {
     case "image/webp":
       return ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP";
     case "application/pdf":
-      // The %PDF- header may legally follow a small amount of leading bytes.
-      return ascii(0, 1024).includes("%PDF-");
+      // Require the %PDF- signature at the very start. A 1KB search window let an
+      // HTML/JS-then-%PDF- polyglot pass; magic bytes are by definition at offset 0.
+      return ascii(0, 5) === "%PDF-";
     default:
       return false;
   }

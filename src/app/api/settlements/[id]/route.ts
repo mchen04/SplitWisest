@@ -23,11 +23,21 @@ export const PATCH = handler(async (req: NextRequest, { params }: Ctx) => {
   const s = await loadAuthorizedSettlementForMutation(Number((await params).id), user.id);
   const body = PatchBody.parse(await req.json());
 
-  let convertedCents = body.amountCents;
-  if (s.groupId !== null) {
-    const group = await sql`SELECT currency FROM groups WHERE id = ${s.groupId}`;
-    if (group.length > 0) {
-      convertedCents = (await convert(body.amountCents, body.currency, group[0].currency)).cents;
+  // Only re-snapshot the group-currency converted amount when the amount or
+  // currency actually changes (mirrors the expense edit guard). Editing just the
+  // note or date must NOT re-convert at today's FX rate — that would retroactively
+  // shift a recorded balance, violating "later rate changes never alter recorded
+  // balances". Direct settlements are always kept in their own currency.
+  let convertedCents = s.convertedCents;
+  const reconvert = body.amountCents !== s.amountCents || body.currency !== s.currency;
+  if (reconvert) {
+    if (s.groupId !== null) {
+      const group = await sql`SELECT currency FROM groups WHERE id = ${s.groupId}`;
+      convertedCents = group.length > 0
+        ? (await convert(body.amountCents, body.currency, group[0].currency)).cents
+        : body.amountCents;
+    } else {
+      convertedCents = body.amountCents;
     }
   }
   const updated = await updateSettlementWithActivity(s, user, body, convertedCents);

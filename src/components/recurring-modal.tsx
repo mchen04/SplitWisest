@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, useFormState } from "@/lib/client";
+import { api, useFormState, amountInputToCents } from "@/lib/client";
 import { Button, Field, Input, Select, Modal, ErrorNote } from "./ui";
 import { Member } from "./expense-form";
 
@@ -57,8 +57,8 @@ export function RecurringModal({
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
-    const amountCents = Math.round(parseFloat(amount || "0") * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) return setError("Enter a positive amount");
+    const amountCents = amountInputToCents(amount) ?? 0;
+    if (amountCents <= 0) return setError("Enter a positive amount");
     const participantIds = members.map((m) => m.id);
     run(async () => {
       if (existing) {

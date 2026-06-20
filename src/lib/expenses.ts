@@ -67,18 +67,28 @@ function validateExpenseShares(memberIds: Set<number>, input: ExpenseInput) {
   let shares: Map<number, number>;
   if (input.splitMethod === "itemized") {
     if (!input.items || input.items.length === 0) badRequest("Itemized expenses need at least one item");
+    // Item participants must be both group members AND part of the expense's
+    // declared participant set, so a crafted payload can't saddle a member with a
+    // share via items without listing them as a participant (the form derives the
+    // participant set from the items, so legitimate submissions always satisfy this).
+    const declared = new Set(input.participants.map((p) => p.userId));
     for (const item of input.items!) {
       if (new Set(item.participantIds).size !== item.participantIds.length) {
         badRequest("Duplicate item participants");
       }
       for (const pid of item.participantIds) {
         if (!memberIds.has(pid)) badRequest("All item participants must be group members");
+        if (!declared.has(pid)) badRequest("Item participants must be expense participants");
       }
     }
-    shares = computeItemizedShares(input.amountCents, input.items!, {
-      taxCents: input.itemizedTaxCents,
-      tipCents: input.itemizedTipCents,
-    });
+    // Zero-decimal currencies (JPY/KRW) split items in whole units so an itemized
+    // bill never produces an unpayable sub-yen/sub-won share.
+    shares = computeItemizedShares(
+      input.amountCents,
+      input.items!,
+      { taxCents: input.itemizedTaxCents, tipCents: input.itemizedTipCents },
+      currencyStep(input.currency)
+    );
   } else {
     // Zero-decimal currencies (JPY/KRW) have no sub-unit: snap the amount to a
     // whole unit and split in whole units so no unsettleable sub-yen/sub-won
@@ -782,6 +792,22 @@ async function deactivateRecurringIfSnapshotStillInvalid(
   ]);
 }
 
+// The Neon driver parses Postgres DATE columns into JS Date objects (at local
+// midnight), so `String(date).slice(0,10)` yields a locale string like
+// "Sat Jun 20" and crashes the date math below. Normalize any date value to a
+// calendar YYYY-MM-DD using local components, which recover the stored calendar
+// date regardless of the server's timezone (the driver parsed it at local
+// midnight). A plain "YYYY-MM-DD" string passes through unchanged.
+function toYmd(value: unknown): string {
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  return String(value).slice(0, 10);
+}
+
 // Materialize due recurring expenses for a group, lazily on group view. Each
 // period's next_date advance and generated expense insert happen in one SQL
 // statement, so process death cannot claim a period without writing it.
@@ -792,8 +818,9 @@ export async function materializeRecurring(groupId: number) {
     WHERE r.group_id = ${groupId} AND r.active AND r.next_date <= CURRENT_DATE`;
   for (const r of due) {
     let storedAnchorDay = r.anchor_day === null ? null : Number(r.anchor_day);
-    const effectiveAnchorDay = storedAnchorDay ?? new Date(String(r.next_date).slice(0, 10) + "T00:00:00Z").getUTCDate();
-    let current = String(r.next_date).slice(0, 10);
+    const baseDate = toYmd(r.next_date);
+    const effectiveAnchorDay = storedAnchorDay ?? new Date(baseDate + "T00:00:00Z").getUTCDate();
+    let current = baseDate;
     for (let i = 0; i < 24; i++) {
       if (new Date(current + "T00:00:00Z").getTime() > Date.now()) break;
       const next = nextOccurrence(current, r.cadence, effectiveAnchorDay);
@@ -843,7 +870,9 @@ export async function materializeRecurring(groupId: number) {
         if (inserted === null) break;
         storedAnchorDay = effectiveAnchorDay;
       } catch (e) {
-        console.error(`recurring ${r.id} failed to materialize:`, e);
+        // Log only name+message — never the raw error object, which for a Neon
+        // SQL error carries the query text and bound params (matches api.ts).
+        console.error(`recurring ${r.id} failed to materialize:`, e instanceof Error ? `${e.name}: ${e.message}` : String(e));
         if (e instanceof ApiError && e.status === 400) {
           // Validation failures (e.g. payer left the group) won't heal on
           // retry: deactivate so the group view doesn't re-attempt forever.
