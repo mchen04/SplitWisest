@@ -52,6 +52,6 @@ export const POST = handler(async (req: NextRequest) => {
   const token = await createSession(userId);
   await clearAuthRateLimit("signup", username);
   if (inviteCode && inviteCode !== process.env.SIGNUP_CODE) await clearAuthRateLimit("invite", inviteCode);
-  await setSessionCookie(token);
+  await setSessionCookie(token, userId);
   return NextResponse.json({ ok: true });
 });

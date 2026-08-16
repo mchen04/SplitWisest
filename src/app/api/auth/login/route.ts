@@ -18,6 +18,6 @@ export const POST = handler(async (req: NextRequest) => {
   if (!ok) badRequest("Incorrect username or password");
   await clearAuthRateLimit("login", username);
   const token = await createSession(Number(rows[0].id));
-  await setSessionCookie(token);
+  await setSessionCookie(token, Number(rows[0].id));
   return NextResponse.json({ ok: true });
 });

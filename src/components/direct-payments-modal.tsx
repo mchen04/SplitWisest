@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState } from "react";
 import { HandCoins, Pencil, Trash2 } from "lucide-react";
-import { api, ApiClientError, fmtMoney, fmtDate } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, fmtDate, useApiData } from "@/lib/client";
 import { Modal, Button } from "./ui";
 import { DirectSettleModal } from "./direct-settle-modal";
 
@@ -32,37 +32,30 @@ export function DirectPaymentsModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
-  const [list, setList] = useState<DirectSettlement[] | null>(null);
   const [editing, setEditing] = useState<DirectSettlement | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const reload = useCallback(() => {
-    if (!friend) return;
-    api<{ settlements: DirectSettlement[] }>(`/api/settlements?friendId=${friend.id}`)
-      .then((r) => setList(r.settlements))
-      .catch(() => setList([]));
-  }, [friend]);
-
-  useEffect(() => {
-    if (!friend) return;
-    // Clear stale history while loading the newly selected friend's payments.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setList(null);
-    setError(null);
-    reload();
-  }, [friend, reload]);
+  const [errorState, setErrorState] = useState<{ friendId: number; message: string } | null>(null);
+  const { data, error: loadError, reload } = useApiData<{ settlements: DirectSettlement[] }>(
+    `/api/settlements?friendId=${friend?.id ?? 0}`, 0, { sync: false, enabled: friend !== null }
+  );
+  const list = data?.settlements ?? (loadError ? [] : null);
 
   if (!friend) return null;
+  const selectedFriend = friend;
+  const error = errorState?.friendId === selectedFriend.id ? errorState.message : null;
 
   async function remove(s: DirectSettlement) {
     if (!window.confirm(`Delete this recorded payment (${fmtMoney(s.amountCents, s.currency)})? Balances will update.`)) return;
-    setError(null);
+    const friendId = selectedFriend.id;
+    setErrorState(null);
     try {
       await api(`/api/settlements/${s.id}?expectedUpdatedAt=${encodeURIComponent(s.updatedAt)}`, { method: "DELETE" });
       reload();
       onChanged();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not delete the payment");
+      setErrorState({
+        friendId,
+        message: err instanceof ApiClientError ? err.message : "Could not delete the payment",
+      });
     }
   }
 

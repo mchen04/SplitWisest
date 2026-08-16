@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Check, KeyRound, LogOut, ShieldCheck, UserCog, Palette, Moon, Sun } from "lucide-react";
-import { api, useFormState } from "@/lib/client";
+import { api, useApiData, useFormState } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, Button, Field, Input, ErrorNote } from "@/components/ui";
@@ -17,11 +17,9 @@ interface Me {
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
-
-  useEffect(() => {
-    api<{ user: Me }>("/api/me").then((r) => setMe(r.user)).catch(() => {});
-  }, []);
+  const { data } = useApiData<{ user: Me }>("/api/me", 0, { sync: false });
+  const [savedMe, setSavedMe] = useState<Me | null>(null);
+  const me = savedMe ?? data?.user ?? null;
 
   async function logout() {
     await api("/api/auth/logout", { method: "POST" });
@@ -35,7 +33,7 @@ export default function SettingsPage() {
       <div className="md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
           <div className="space-y-4">
-            <ProfileCard me={me} onSaved={setMe} />
+            <ProfileCard me={me} onSaved={setSavedMe} />
             <AppearanceCard />
             <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div>
@@ -170,22 +168,19 @@ function PasswordCard() {
 }
 
 function RecoveryCard() {
-  const [remaining, setRemaining] = useState<number | null>(null);
+  const { data } = useApiData<{ remaining: number }>("/api/me/recovery-codes", 0, { sync: false });
+  const [generatedRemaining, setGeneratedRemaining] = useState<number | null>(null);
+  const remaining = generatedRemaining ?? data?.remaining ?? null;
   const [codes, setCodes] = useState<string[] | null>(null);
   const [copied, setCopied] = useState(false);
   const { error, busy, run } = useFormState();
-
-  const loadRemaining = () =>
-    api<{ remaining: number }>("/api/me/recovery-codes").then((r) => setRemaining(r.remaining)).catch(() => {});
-
-  useEffect(() => { loadRemaining(); }, []);
 
   function regenerate() {
     if (codes && !window.confirm("Generate new recovery codes? Your old codes will stop working.")) return;
     run(async () => {
       const r = await api<{ codes: string[] }>("/api/me/recovery-codes", { method: "POST" });
       setCodes(r.codes);
-      setRemaining(r.codes.length);
+      setGeneratedRemaining(r.codes.length);
     }, "Could not generate recovery codes");
   }
 

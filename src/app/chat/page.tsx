@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, MessageSquare, Pin, PinOff, Search, Users } from "lucide-react";
-import { apiCached, cacheGet, ApiClientError, useMe, useSync } from "@/lib/client";
+import { useApiData, useMe, useSync } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, EmptyState, Avatar, Button, Input } from "@/components/ui";
 import { ChatPane } from "@/components/chat";
@@ -51,10 +51,10 @@ function ChatPageInner() {
   const me = useMe();
   const router = useRouter();
   const params = useSearchParams();
-  const [conversations, setConversations] = useState<Conversation[] | null>(
-    () => cacheGet<{ conversations: Conversation[] }>("/api/conversations")?.conversations ?? null
+  const { data, error, reload } = useApiData<{ conversations: Conversation[] }>(
+    "/api/conversations", 0, { sync: false }
   );
-  const [error, setError] = useState<string | null>(null);
+  const conversations = data?.conversations ?? null;
   const [query, setQuery] = useState("");
   const [pins, setPins] = useState<string[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -66,19 +66,13 @@ function ChatPageInner() {
     Number.isInteger(dmId) && dmId > 0 ? `dm:${dmId}` : null;
 
   function load() {
-    setError(null);
-    apiCached<{ conversations: Conversation[] }>("/api/conversations")
-      .then((r) => setConversations(r.conversations))
-      .catch((err) => {
-        setError(err instanceof ApiClientError ? err.message : "Could not load conversations");
-      });
+    reload();
   }
 
   useEffect(() => {
-    // Initial load + per-device pinned chats.
+    // Load per-device pinned chats.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPins(loadPins());
-    load();
   }, []);
   useSync((c, prev) => {
     if (c.messageCursor === prev.messageCursor) return;

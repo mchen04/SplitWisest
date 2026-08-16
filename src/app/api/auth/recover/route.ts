@@ -54,6 +54,6 @@ export const POST = handler(async (req: NextRequest) => {
 
   await clearAuthRateLimit("recover", username);
   const token = await createSession(userId);
-  await setSessionCookie(token);
+  await setSessionCookie(token, userId);
   return NextResponse.json({ ok: true });
 });

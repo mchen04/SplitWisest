@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Paperclip, Plus, Check, AlertCircle } from "lucide-react";
-import { api, apiCached, ApiClientError, fmtMoney, todayStr, CURRENCIES, amountInputToCents } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, todayStr, CURRENCIES, amountInputToCents, useApiData } from "@/lib/client";
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
 import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
 
@@ -81,7 +81,13 @@ export function ExpenseForm({
   const [taxRate, setTaxRate] = useState(CALIFORNIA_TAX_RATE);
   const [tipEnabled, setTipEnabled] = useState(false);
   const [tipRate, setTipRate] = useState("20");
-  const [categories, setCategories] = useState<Category[]>([]);
+  const { data: categoriesData } = useApiData<{ categories: Category[] }>("/api/categories", 0, { sync: false });
+  const [addedCategories, setAddedCategories] = useState<Category[]>([]);
+  const baseCategories = categoriesData?.categories ?? [];
+  const categories = [
+    ...baseCategories,
+    ...addedCategories.filter((added) => !baseCategories.some((base) => base.id === added.id)),
+  ];
   const [newCategory, setNewCategory] = useState("");
   const [addingCat, setAddingCat] = useState(false);
   const [showSplitOptions, setShowSplitOptions] = useState(false);
@@ -92,7 +98,6 @@ export function ExpenseForm({
 
   useEffect(() => {
     if (!open) return;
-    apiCached<{ categories: Category[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
     // Reset the form when opening or switching the edited expense.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
@@ -221,7 +226,7 @@ export function ExpenseForm({
     if (!newCategory.trim()) return;
     try {
       const c = await api<Category>("/api/categories", { body: { name: newCategory.trim() } });
-      setCategories((cs) => [...cs, c]);
+      setAddedCategories((current) => [...current, c]);
       setCategoryId(c.id);
       setNewCategory("");
       setAddingCat(false);

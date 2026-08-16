@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { sql } from "./db";
 
 const SESSION_COOKIE = "sw_session";
+const CACHE_OWNER_COOKIE = "sw_cache_owner";
 const SESSION_DAYS = 30;
 const DUMMY_HASH = "scrypt:0123456789abcdef0123456789abcdef:" + "ab".repeat(64);
 const RECOVERY_CODE_CHECKS = 8;
@@ -78,10 +79,19 @@ export async function createSession(userId: number): Promise<string> {
   return token;
 }
 
-export async function setSessionCookie(token: string) {
+export async function setSessionCookie(token: string, userId: number) {
   const store = await cookies();
   store.set(SESSION_COOKIE, token, {
     httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_DAYS * 86400,
+    path: "/",
+  });
+  // This non-secret owner key lets the browser reject another account's
+  // persistent read cache before it paints cached private data.
+  store.set(CACHE_OWNER_COOKIE, String(userId), {
+    httpOnly: false,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     maxAge: SESSION_DAYS * 86400,
@@ -94,6 +104,7 @@ export async function clearSession() {
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) await sql`DELETE FROM sessions WHERE token = ${token}`;
   store.delete(SESSION_COOKIE);
+  store.delete(CACHE_OWNER_COOKIE);
 }
 
 export async function revokeOtherSessions(userId: number) {
@@ -114,6 +125,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     WHERE s.token = ${token} AND s.expires_at > now() AND u.deleted_at IS NULL`;
   if (rows.length === 0) return null;
   const r = rows[0];
+  if (store.get(CACHE_OWNER_COOKIE)?.value !== String(r.id)) {
+    store.set(CACHE_OWNER_COOKIE, String(r.id), {
+      httpOnly: false,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: SESSION_DAYS * 86400,
+      path: "/",
+    });
+  }
   return {
     id: Number(r.id),
     username: r.username,

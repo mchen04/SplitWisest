@@ -75,6 +75,7 @@ async function main() {
     name TEXT PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  await sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`;
 
   // ----------------------------------------------------------------------------
   // INDEX / CONCURRENTLY NOTE
@@ -137,6 +138,7 @@ async function main() {
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  await sql`CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions (user_id)`;
 
   await sql`CREATE TABLE IF NOT EXISTS auth_rate_limits (
     scope TEXT NOT NULL,
@@ -220,7 +222,13 @@ async function main() {
   // THE hottest read (per group page, per sidebar group, and lateral'd across all of
   // a user's groups on the friends page). Without this index each call seq-scans the
   // whole table. This single index is the highest-leverage fix in the audit.
-  await sql`CREATE INDEX IF NOT EXISTS expenses_group_idx ON expenses (group_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS expenses_group_date_idx
+    ON expenses (group_id, expense_date DESC, id DESC)`;
+  await sql`DROP INDEX IF EXISTS expenses_group_idx`;
+  await sql`CREATE INDEX IF NOT EXISTS expenses_title_search_idx
+    ON expenses USING gin (title gin_trgm_ops)`;
+  await sql`CREATE INDEX IF NOT EXISTS expenses_notes_search_idx
+    ON expenses USING gin (notes gin_trgm_ops)`;
   // recurring_id has no FK by default and is joined by the anchor-day backfill below
   // and the recurring materializer. Partial index skips the many non-recurring rows.
   await sql`CREATE INDEX IF NOT EXISTS expenses_recurring_idx ON expenses (recurring_id) WHERE recurring_id IS NOT NULL`;
@@ -240,6 +248,7 @@ async function main() {
     amount_cents BIGINT NOT NULL CHECK (amount_cents >= 0),
     participant_ids BIGINT[] NOT NULL
   )`;
+  await sql`CREATE INDEX IF NOT EXISTS expense_items_expense_idx ON expense_items (expense_id)`;
 
   await sql`CREATE TABLE IF NOT EXISTS attachments (
     id BIGSERIAL PRIMARY KEY,
@@ -273,7 +282,9 @@ async function main() {
   // group_balance_rows() sums settlements by group_id twice (settled_out/settled_in);
   // friend balances probe the group-less direct settlements by `payer_id = X OR
   // recipient_id = X` (the planner BitmapOrs the two single-column indexes).
-  await sql`CREATE INDEX IF NOT EXISTS settlements_group_idx ON settlements (group_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS settlements_group_date_idx
+    ON settlements (group_id, settled_date DESC, id DESC)`;
+  await sql`DROP INDEX IF EXISTS settlements_group_idx`;
   await sql`CREATE INDEX IF NOT EXISTS settlements_payer_idx ON settlements (payer_id)`;
   await sql`CREATE INDEX IF NOT EXISTS settlements_recipient_idx ON settlements (recipient_id)`;
 
@@ -385,6 +396,9 @@ async function main() {
 
 	  await sql`ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS anchor_day INT`;
 	  await sql`ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`;
+  await sql`CREATE INDEX IF NOT EXISTS recurring_expenses_group_idx ON recurring_expenses (group_id, id)`;
+  await sql`CREATE INDEX IF NOT EXISTS recurring_expenses_due_idx
+    ON recurring_expenses (group_id, next_date, id) WHERE active`;
   if (!(await migrationDone("backfill_recurring_anchor_day"))) {
     await sql`
       UPDATE recurring_expenses r
@@ -434,6 +448,10 @@ async function main() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   await sql`CREATE INDEX IF NOT EXISTS activity_group_idx ON activity (group_id, id)`;
+  await sql`CREATE INDEX IF NOT EXISTS activity_direct_actor_idx
+    ON activity (actor_id, id) WHERE group_id IS NULL`;
+  await sql`CREATE INDEX IF NOT EXISTS activity_visible_users_idx
+    ON activity USING gin ((data->'visibleUserIds')) WHERE group_id IS NULL`;
 
   await sql`CREATE TABLE IF NOT EXISTS messages (
     id BIGSERIAL PRIMARY KEY,
@@ -451,6 +469,8 @@ async function main() {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS messages_group_idx ON messages (group_id, id)`;
   await sql`CREATE INDEX IF NOT EXISTS messages_dm_idx ON messages (dm_a, dm_b, id)`;
+  await sql`CREATE INDEX IF NOT EXISTS messages_body_search_idx
+    ON messages USING gin (body gin_trgm_ops)`;
 
   await sql`CREATE TABLE IF NOT EXISTS fx_rates (
     currency TEXT PRIMARY KEY,
@@ -503,6 +523,7 @@ async function main() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   await sql`CREATE INDEX IF NOT EXISTS nudges_to_idx ON nudges (to_id, id)`;
+  await sql`CREATE INDEX IF NOT EXISTS nudges_unseen_to_idx ON nudges (to_id, id) WHERE seen_at IS NULL`;
 
   // Pending friend requests. Adding a friend by code now creates a request the
   // recipient accepts or declines, instead of an instant two-way friendship.
@@ -530,6 +551,7 @@ async function main() {
   // + the MAX(id) cursor); the pair index leads with LEAST/GREATEST and can't
   // serve a bare `to_id` lookup, so this is the one un-indexed hot-path predicate.
   await sql`CREATE INDEX IF NOT EXISTS friend_requests_to_idx ON friend_requests (to_id, id)`;
+  await sql`CREATE INDEX IF NOT EXISTS friend_requests_from_idx ON friend_requests (from_id, id)`;
 
   // Dedupe categories on the same case-insensitive key enforced by routes.
   // Repoint references to the lowest id per owner/name key, delete the rest,

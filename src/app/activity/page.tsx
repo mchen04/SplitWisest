@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
-import { apiCached, cacheGet, fmtTime, markRead, useSync } from "@/lib/client";
+import { fmtTime, markRead, useApiData, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Button } from "@/components/ui";
 import { ActivitySummary } from "@/components/activity-summary";
@@ -33,26 +33,19 @@ interface Activity {
 }
 
 export default function ActivityPage() {
-  const [activity, setActivity] = useState<Activity[] | null>(
-    () => cacheGet<{ activity: Activity[] }>("/api/activity?limit=50")?.activity ?? null
-  );
   const [limit, setLimit] = useState(50);
-  const [hasMore, setHasMore] = useState(false);
+  const { data, reload } = useApiData<{ activity: Activity[]; hasMore: boolean }>(
+    `/api/activity?limit=${limit}`, 0, { sync: false }
+  );
+  const activity = data?.activity ?? null;
+  const hasMore = data?.hasMore ?? false;
 
-  const load = useCallback(() => {
-    apiCached<{ activity: Activity[]; hasMore: boolean }>(`/api/activity?limit=${limit}`)
-      .then((r) => {
-        setActivity(r.activity);
-        setHasMore(r.hasMore);
-        const maxId = r.activity.reduce((m, a) => Math.max(m, a.id), 0);
-        if (maxId > 0) markRead("activity", maxId);
-      })
-      .catch(() => {});
-  }, [limit]);
-
-  useEffect(load, [load]);
+  useEffect(() => {
+    const maxId = activity?.reduce((max, item) => Math.max(max, item.id), 0) ?? 0;
+    if (maxId > 0) markRead("activity", maxId);
+  }, [activity]);
   useSync((c, prev) => {
-    if (c.activityCursor !== prev.activityCursor) load();
+    if (c.activityCursor !== prev.activityCursor) reload();
   });
 
   return (
