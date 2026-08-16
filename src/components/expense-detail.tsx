@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Pencil, Trash2, Paperclip, FileText, SendHorizonal, MessageSquare } from "lucide-react";
-import { api, fmtDate, fmtMoney, fmtTime } from "@/lib/client";
+import { api, fmtDate, fmtMoney, fmtTime, useApiData } from "@/lib/client";
 import { Modal, Button, Avatar, Input } from "./ui";
 
 interface Detail {
@@ -52,22 +52,23 @@ export function ExpenseDetailModal({
   onEdit: (id: number) => void;
   onDelete: (id: number) => void;
 }) {
-  const [detail, setDetail] = useState<Detail | null>(null);
-  const [comments, setComments] = useState<Comment[] | null>(null);
-  const [draft, setDraft] = useState("");
+  const enabled = open && expenseId !== null;
+  const { data: detailData } = useApiData<{ expense: Detail }>(
+    `/api/expenses/${expenseId ?? 0}`, 0, { sync: false, enabled }
+  );
+  const { data: commentsData } = useApiData<{ comments: Comment[] }>(
+    `/api/expenses/${expenseId ?? 0}/comments`, 0, { sync: false, enabled }
+  );
+  const detail = detailData?.expense ?? null;
+  const [localComments, setLocalComments] = useState<{ expenseId: number; comments: Comment[] } | null>(null);
+  const comments = localComments?.expenseId === expenseId
+    ? localComments.comments
+    : commentsData?.comments ?? null;
+  const [draftState, setDraftState] = useState<{ expenseId: number; value: string } | null>(null);
+  const draft = draftState?.expenseId === expenseId ? draftState.value : "";
+  const setDraft = (value: string) => setDraftState({ expenseId: expenseId ?? 0, value });
   const [sending, setSending] = useState(false);
   const commentsEnd = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open || expenseId === null) return;
-    // Clear stale detail before loading the selected expense.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDetail(null);
-    setComments(null);
-    setDraft("");
-    api<{ expense: Detail }>(`/api/expenses/${expenseId}`).then((r) => setDetail(r.expense)).catch(() => {});
-    api<{ comments: Comment[] }>(`/api/expenses/${expenseId}/comments`).then((r) => setComments(r.comments)).catch(() => {});
-  }, [open, expenseId]);
 
   useEffect(() => {
     commentsEnd.current?.scrollIntoView({ block: "nearest" });
@@ -80,7 +81,7 @@ export function ExpenseDetailModal({
     setSending(true);
     try {
       const r = await api<{ comment: Comment }>(`/api/expenses/${expenseId}/comments`, { body: { body } });
-      setComments((c) => [...(c ?? []), r.comment]);
+      setLocalComments({ expenseId, comments: [...(comments ?? []), r.comment] });
       setDraft("");
     } finally {
       setSending(false);

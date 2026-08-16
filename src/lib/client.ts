@@ -306,8 +306,9 @@ export function useSync(onChange: ((c: SyncCursors, prev: SyncCursors) => void) 
 export function useApiData<T>(
   path: string,
   debounceMs = 0,
-  opts: { sync?: false | keyof SyncCursors | (keyof SyncCursors)[] } = {}
+  opts: { sync?: false | keyof SyncCursors | (keyof SyncCursors)[]; enabled?: boolean } = {}
 ): { data: T | null; error: string | null; status: number | null; reload: () => void } {
+  const enabled = opts.enabled !== false;
   const [state, setState] = useState<{ path: string; data: T | null; error: string | null; status: number | null }>({
     path,
     data: null,
@@ -331,6 +332,7 @@ export function useApiData<T>(
       });
   }, [path]);
   useLayoutEffect(() => {
+    if (!enabled) return;
     hydrateReadCache();
     const stale = cacheGet<T>(path);
     if (stale === null) return;
@@ -339,15 +341,16 @@ export function useApiData<T>(
     setState((current) => current.path === path && current.data !== null
       ? current
       : { path, data: stale, error: null, status: null });
-  }, [path]);
+  }, [path, enabled]);
   useEffect(() => {
+    if (!enabled) return;
     const t = setTimeout(reload, debounceMs);
     return () => clearTimeout(t);
-  }, [reload, debounceMs]);
+  }, [reload, debounceMs, enabled]);
   const syncKeys =
     opts.sync === false ? null : Array.isArray(opts.sync) ? opts.sync : opts.sync ? [opts.sync] : null;
   useSync(
-    opts.sync === false
+    !enabled || opts.sync === false
       ? undefined
       : syncKeys
         ? (c, prev) => {
@@ -359,9 +362,9 @@ export function useApiData<T>(
   // last cached payload for this path so navigation renders instantly.
   const cached = (dataCache.get(path) as T | undefined) ?? null;
   return {
-    data: state.path === path ? state.data ?? cached : cached,
-    error: state.path === path ? state.error : null,
-    status: state.path === path ? state.status : null,
+    data: enabled ? state.path === path ? state.data ?? cached : cached : null,
+    error: enabled && state.path === path ? state.error : null,
+    status: enabled && state.path === path ? state.status : null,
     reload,
   };
 }
