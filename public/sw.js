@@ -2,6 +2,7 @@ const STATIC_CACHE = "splitwisest-static-v2";
 const PAGE_CACHE = "splitwisest-pages-v2";
 const META_CACHE = "splitwisest-meta-v2";
 const SHELL_UPDATE_KEY = "/__splitwisest_shell_updated__";
+const VERSION_KEY = "/__splitwisest_version__";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.json"];
 
@@ -30,11 +31,29 @@ async function notifyShellUpdate() {
   for (const client of clients) client.postMessage({ type: "APP_SHELL_UPDATED" });
 }
 
+async function deploymentChanged() {
+  try {
+    const response = await fetch("/api/version", { cache: "no-store" });
+    if (!response.ok) return false;
+    const { version } = await response.json();
+    if (typeof version !== "string" || !version) return false;
+    const meta = await caches.open(META_CACHE);
+    const previous = await meta.match(VERSION_KEY);
+    const previousVersion = previous ? await previous.text() : null;
+    await meta.put(VERSION_KEY, new Response(version));
+    if (!previousVersion || previousVersion === version) return false;
+    await caches.delete(STATIC_CACHE);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function refreshPage(request, cached) {
   const response = await fetch(request);
   if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return response;
 
-  let changed = false;
+  let changed = await deploymentChanged();
   if (cached) {
     const [oldHtml, nextHtml] = await Promise.all([cached.clone().text(), response.clone().text()]);
     changed = oldHtml !== nextHtml;
