@@ -24,16 +24,23 @@ export function ServiceWorkerRegistration() {
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
     let registration: ServiceWorkerRegistration | null = null;
-    const reloadForUpdate = () => {
+    const reloadForUpdate = async (force = false) => {
       if (reloaded) return;
+      let pending = force;
+      if ("caches" in window) {
+        const meta = await caches.open("splitwisest-meta-v2");
+        pending = (await meta.match("/__splitwisest_shell_updated__")) !== undefined || pending;
+        if (pending) await meta.delete("/__splitwisest_shell_updated__");
+      }
+      if (!pending) return;
       reloaded = true;
       window.location.reload();
     };
     const onChange = () => {
-      if (hadController) reloadForUpdate();
+      if (hadController) reloadForUpdate(true);
     };
     const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === "APP_SHELL_UPDATED") reloadForUpdate();
+      if (event.data?.type === "APP_SHELL_UPDATED") reloadForUpdate(true);
     };
     const checkForUpdate = () => {
       if (document.visibilityState === "visible" && navigator.onLine) registration?.update().catch(() => {});
@@ -43,6 +50,7 @@ export function ServiceWorkerRegistration() {
     navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
       .then((next) => {
         registration = next;
+        reloadForUpdate();
         checkForUpdate();
       })
       .catch(() => {});

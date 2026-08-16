@@ -1,5 +1,7 @@
 const STATIC_CACHE = "splitwisest-static-v2";
 const PAGE_CACHE = "splitwisest-pages-v2";
+const META_CACHE = "splitwisest-meta-v2";
+const SHELL_UPDATE_KEY = "/__splitwisest_shell_updated__";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.json"];
 
@@ -13,7 +15,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  const current = new Set([STATIC_CACHE, PAGE_CACHE]);
+  const current = new Set([STATIC_CACHE, PAGE_CACHE, META_CACHE]);
   event.waitUntil(
     caches.keys()
       .then((keys) => Promise.all(keys.filter((key) => !current.has(key)).map((key) => caches.delete(key))))
@@ -22,6 +24,8 @@ self.addEventListener("activate", (event) => {
 });
 
 async function notifyShellUpdate() {
+  const meta = await caches.open(META_CACHE);
+  await meta.put(SHELL_UPDATE_KEY, new Response(String(Date.now())));
   const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   for (const client of clients) client.postMessage({ type: "APP_SHELL_UPDATED" });
 }
