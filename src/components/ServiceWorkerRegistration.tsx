@@ -23,15 +23,37 @@ export function ServiceWorkerRegistration() {
     // controller), which isn't an update.
     const hadController = !!navigator.serviceWorker.controller;
     let reloaded = false;
+    let registration: ServiceWorkerRegistration | null = null;
+    const reloadForUpdate = () => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    };
     const onChange = () => {
-      if (hadController && !reloaded) {
-        reloaded = true;
-        window.location.reload();
-      }
+      if (hadController) reloadForUpdate();
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === "APP_SHELL_UPDATED") reloadForUpdate();
+    };
+    const checkForUpdate = () => {
+      if (document.visibilityState === "visible" && navigator.onLine) registration?.update().catch(() => {});
     };
     navigator.serviceWorker.addEventListener("controllerchange", onChange);
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
-    return () => navigator.serviceWorker.removeEventListener("controllerchange", onChange);
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+      .then((next) => {
+        registration = next;
+        checkForUpdate();
+      })
+      .catch(() => {});
+    document.addEventListener("visibilitychange", checkForUpdate);
+    const timer = window.setInterval(checkForUpdate, 30 * 60 * 1000);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", checkForUpdate);
+      navigator.serviceWorker.removeEventListener("controllerchange", onChange);
+      navigator.serviceWorker.removeEventListener("message", onMessage);
+    };
   }, []);
   return null;
 }

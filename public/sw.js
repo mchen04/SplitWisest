@@ -1,21 +1,45 @@
-const CACHE = "splitwisest-v1";
+const STATIC_CACHE = "splitwisest-static-v2";
+const PAGE_CACHE = "splitwisest-pages-v2";
 const OFFLINE_URL = "/offline.html";
 const PRECACHE = [OFFLINE_URL, "/icon.svg", "/icon-192.png", "/icon-512.png", "/manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+    Promise.all([
+      caches.open(STATIC_CACHE).then((cache) => cache.addAll(PRECACHE)),
+      caches.open(PAGE_CACHE).then((cache) => cache.add("/")),
+    ]).then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener("activate", (event) => {
+  const current = new Set([STATIC_CACHE, PAGE_CACHE]);
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => !current.has(key)).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });
+
+async function notifyShellUpdate() {
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of clients) client.postMessage({ type: "APP_SHELL_UPDATED" });
+}
+
+async function refreshPage(request, cached) {
+  const response = await fetch(request);
+  if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return response;
+
+  let changed = false;
+  if (cached) {
+    const [oldHtml, nextHtml] = await Promise.all([cached.clone().text(), response.clone().text()]);
+    changed = oldHtml !== nextHtml;
+  }
+  const cache = await caches.open(PAGE_CACHE);
+  await cache.put(request, response.clone());
+  if (changed) await notifyShellUpdate();
+  return response;
+}
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;
@@ -23,45 +47,53 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
-  // Never cache API/auth traffic — always live.
   if (url.pathname.startsWith("/api/")) return;
 
-  // Hashed build assets are immutable: cache-first.
-  if (url.pathname.startsWith("/_next/static/")) {
+  if (request.mode === "navigate") {
+    const cachedPromise = caches.open(PAGE_CACHE).then((cache) => cache.match(request));
+    let networkPromise;
+    const network = (cached) => {
+      networkPromise ??= refreshPage(request, cached);
+      return networkPromise;
+    };
+
+    event.waitUntil(
+      cachedPromise.then((cached) => cached ? network(cached).catch(() => undefined) : undefined)
+    );
     event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((res) => {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(request, copy));
-            return res;
-          })
-      )
+      cachedPromise.then((cached) => {
+        if (cached) return cached;
+        return network(null).catch(() => caches.match(OFFLINE_URL));
+      })
     );
     return;
   }
 
-  // Everything else: network-first so behavior matches the live app. We deliberately
-  // do NOT cache navigation HTML — a cached app shell can reference a previous
-  // deploy's chunk hashes and fail a dynamic import after an update; offline
-  // navigations fall back to the precached offline page instead. Only icons are
-  // cached (immutable enough, and used by the manifest/install UI).
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(
+      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+        if (response.ok) {
+          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone())));
+        }
+        return response;
+      }))
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(request)
-      .then((res) => {
-        if (res.ok && url.pathname.startsWith("/icon")) {
-          const copy = res.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, copy));
+    caches.match(request).then((cached) => {
+      const update = fetch(request).then((response) => {
+        if (response.ok) {
+          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone())));
         }
-        return res;
-      })
-      .catch(async () => {
-        if (request.mode === "navigate") {
-          return caches.match(OFFLINE_URL);
-        }
-        const cached = await caches.match(request);
-        return cached || Response.error();
-      })
+        return response;
+      });
+      if (cached) {
+        event.waitUntil(update.catch(() => undefined));
+        return cached;
+      }
+      return update.catch(() => Response.error());
+    })
   );
 });

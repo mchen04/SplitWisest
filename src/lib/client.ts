@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export class ApiClientError extends Error {
   status: number;
@@ -21,6 +21,7 @@ export async function api<T = unknown>(
     body: opts.form ?? (opts.body ? JSON.stringify(opts.body) : undefined),
   });
   if (res.status === 401 && typeof window !== "undefined" && !location.pathname.startsWith("/login")) {
+    clearReadCache(true);
     location.href = "/login";
     throw new ApiClientError("Not authenticated", 401);
   }
@@ -30,9 +31,11 @@ export async function api<T = unknown>(
   // always fetches fresh — so mutations don't need to clear it (doing so made
   // remounting shells flash empty). Auth changes do clear it, so one account's
   // data never paints for another.
-  if (method !== "GET" && (path.startsWith("/api/auth") || path.startsWith("/api/me"))) {
-    dataCache.clear();
-    meCache = null;
+  if (method !== "GET") {
+    // Keep stale values available for paint, but force the next read to reach
+    // the server. Authentication changes must remove the previous owner data.
+    for (const key of cacheTimes.keys()) cacheTimes.set(key, 0);
+    if (path.startsWith("/api/auth")) clearReadCache(path.endsWith("/logout"));
   }
   return json as T;
 }
@@ -42,7 +45,95 @@ export async function api<T = unknown>(
 // remounting hook renders the last known payload instantly while a fresh fetch
 // runs in the background. Identical concurrent GETs share one request.
 const dataCache = new Map<string, unknown>();
+const cacheTimes = new Map<string, number>();
 const inflight = new Map<string, Promise<unknown>>();
+const READ_CACHE_KEY = "splitwisest.read-cache.v1";
+const CACHE_OWNER_COOKIE = "sw_cache_owner";
+const MAX_CACHE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const FRESH_DEDUPE_MS = 1500;
+const MAX_CACHE_ENTRIES = 80;
+const MAX_CACHE_BYTES = 3_500_000;
+let cacheHydrated = false;
+let persistScheduled = false;
+
+interface StoredReadCache {
+  owner: string;
+  entries: [string, unknown, number][];
+}
+
+function cacheOwner(): string | null {
+  if (typeof document === "undefined") return null;
+  const part = document.cookie.split("; ").find((item) => item.startsWith(`${CACHE_OWNER_COOKIE}=`));
+  return part ? decodeURIComponent(part.slice(CACHE_OWNER_COOKIE.length + 1)) : null;
+}
+
+function clearReadCache(clearOwnerCookie = false) {
+  dataCache.clear();
+  cacheTimes.clear();
+  cacheHydrated = true;
+  if (typeof window !== "undefined") {
+    try { localStorage.removeItem(READ_CACHE_KEY); } catch {}
+    if (clearOwnerCookie) {
+      document.cookie = `${CACHE_OWNER_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
+    }
+  }
+}
+
+function hydrateReadCache() {
+  if (cacheHydrated || typeof window === "undefined") return;
+  cacheHydrated = true;
+  const owner = cacheOwner();
+  if (!owner) return;
+  try {
+    const raw = localStorage.getItem(READ_CACHE_KEY);
+    if (!raw) return;
+    const stored = JSON.parse(raw) as StoredReadCache;
+    if (stored.owner !== owner || !Array.isArray(stored.entries)) {
+      localStorage.removeItem(READ_CACHE_KEY);
+      return;
+    }
+    const cutoff = Date.now() - MAX_CACHE_AGE_MS;
+    for (const entry of stored.entries) {
+      if (!Array.isArray(entry) || typeof entry[0] !== "string" || typeof entry[2] !== "number") continue;
+      if (entry[2] < cutoff) continue;
+      dataCache.set(entry[0], entry[1]);
+      cacheTimes.set(entry[0], entry[2]);
+    }
+  } catch {
+    try { localStorage.removeItem(READ_CACHE_KEY); } catch {}
+  }
+}
+
+function persistReadCache() {
+  persistScheduled = false;
+  if (typeof window === "undefined") return;
+  const owner = cacheOwner();
+  if (!owner) return;
+  const entries = [...dataCache.entries()]
+    .map(([path, value]) => [path, value, cacheTimes.get(path) ?? Date.now()] as [string, unknown, number])
+    .sort((a, b) => b[2] - a[2])
+    .slice(0, MAX_CACHE_ENTRIES);
+  try {
+    let payload = JSON.stringify({ owner, entries } satisfies StoredReadCache);
+    while (payload.length > MAX_CACHE_BYTES && entries.length > 1) {
+      entries.pop();
+      payload = JSON.stringify({ owner, entries } satisfies StoredReadCache);
+    }
+    localStorage.setItem(READ_CACHE_KEY, payload);
+  } catch {
+    // Storage can be disabled or full. Memory caching still works.
+  }
+}
+
+function scheduleCachePersist() {
+  if (persistScheduled || typeof window === "undefined") return;
+  persistScheduled = true;
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(persistReadCache, { timeout: 1000 });
+  } else {
+    globalThis.setTimeout(persistReadCache, 0);
+  }
+}
 
 // Synchronous read of the last cached payload for a path (or null). Pages that
 // manage their own fetch state use this to seed useState so a revisit renders
@@ -52,11 +143,18 @@ export function cacheGet<T>(path: string): T | null {
 }
 
 export function apiCached<T>(path: string): Promise<T> {
+  const cached = dataCache.get(path);
+  const cachedAt = cacheTimes.get(path) ?? 0;
+  if (cached !== undefined && Date.now() - cachedAt < FRESH_DEDUPE_MS) {
+    return Promise.resolve(cached as T);
+  }
   const pending = inflight.get(path);
   if (pending) return pending as Promise<T>;
   const p = api<T>(path)
     .then((json) => {
       dataCache.set(path, json);
+      cacheTimes.set(path, Date.now());
+      scheduleCachePersist();
       return json;
     })
     .finally(() => inflight.delete(path));
@@ -223,13 +321,24 @@ export function useApiData<T>(
         setState({ path: requestedPath, data: next, error: null, status: 200 });
       })
       .catch((err) => {
+        const stale = cacheGet<T>(requestedPath);
         setState({
           path: requestedPath,
-          data: null,
-          error: err instanceof ApiClientError ? err.message : "Could not load data",
+          data: stale,
+          error: stale ? null : err instanceof ApiClientError ? err.message : "Could not load data",
           status: err instanceof ApiClientError ? err.status : null,
         });
       });
+  }, [path]);
+  useLayoutEffect(() => {
+    hydrateReadCache();
+    const stale = cacheGet<T>(path);
+    if (stale === null) return;
+    // A layout update replaces the server skeleton before the first paint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setState((current) => current.path === path && current.data !== null
+      ? current
+      : { path, data: stale, error: null, status: null });
   }, [path]);
   useEffect(() => {
     const t = setTimeout(reload, debounceMs);
@@ -287,20 +396,10 @@ export function useFilters<T extends Record<string, string>>(initial: T) {
 }
 
 interface MeUser { id: number; username: string; displayName: string; inviteCode: string }
-let meCache: MeUser | null = null;
 
 export function useMe() {
-  const [me, setMe] = useState<MeUser | null>(meCache);
-  useEffect(() => {
-    if (meCache) return;
-    apiCached<{ user: MeUser }>("/api/me")
-      .then((r) => {
-        meCache = r.user;
-        setMe(r.user);
-      })
-      .catch(() => {});
-  }, []);
-  return me;
+  const { data } = useApiData<{ user: MeUser }>("/api/me", 0, { sync: false });
+  return data?.user ?? null;
 }
 
 export { CURRENCIES } from "./currencies";

@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus, Users, ScrollText, Bell, HandCoins } from "lucide-react";
-import { apiCached, cacheGet, fmtMoney, fmtTime, useMe, useSync } from "@/lib/client";
+import { fmtMoney, fmtTime, useApiData, useMe, useSync } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
 
@@ -32,17 +32,18 @@ interface Activity {
 
 export default function Dashboard() {
   const me = useMe();
-  const [groups, setGroups] = useState<Group[] | null>(() => cacheGet<{ groups: Group[] }>("/api/groups")?.groups ?? null);
-  const [friends, setFriends] = useState<Friend[] | null>(() => cacheGet<{ friends: Friend[] }>("/api/friends")?.friends ?? null);
-  const [activity, setActivity] = useState<Activity[] | null>(() => cacheGet<{ activity: Activity[] }>("/api/activity")?.activity ?? null);
+  const { data: groupsData, reload: reloadGroups } = useApiData<{ groups: Group[] }>("/api/groups", 0, { sync: false });
+  const { data: friendsData, reload: reloadFriends } = useApiData<{ friends: Friend[] }>("/api/friends", 0, { sync: false });
+  const { data: activityData, reload: reloadActivity } = useApiData<{ activity: Activity[] }>("/api/activity", 0, { sync: false });
+  const groups = groupsData?.groups ?? null;
+  const friends = friendsData?.friends ?? null;
+  const activity = activityData?.activity ?? null;
 
   const load = useCallback(() => {
-    apiCached<{ groups: Group[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
-    apiCached<{ friends: Friend[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
-    apiCached<{ activity: Activity[] }>("/api/activity").then((r) => setActivity(r.activity)).catch(() => {});
-  }, []);
-
-  useEffect(load, [load]);
+    reloadGroups();
+    reloadFriends();
+    reloadActivity();
+  }, [reloadGroups, reloadFriends, reloadActivity]);
   useSync((c, prev) => {
     if (
       c.activityCursor !== prev.activityCursor ||
