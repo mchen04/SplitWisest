@@ -46,6 +46,7 @@ export async function api<T = unknown>(
 // runs in the background. Identical concurrent GETs share one request.
 const dataCache = new Map<string, unknown>();
 const cacheTimes = new Map<string, number>();
+const cacheStoredAt = new Map<string, number>();
 const inflight = new Map<string, Promise<unknown>>();
 const READ_CACHE_KEY = "splitwisest.read-cache.v1";
 const CACHE_OWNER_COOKIE = "sw_cache_owner";
@@ -70,6 +71,7 @@ function cacheOwner(): string | null {
 function clearReadCache(clearOwnerCookie = false) {
   dataCache.clear();
   cacheTimes.clear();
+  cacheStoredAt.clear();
   cacheHydrated = true;
   if (typeof window !== "undefined") {
     try { localStorage.removeItem(READ_CACHE_KEY); } catch {}
@@ -97,7 +99,9 @@ function hydrateReadCache() {
       if (!Array.isArray(entry) || typeof entry[0] !== "string" || typeof entry[2] !== "number") continue;
       if (entry[2] < cutoff) continue;
       dataCache.set(entry[0], entry[1]);
-      cacheTimes.set(entry[0], entry[2]);
+      // Persisted values paint immediately but always revalidate after reload.
+      cacheTimes.set(entry[0], 0);
+      cacheStoredAt.set(entry[0], entry[2]);
     }
   } catch {
     try { localStorage.removeItem(READ_CACHE_KEY); } catch {}
@@ -110,7 +114,7 @@ function persistReadCache() {
   const owner = cacheOwner();
   if (!owner) return;
   const entries = [...dataCache.entries()]
-    .map(([path, value]) => [path, value, cacheTimes.get(path) ?? Date.now()] as [string, unknown, number])
+    .map(([path, value]) => [path, value, cacheStoredAt.get(path) ?? Date.now()] as [string, unknown, number])
     .sort((a, b) => b[2] - a[2])
     .slice(0, MAX_CACHE_ENTRIES);
   try {
@@ -153,7 +157,9 @@ export function apiCached<T>(path: string): Promise<T> {
   const p = api<T>(path)
     .then((json) => {
       dataCache.set(path, json);
-      cacheTimes.set(path, Date.now());
+      const now = Date.now();
+      cacheTimes.set(path, now);
+      cacheStoredAt.set(path, now);
       scheduleCachePersist();
       return json;
     })
