@@ -8,7 +8,7 @@ import {
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, ChevronDown, Users,
   SlidersHorizontal,
 } from "lucide-react";
-import { api, apiCached, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
+import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal, Menu, MenuItem } from "@/components/ui";
 import { ExpenseForm } from "@/components/expense-form";
@@ -36,7 +36,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   // filters
   const { filters, setFilter, reset: resetFilters, active: filtersActive } =
     useFilters({ q: "", cat: "", payer: "", from: "", to: "" });
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const { data: categoriesData } = useApiData<{ categories: { id: number; name: string }[] }>(
+    "/api/categories", 0, { sync: false }
+  );
+  const categories = categoriesData?.categories ?? [];
   const {
     detail, expenses, hasMoreExpenses, recurring, settlements, hasMoreSettlements,
     activity, refreshKey, loadError, loadDetail, refreshAll,
@@ -88,12 +91,6 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    apiCached<{ categories: { id: number; name: string }[] }>("/api/categories")
-      .then((r) => setCategories(r.categories))
-      .catch(() => {});
-  }, []);
 
   async function openEdit(expenseId: number) {
     try {

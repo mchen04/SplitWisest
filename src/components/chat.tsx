@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Search, SendHorizonal } from "lucide-react";
-import { api, fmtTime, markRead } from "@/lib/client";
+import { api, fmtTime, markRead, useApiData } from "@/lib/client";
 import { Avatar, Input } from "./ui";
 
 interface Message {
@@ -55,6 +55,9 @@ export function ChatPane({
   readScope?: string; // e.g. msg:group:1 — marks the conversation read on view
   fill?: boolean; // fill the parent's height instead of the fixed mobile height
 }) {
+  const { data: initialData, reload: reloadInitial } = useApiData<{ messages: Message[]; hasMore?: boolean }>(
+    endpoint, 0, { sync: false }
+  );
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
@@ -67,15 +70,15 @@ export function ChatPane({
   const inflight = useRef<Promise<void> | null>(null);
   const searchSeq = useRef(0);
 
-  async function loadAll() {
-    const seq = ++searchSeq.current;
-    const r = await api<{ messages: Message[]; hasMore?: boolean }>(endpoint);
-    if (seq !== searchSeq.current) return; // a newer search superseded this
-    setMessages(r.messages);
-    setHasMoreOlder(!!r.hasMore);
-    lastId.current = r.messages.at(-1)?.id ?? 0;
+  useLayoutEffect(() => {
+    // Reset on a conversation change. A persistent result replaces the old
+    // conversation before paint when one is available.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMessages(initialData?.messages ?? null);
+    setHasMoreOlder(!!initialData?.hasMore);
+    lastId.current = initialData?.messages.at(-1)?.id ?? 0;
     if (readScope && lastId.current > 0) markRead(readScope, lastId.current);
-  }
+  }, [endpoint, initialData, readScope]);
 
   // Prepend an older page of history while preserving scroll position.
   async function loadEarlier() {
@@ -122,12 +125,6 @@ export function ChatPane({
   }
 
   useEffect(() => {
-    loadAll().catch(() => {});
-    // loadAll closes over endpoint; re-run only when the conversation changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint]);
-
-  useEffect(() => {
     if (refreshKey > 0 && !searching) loadNew().catch(() => {});
     // Fire on each sync tick (refreshKey bump) only; loadNew/searching are refs
     // or read fresh and intentionally excluded.
@@ -149,7 +146,7 @@ export function ChatPane({
     searchTimer.current = setTimeout(async () => {
       if (!q.trim()) {
         setSearching(false);
-        await loadAll().catch(() => {});
+        reloadInitial();
         return;
       }
       setSearching(true);

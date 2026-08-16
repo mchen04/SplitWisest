@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
-import { apiCached, fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
+import { fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
 import { AppShell, PageTitle } from "@/components/shell";
 import { Card, EmptyState, Input, Select, Button, Chip } from "@/components/ui";
 
@@ -23,9 +23,6 @@ interface Expense {
 const EMPTY_FILTERS = { q: "", groupId: "", categoryId: "", friendId: "", from: "", to: "" };
 
 export default function ExpensesPage() {
-  const [groups, setGroups] = useState<{ id: number; name: string }[]>([]);
-  const [friends, setFriends] = useState<{ id: number; displayName: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const { filters, setFilter, reset, active: filtersActive } = useFilters(EMPTY_FILTERS);
   const [limit, setLimit] = useState(50);
 
@@ -46,12 +43,12 @@ export default function ExpensesPage() {
   const { data } = useApiData<{ expenses: Expense[]; hasMore: boolean }>(`/api/expenses?${params}`, filters.q.trim() ? 250 : 0);
   const expenses = data?.expenses ?? null;
   const hasMore = data?.hasMore ?? false;
-
-  useEffect(() => {
-    apiCached<{ groups: { id: number; name: string }[] }>("/api/groups").then((r) => setGroups(r.groups)).catch(() => {});
-    apiCached<{ friends: { id: number; displayName: string }[] }>("/api/friends").then((r) => setFriends(r.friends)).catch(() => {});
-    apiCached<{ categories: { id: number; name: string }[] }>("/api/categories").then((r) => setCategories(r.categories)).catch(() => {});
-  }, []);
+  const { data: groupsData } = useApiData<{ groups: { id: number; name: string }[] }>("/api/groups", 0, { sync: false });
+  const { data: friendsData } = useApiData<{ friends: { id: number; displayName: string }[] }>("/api/friends", 0, { sync: false });
+  const { data: categoriesData } = useApiData<{ categories: { id: number; name: string }[] }>("/api/categories", 0, { sync: false });
+  const groups = groupsData?.groups ?? [];
+  const friends = friendsData?.friends ?? [];
+  const categories = categoriesData?.categories ?? [];
 
   return (
     <AppShell>
