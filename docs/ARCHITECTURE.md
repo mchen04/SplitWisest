@@ -42,7 +42,13 @@ Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byt
 
 ## Chat
 
-`messages` rows are either `group` (group_id) or `dm` (ordered user pair). Both endpoints support `since` incremental fetch and `q` substring search. Links render as anchors; everything else is plain text (React escapes by default).
+`messages` rows are either `group` (group_id) or `dm` (ordered user pair). Both endpoints support `since` incremental fetch and `q` substring search. Links render as anchors; everything else is plain text (React escapes by default). The dedicated mobile Chat page owns the visible viewport. Its message list scrolls inside the page, while search, composer, Send, and bottom navigation stay visible.
+
+## Mobile PWA shell
+
+The root viewport uses `viewport-fit=cover`. Mobile safe-area values become CSS variables in `src/app/globals.css`. The bottom navigation adds the iPhone inset plus a small lift. The Chat main area reserves the same height, so the composer never sits under navigation.
+
+The dedicated Chat route uses a bounded `100dvh` flex shell with page overflow disabled. Only the message list has vertical overflow. This layout follows the visual viewport when Safari expands its toolbars or shows the keyboard. See `docs/PWA.md` for the verification contract.
 
 ## Recurring expenses
 
@@ -50,7 +56,7 @@ Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byt
 
 ## Theming
 
-The design system is codified in `.interface-design/system.md` and ships from a single source of truth: the design tokens in `src/app/globals.css` (`@theme`). The direction is modern/clean/minimal — flat, cool-neutral surfaces (no texture), one sans typeface (Instrument Sans) for all UI and money with tabular figures, the serif (Fraunces) reserved only for the wordmark, and a restrained green accent with money semantics (`owed`/`owe`) kept distinct from the brand and from `danger`. Two palettes share the same token names: light is the default; dark is defined under `[data-theme="dark"]`, which overrides the `--color-*` tokens (and `--shadow-*`, skeleton) so every `bg-paper`/`text-ink`/`bg-accent` utility flips automatically — no per-component dark variants. In dark mode cards lift above the canvas (depth comes from a surface-lightness step, not shadows). Accent and danger backgrounds use dedicated `--color-on-accent` / `--color-on-danger` foreground tokens so text stays legible in both themes. `src/lib/theme.tsx` exposes `useTheme()` (toggle wired into the sidebar, mobile header, and Settings → Appearance) and `themeInitScript`, an inline `<head>` script that applies the saved theme (or the OS `prefers-color-scheme`) before first paint to avoid a flash. The choice persists in `localStorage`.
+The design system is codified in `.interface-design/system.md` and ships from two CSS token scopes. Tailwind design tokens live in `src/app/globals.css` under `@theme`. Runtime environment tokens, including safe-area values, live under `:root` so Tailwind cannot remove them. The direction is modern/clean/minimal — flat, cool-neutral surfaces (no texture), one sans typeface (Instrument Sans) for all UI and money with tabular figures, the serif (Fraunces) reserved only for the wordmark, and a restrained green accent with money semantics (`owed`/`owe`) kept distinct from the brand and from `danger`. Two palettes share the same token names: light is the default; dark is defined under `[data-theme="dark"]`, which overrides the `--color-*` tokens (and `--shadow-*`, skeleton) so every `bg-paper`/`text-ink`/`bg-accent` utility flips automatically — no per-component dark variants. In dark mode cards lift above the canvas (depth comes from a surface-lightness step, not shadows). Accent and danger backgrounds use dedicated `--color-on-accent` / `--color-on-danger` foreground tokens so text stays legible in both themes. `src/lib/theme.tsx` exposes `useTheme()` (toggle wired into the sidebar, mobile header, and Settings → Appearance) and `themeInitScript`, an inline `<head>` script that applies the saved theme (or the OS `prefers-color-scheme`) before first paint to avoid a flash. The choice persists in `localStorage`.
 
 ## Performance
 

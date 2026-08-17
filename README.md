@@ -18,7 +18,7 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 - Group chat + direct friend chat with link rendering and search
 - Realtime via lightweight polling sync cursor (serverless-friendly)
 - Modern, clean, minimal UI from a single design-token system — flat surfaces, one sans typeface, tabular money; light + dark theme toggle in the sidebar, mobile header, and Settings — persists and respects OS preference
-- PWA manifest, responsive from small phones to ultrawide
+- Installable PWA with iPhone safe-area support, fixed chat controls, and responsive layouts from small phones to ultrawide
 
 ## Stack
 
@@ -47,12 +47,14 @@ escape hatch, inert in production).
 ## Testing
 
 ```bash
-pnpm vitest run      # money math + unit tests
-pnpm tsc --noEmit    # typecheck
-pnpm next build      # production build
+pnpm vitest run          # unit and regression tests
+pnpm exec tsc --noEmit   # typecheck
+pnpm verify:ui-tokens    # design-token rules
+pnpm lint                # lint
+pnpm build               # production build
 ```
 
-Browser/E2E verification is done with `agent-browser` across mobile portrait, mobile landscape, tablet, desktop, and wide viewports.
+Browser verification uses `agent-browser` across common viewports. The iPhone PWA gate uses WebKit and a physical-device release checklist in `docs/PWA.md`.
 
 ## Deployment (Vercel)
 
@@ -66,4 +68,5 @@ Set `DATABASE_URL` in Vercel project env vars. Add `SIGNUP_CODE` only if you wan
 
 - `docs/ARCHITECTURE.md` — auth, balance math, settlements, realtime, chat, deployment
 - `docs/DATABASE.md` — schema and migration notes for Neon
+- `docs/PWA.md` — iPhone layout contract and Safari release checks
 - `docs/USAGE.md` — user-facing workflow guide
