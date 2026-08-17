@@ -70,6 +70,8 @@
   --radius-control: 0.5rem;      /* 8 — controls and row actions */
   --radius-card: 0.75rem;        /* 12 — cards and grouped controls */
   --radius-sheet: 1rem;          /* 16 — sheets and dialogs */
+  --focus-ring: 3px;
+  --overlay-blur: 2px;
 }
 
 /* Dark mode — cool charcoal. Cards LIFT above the canvas (depth comes from a

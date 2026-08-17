@@ -5,7 +5,7 @@ import { Wallet } from "lucide-react";
 export function AuthFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh items-center justify-center p-5">
-      <div className="rise-in w-full max-w-[404px]">
+      <div className="rise-in w-full max-w-sm">
         <div className="mb-4 flex flex-col items-center gap-2">
           <div className="flex items-center justify-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-2xl text-on-accent">

@@ -95,7 +95,7 @@ Never introduce other radius values.
 
 ## Layout shell
 
-- Desktop/tablet (`md+`): fixed 216px sidebar (wordmark, single Add-expense CTA, nav
+- Desktop/tablet (`md+`): fixed 224px sidebar (wordmark, single Add-expense CTA, nav
   with unread badges, theme toggle, profile) + `max-w-5xl/6xl` main column. The sidebar
   owns the persistent "Add expense" — pages don't duplicate a second primary of equal
   weight.
@@ -121,3 +121,9 @@ Never introduce other radius values.
 No texture, no serif in the UI, no decorative hero sections, no marketing styling, no
 row of competing CTAs, no novel one-off controls. Reuse the patterns above or extend
 this file deliberately when a new pattern is genuinely needed.
+
+## Enforcement
+
+Run `pnpm verify:ui-tokens` before each UI commit. Components cannot use arbitrary
+pixel classes, numeric text or radius classes, or hard-coded hex colors. Structural
+viewport, percentage, `calc()`, and CSS-variable values remain valid.

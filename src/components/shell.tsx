@@ -97,7 +97,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-dvh">
       {/* Desktop / tablet sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[216px] flex-col border-r border-line bg-card md:flex">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-line bg-card md:flex">
         <Link href="/" className="flex items-center gap-2 px-4 pb-3 pt-4">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={launchExpense}
-            className="flex min-h-[var(--control-h)] w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="flex min-h-[var(--control-h)] w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[var(--focus-ring)] focus-visible:ring-accent-soft"
           >
             <Plus className="h-4 w-4" /> Add expense
           </button>
@@ -196,15 +196,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         </Link>
         <div className="flex items-center gap-1">
           <IconButton label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggle}>
-            {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </IconButton>
           <Link href="/settings" aria-label="Settings" title="Settings" className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-soft hover:bg-subtle hover:text-ink">
-            <Settings className="h-[18px] w-[18px]" />
+            <Settings className="h-5 w-5" />
           </Link>
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-[216px] md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8">
+      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0">{children}</div>
       </main>
 

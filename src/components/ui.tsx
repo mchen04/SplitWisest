@@ -35,7 +35,7 @@ export function Button({
     : "min-h-[var(--control-h)] px-3.5 text-sm gap-1.5";
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-lg py-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:pointer-events-none ${
+      className={`inline-flex items-center justify-center rounded-lg py-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[var(--focus-ring)] focus-visible:ring-accent-soft disabled:pointer-events-none ${
         // Busy keeps the variant color (with a spinner); a genuinely-disabled
         // (invalid) button uses a readable neutral instead of a low-contrast 50%
         // tint so its label stays legible.
@@ -69,7 +69,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${styles} ${className}`}
+      className={`inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[var(--focus-ring)] focus-visible:ring-accent-soft ${styles} ${className}`}
       {...rest}
     >
       {children}
@@ -119,7 +119,7 @@ export function Menu({
       {open && (
         <div
           role="menu"
-          className={`fade-in absolute z-50 mt-1 min-w-[180px] overflow-hidden rounded-xl border border-line bg-card p-1 shadow-pop ${align === "end" ? "right-0" : "left-0"}`}
+          className={`fade-in absolute z-50 mt-1 min-w-48 overflow-hidden rounded-xl border border-line bg-card p-1 shadow-pop ${align === "end" ? "right-0" : "left-0"}`}
           onClick={() => setOpen(false)}
         >
           {children}
@@ -169,7 +169,7 @@ export function SectionLabel({ children, className = "" }: { children: ReactNode
 }
 
 const inputCls =
-  "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card px-3 py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft sm:text-sm";
+  "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card px-3 py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[var(--focus-ring)] focus:ring-accent-soft sm:text-sm";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputCls} ${props.className ?? ""}`} />;
@@ -287,7 +287,7 @@ export function Modal({
   if (!open) return null;
   return (
     <div
-      className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-6"
+      className="fade-in fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-[var(--overlay-blur)] sm:items-center sm:p-6"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
       role="dialog"
       aria-modal="true"
