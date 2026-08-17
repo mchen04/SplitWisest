@@ -49,7 +49,7 @@ export default function GroupsPage() {
     <AppShell>
       <PageTitle
         title="Groups"
-        subtitle="A group for every shared context — trips, rent, dinners."
+        subtitle="Choose a group to see its expenses, balances, and chat."
         action={
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => { setJoinOpen(true); setError(null); setCode(""); }}>
@@ -62,35 +62,37 @@ export default function GroupsPage() {
         }
       />
 
-      <Card className="flex flex-col md:min-h-0 md:flex-1">
+      <div className="flex flex-col md:min-h-0 md:flex-1">
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {groups === null ? (
-          <div className="space-y-2 p-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="skeleton h-12 w-full" />
+              <div key={i} className="skeleton h-[4.75rem] w-full" />
             ))}
           </div>
         ) : groups.length === 0 ? (
-          <EmptyState
-            icon={<Users className="h-8 w-8" />}
-            title="No groups yet"
-            hint="Create your first group, or join one with an invite code."
-            action={
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" /> Create a group
-              </Button>
-            }
-          />
+          <Card>
+            <EmptyState
+              icon={<Users className="h-8 w-8" />}
+              title="No groups yet"
+              hint="Create your first group, or join one with an invite code."
+              action={
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="h-4 w-4" /> Create a group
+                </Button>
+              }
+            />
+          </Card>
         ) : (
-          <ul className="divide-y divide-line">
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {groups.map((g) => (
               <li key={g.id}>
-                <Link href={`/groups/${g.id}`} className="flex min-h-[var(--row-h)] items-center gap-2.5 px-3.5 py-2 hover:bg-subtle">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent-dark">
+                <Link href={`/groups/${g.id}`} className={`group-choice group-hue-${g.id % 6} flex min-h-[4.75rem] items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-card transition-colors hover:bg-subtle`}>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--group-soft)] text-[var(--group-ink)]">
                     <Users className="h-5 w-5" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{g.name}</span>
+                    <span className="block truncate font-semibold">{g.name}</span>
                     <span className="block text-xs text-ink-faint">
                       {g.memberCount} {g.memberCount === 1 ? "member" : "members"} · {g.expenseCount}{" "}
                       {g.expenseCount === 1 ? "expense" : "expenses"} · {g.currency}
@@ -112,7 +114,7 @@ export default function GroupsPage() {
           </ul>
         )}
         </div>
-      </Card>
+      </div>
 
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New group">
         <form onSubmit={create} className="space-y-4">

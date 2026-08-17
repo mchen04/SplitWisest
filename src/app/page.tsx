@@ -184,8 +184,8 @@ export default function Dashboard() {
               <ul className="divide-y divide-line">
                 {groups.map((g) => (
                   <li key={g.id}>
-                    <Link href={`/groups/${g.id}`} className="flex min-h-[var(--row-h)] items-center gap-3 px-4 py-2.5 hover:bg-subtle">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                    <Link href={`/groups/${g.id}`} className={`group-hue-${g.id % 6} flex min-h-[var(--row-h)] items-center gap-3 px-4 py-2.5 hover:bg-subtle`}>
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--group-soft)] text-[var(--group-ink)]">
                         <Users className="h-4 w-4" />
                       </span>
                       <span className="min-w-0 flex-1">

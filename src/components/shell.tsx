@@ -145,12 +145,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Link
                       key={g.id}
                       href={`/groups/${g.id}`}
-                      className={`flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-2.5 text-sm transition-colors ${
+                      className={`group-hue-${g.id % 6} flex items-center gap-2 rounded-lg py-1.5 pl-7 pr-2.5 text-sm transition-colors ${
                         pathname === `/groups/${g.id}`
                           ? "bg-accent-soft font-medium text-accent-dark"
                           : "text-ink-soft hover:bg-subtle hover:text-ink"
                       }`}
                     >
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--group-color)]" aria-hidden />
                       <span className="min-w-0 flex-1 truncate" title={g.name}>{g.name}</span>
                       {!!g.unreadMessages && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
                     </Link>
