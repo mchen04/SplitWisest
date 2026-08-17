@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Search, SendHorizonal } from "lucide-react";
 import { api, fmtTime, markRead, useApiData } from "@/lib/client";
+import { startsMessageBurst } from "@/lib/chat";
 import { Avatar, Input } from "./ui";
 
 interface Message {
@@ -205,23 +206,24 @@ export function ChatPane({
         ) : messages.length === 0 ? (
           <p className="py-10 text-center text-sm text-ink-faint">{searching ? "No messages match." : emptyHint}</p>
         ) : (
-          messages.map((m) => {
+          messages.map((m, index) => {
             const mine = m.senderId === meId;
+            const showTimestamp = startsMessageBurst(m.createdAt, messages[index - 1]?.createdAt);
             return (
-              <div key={m.id} className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
-                {!mine && <Avatar name={m.senderName} size="sm" />}
-                <div className={`max-w-[78%] ${mine ? "text-right" : ""}`}>
-                  <div
-                    className={`inline-block rounded-2xl px-3.5 py-2 text-left text-sm leading-relaxed ${
-                      mine ? "rounded-br-md bg-accent text-on-accent" : "rounded-bl-md bg-subtle text-ink"
-                    }`}
-                  >
-                    <MessageBody text={m.body} mine={mine} />
+              <div key={m.id} className={showTimestamp ? "space-y-3" : ""}>
+                {showTimestamp && <p className="text-center text-xs text-ink-faint">{fmtTime(m.createdAt)}</p>}
+                <div className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
+                  {!mine && <Avatar name={m.senderName} size="sm" />}
+                  <div className={`max-w-[78%] ${mine ? "text-right" : ""}`}>
+                    <div
+                      className={`inline-block rounded-2xl px-3.5 py-2 text-left text-sm leading-relaxed ${
+                        mine ? "rounded-br-md bg-accent text-on-accent" : "rounded-bl-md bg-subtle text-ink"
+                      }`}
+                    >
+                      <MessageBody text={m.body} mine={mine} />
+                    </div>
+                    {!mine && <p className="mt-0.5 text-xs font-medium text-ink-faint">{m.senderName}</p>}
                   </div>
-                  <p className="mt-0.5 text-xs text-ink-faint">
-                    {!mine && <span className="font-medium">{m.senderName} · </span>}
-                    {fmtTime(m.createdAt)}
-                  </p>
                 </div>
               </div>
             );
