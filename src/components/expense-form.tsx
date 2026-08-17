@@ -330,7 +330,7 @@ export function ExpenseForm({
     <Modal open={open} onClose={onClose} title={existing ? "Edit expense" : "Add expense"} wide>
       <form onSubmit={submit} className="space-y-4">
         <div className={`group-choice group-hue-${groupId % 6} flex items-center gap-3 rounded-xl bg-[var(--group-soft)] px-3 py-2.5 text-[var(--group-ink)]`}>
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-card/60">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card/60">
             <Users className="h-4 w-4" />
           </span>
           <span className="min-w-0">
@@ -408,7 +408,7 @@ export function ExpenseForm({
         <div>
           <span className="mb-1.5 block text-xs font-medium text-ink-soft">Split</span>
           {!showSplitOptions ? (
-            <div className="flex items-center justify-between gap-3 rounded-[10px] border border-line bg-subtle px-3 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-subtle px-3 py-2">
               <span className="text-sm text-ink-soft">Split <span className="font-medium text-ink">equally</span> between everyone selected</span>
               <button
                 type="button"

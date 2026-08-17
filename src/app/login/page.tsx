@@ -55,7 +55,7 @@ export default function LoginPage() {
           Log in
         </Button>
       </form>
-      <div className="mt-4 flex items-center justify-between text-[13px]">
+      <div className="mt-4 flex items-center justify-between text-sm">
         <Link href="/recover" className="whitespace-nowrap text-ink-soft hover:text-accent">
           Forgot password?
         </Link>

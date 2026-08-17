@@ -202,7 +202,7 @@ export default function Dashboard() {
                           // Word + color + amount so the per-group direction isn't
                           // carried by color alone (matches the Friends list).
                           <span className={g.myNetCents > 0 ? "text-owed" : "text-owe"}>
-                            <span className="mr-1 text-[11px] font-normal opacity-90">{g.myNetCents > 0 ? "owed" : "you owe"}</span>
+                            <span className="mr-1 text-xs font-normal opacity-90">{g.myNetCents > 0 ? "owed" : "you owe"}</span>
                             <span className="tnum">{fmtMoney(Math.abs(g.myNetCents), g.currency)}</span>
                           </span>
                         )}
@@ -250,7 +250,7 @@ export default function Dashboard() {
                               // Word + color + amount (matches Balances) so direction
                               // isn't carried by color alone.
                               <span key={cur} className={`block ${amt > 0 ? "text-owed" : "text-owe"}`}>
-                                <span className="text-[11px] font-normal opacity-90">{amt > 0 ? "owes you " : "you owe "}</span>
+                                <span className="text-xs font-normal opacity-90">{amt > 0 ? "owes you " : "you owe "}</span>
                                 <span className="tnum">{fmtMoney(Math.abs(amt), cur)}</span>
                               </span>
                             ))

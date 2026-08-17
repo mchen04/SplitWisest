@@ -35,7 +35,7 @@ export function Button({
     : "min-h-[var(--control-h)] px-3.5 text-sm gap-1.5";
   return (
     <button
-      className={`inline-flex items-center justify-center rounded-[10px] py-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:pointer-events-none ${
+      className={`inline-flex items-center justify-center rounded-lg py-1.5 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft disabled:pointer-events-none ${
         // Busy keeps the variant color (with a spinner); a genuinely-disabled
         // (invalid) button uses a readable neutral instead of a low-contrast 50%
         // tint so its label stays legible.
@@ -69,7 +69,7 @@ export function IconButton({
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${styles} ${className}`}
+      className={`inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft ${styles} ${className}`}
       {...rest}
     >
       {children}
@@ -154,7 +154,7 @@ export function MenuItem({
 export function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-medium text-ink-soft">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-ink-soft">{label}</span>
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
     </label>
@@ -164,12 +164,12 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 /** A true section divider label — the only place uppercase is allowed. */
 export function SectionLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <p className={`text-[11px] font-semibold uppercase tracking-wider text-ink-faint ${className}`}>{children}</p>
+    <p className={`text-xs font-semibold uppercase tracking-wider text-ink-faint ${className}`}>{children}</p>
   );
 }
 
 const inputCls =
-  "w-full rounded-[10px] border border-line-strong bg-card px-3 py-1.5 text-sm text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft min-h-[var(--control-h)]";
+  "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card px-3 py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[3px] focus:ring-accent-soft sm:text-sm";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputCls} ${props.className ?? ""}`} />;
@@ -203,7 +203,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex min-h-11 items-center justify-between gap-2 border-b border-line px-4 py-2">
-      <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
       {action}
     </div>
   );
@@ -224,7 +224,7 @@ export function Chip({
     accent: "bg-accent-soft text-accent-dark",
   }[tone];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${tones} ${className}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${tones} ${className}`}>
       {children}
     </span>
   );
@@ -323,7 +323,7 @@ export function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md"
     .join("")
     .toUpperCase();
   const hue = [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
-  const cls = { sm: "h-6 w-6 text-[10px]", md: "h-8 w-8 text-xs", lg: "h-10 w-10 text-sm" }[size];
+  const cls = { sm: "h-6 w-6 text-xs", md: "h-8 w-8 text-xs", lg: "h-10 w-10 text-sm" }[size];
   // Deterministic per-name hue — the one sanctioned hard-coded color in the app.
   return (
     <span

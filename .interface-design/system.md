@@ -39,19 +39,19 @@ ornament. Consistency beats novelty; these decisions compound — follow them.
   Do not reintroduce it anywhere else.
 - Money & aligned figures use `.tnum` (tabular figures) so columns line up and digits
   don't reflow as values change.
-- Ramp (overridden in `globals.css`): `xs` 12, `sm` 13, `base` 14 (body), `lg` 16,
-  `xl` 19, `2xl` 23 (page title), `3xl` 30 (hero number), `4xl` 40 (primary hero).
+- Ramp (overridden in `globals.css`): `xs` 12/16, `sm` 14/20, `base` 16/24,
+  `lg` 18/24, `xl` 20/28, `2xl` 24/28, `3xl` 32/36, `4xl` 40/44.
 - Roles: page title `text-2xl font-semibold tracking-tight`; card header
-  `text-base font-semibold`; row title `text-sm/base font-medium` (semibold when
-  unread); metadata `text-xs text-ink-faint`; hero money `text-3xl/4xl font-semibold
+  `text-lg font-semibold`; row title `text-sm/base font-medium` (semibold when
+  unread); metadata `text-xs text-ink-faint`; balance money `text-3xl/4xl font-semibold
   tnum`; form label `text-xs font-medium text-ink-soft` (**sentence case**, not
   uppercase — reserve uppercase only for true section dividers).
 
 ## Spacing & density
 
 4px base; a calm-but-efficient scale: **4 · 8 · 12 · 16 · 24 · 32 · 48**.
-Control metrics are tokens: `--control-h` 38px (buttons/inputs),
-`--control-h-sm` 32px (compact), `--row-h` 46px (two-line rows).
+Control metrics are tokens: `--control-h` 40px desktop / 44px mobile,
+`--control-h-sm` 32px (compact desktop), `--row-h` 48px desktop / 52px mobile.
 Common roles: card padding `p-4`/`px-4 py-3`, row padding `px-4 py-2.5`, section gap
 `gap-4`/`space-y-4`, grid gaps `gap-4`. 8–12px between related items, 16–24px between
 groups. **No "no-scroll" mandate** — let content size to content and pages scroll;
@@ -60,8 +60,7 @@ voids the review flagged).
 
 ## Radius scale
 
-- `rounded-[10px]` — interactive controls: Button, Input, Select, Textarea.
-- `rounded-lg` (8px) — icon buttons, nav rows, inline chips.
+- `rounded-lg` (8px) — controls, icon buttons, nav rows, inline chips.
 - `rounded-xl` (12px) — Cards, tab strips.
 - `rounded-2xl` (16px) — Modal panels, auth card, chat bubbles.
 - `rounded-full` — avatars, badges, pills.

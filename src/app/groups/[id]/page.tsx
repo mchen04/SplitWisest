@@ -277,7 +277,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition-colors sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
+            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium transition-colors sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -373,7 +373,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         aria-label={`View ${e.title}`}
                       >
                       <div className="hidden w-12 shrink-0 text-center sm:block">
-                        <p className="text-[11px] font-semibold uppercase text-ink-faint">
+                        <p className="text-xs font-semibold uppercase text-ink-faint">
                           {new Date(String(e.date).slice(0, 10) + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
                         </p>
                         <p className="font-display text-lg font-semibold leading-none">
@@ -784,7 +784,7 @@ function GroupSwitcher({
                 onClick={() => setOpen(false)}
                 className={`group-hue-${g.id % 6} flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-subtle ${g.id === currentId ? "bg-subtle" : ""}`}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--group-soft)] text-[var(--group-ink)]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--group-soft)] text-[var(--group-ink)]">
                   <Users className="h-3.5 w-3.5" />
                 </span>
                 <span className="min-w-0 flex-1">

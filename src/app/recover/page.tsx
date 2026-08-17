@@ -45,7 +45,7 @@ export default function RecoverPage() {
         <ErrorNote message={error} />
         <Button type="submit" busy={busy} className="w-full">Reset password</Button>
       </form>
-      <p className="mt-4 text-center text-[13px]">
+      <p className="mt-4 text-center text-sm">
         <Link href="/login" className="font-semibold text-accent hover:text-accent-dark">Back to log in</Link>
       </p>
     </AuthFrame>

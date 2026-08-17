@@ -138,7 +138,7 @@ function ChatPageInner() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search chats"
             aria-label="Search chats"
-            className="!min-h-9 !py-1.5 pl-8"
+            className="!min-h-[var(--control-h-sm)] !py-1.5 pl-8"
           />
         </div>
       </div>
@@ -174,7 +174,7 @@ function ChatPageInner() {
                     }`}
                   >
                     {c.kind === "group" ? (
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
                         <Users className="h-4.5 w-4.5" />
                       </span>
                     ) : (
@@ -184,7 +184,7 @@ function ChatPageInner() {
                       <span className="flex items-baseline justify-between gap-2">
                         <span className={`truncate text-sm ${c.unread ? "font-bold" : "font-medium"}`}>{c.name}</span>
                         {c.lastAt && (
-                          <span className="shrink-0 text-[11px] text-ink-faint transition-opacity group-hover/row:opacity-0">
+                          <span className="shrink-0 text-xs text-ink-faint transition-opacity group-hover/row:opacity-0">
                             {fmtRowTime(c.lastAt)}
                           </span>
                         )}
@@ -206,7 +206,7 @@ function ChatPageInner() {
                     onClick={() => togglePin(c)}
                     aria-label={pinned ? `Unpin ${c.name}` : `Pin ${c.name}`}
                     title={pinned ? "Unpin" : "Pin"}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-ink-faint hover:bg-card hover:text-ink md:top-1.5 md:hidden md:translate-y-0 md:p-1 md:group-hover/row:block md:focus-visible:block"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-ink-faint hover:bg-card hover:text-ink md:top-1.5 md:hidden md:translate-y-0 md:p-1 md:group-hover/row:block md:focus-visible:block"
                   >
                     {pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                   </button>

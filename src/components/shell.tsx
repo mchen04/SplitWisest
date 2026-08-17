@@ -41,7 +41,7 @@ const MOBILE_NAV: { href: string; label: string; icon: typeof LayoutDashboard; b
 function Badge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-bold leading-none text-on-accent">
+    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1 text-xs font-bold leading-none text-on-accent">
       {count > 9 ? "9+" : count}
     </span>
   );
@@ -108,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={launchExpense}
-            className="flex min-h-[var(--control-h)] w-full items-center justify-center gap-1.5 rounded-[10px] bg-accent px-2.5 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
+            className="flex min-h-[var(--control-h)] w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-2.5 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
           >
             <Plus className="h-4 w-4" /> Add expense
           </button>
@@ -133,7 +133,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     onClick={() => toggleGroups()}
                     aria-label={groupsOpen ? "Collapse group list" : "Expand group list"}
                     aria-expanded={groupsOpen}
-                    className="mr-1 rounded-md p-1 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                    className="mr-1 rounded-lg p-1 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
                   >
                     <ChevronDown className={`h-3.5 w-3.5 transition-transform ${groupsOpen ? "rotate-180" : ""}`} />
                   </button>
@@ -198,13 +198,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <IconButton label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggle}>
             {theme === "dark" ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
           </IconButton>
-          <Link href="/settings" aria-label="Settings" title="Settings" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle hover:text-ink">
+          <Link href="/settings" aria-label="Settings" title="Settings" className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-soft hover:bg-subtle hover:text-ink">
             <Settings className="h-[18px] w-[18px]" />
           </Link>
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-5 sm:px-6 md:ml-[216px] md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8">
+      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-[216px] md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8">
         <div className="mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0">{children}</div>
       </main>
 
@@ -217,14 +217,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link
             key={href}
             href={href}
-            className={`relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+            className={`relative flex flex-col items-center gap-0.5 py-2 text-xs font-medium ${
               isActive(href) ? "text-accent" : "text-ink-faint"
             }`}
           >
             <span className="relative">
               <Icon className="h-5 w-5" />
               {badge && unread[badge] > 0 && (
-                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-on-accent">
+                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-0.5 text-xs font-bold leading-none text-on-accent">
                   {unread[badge] > 9 ? "9+" : unread[badge]}
                 </span>
               )}
@@ -236,7 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           type="button"
           onClick={launchExpense}
           aria-label="Add expense"
-          className="relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold text-accent"
+          className="relative flex flex-col items-center gap-0.5 py-2 text-xs font-semibold text-accent"
         >
           <span className="-mt-5 flex h-11 w-11 items-center justify-center rounded-full border-4 border-paper bg-accent text-on-accent shadow-pop">
             <Plus className="h-5 w-5" />
@@ -247,14 +247,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link
             key={href}
             href={href}
-            className={`relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+            className={`relative flex flex-col items-center gap-0.5 py-2 text-xs font-medium ${
               isActive(href) ? "text-accent" : "text-ink-faint"
             }`}
           >
             <span className="relative">
               <Icon className="h-5 w-5" />
               {badge && unread[badge] > 0 && (
-                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-on-accent">
+                <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-0.5 text-xs font-bold leading-none text-on-accent">
                   {unread[badge] > 9 ? "9+" : unread[badge]}
                 </span>
               )}
@@ -294,7 +294,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
