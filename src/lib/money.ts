@@ -173,15 +173,13 @@ export function computeItemizedShares(
   return out;
 }
 
-// Greedy debt simplification: match the largest debtor with the largest
-// creditor repeatedly. Produces at most n-1 transfers.
 export interface Transfer {
   from: number;
   to: number;
   amountCents: number;
 }
 
-export function simplifyDebts(netBalances: Map<number, number>): Transfer[] {
+function greedySettlementPlan(netBalances: Map<number, number>): Transfer[] {
   const creditors: { id: number; amt: number }[] = [];
   const debtors: { id: number; amt: number }[] = [];
   for (const [id, net] of netBalances) {
@@ -200,6 +198,68 @@ export function simplifyDebts(netBalances: Map<number, number>): Transfer[] {
     debtors[di].amt -= pay;
     if (creditors[ci].amt === 0) ci++;
     if (debtors[di].amt === 0) di++;
+  }
+  return transfers;
+}
+
+const EXACT_SETTLEMENT_LIMIT = 18;
+
+// Split balances into the largest possible number of zero-sum sets. Each set
+// needs members - 1 payments, so this produces the fewest total payments.
+export function simplifyDebts(netBalances: Map<number, number>): Transfer[] {
+  const balances = [...netBalances]
+    .filter(([, net]) => net !== 0)
+    .sort(([a], [b]) => a - b)
+    .map(([id, net]) => ({ id, net }));
+  if (balances.length <= 1) return [];
+  if (balances.length > EXACT_SETTLEMENT_LIMIT) return greedySettlementPlan(netBalances);
+
+  const stateCount = 1 << balances.length;
+  const sums = new Float64Array(stateCount);
+  for (let mask = 1; mask < stateCount; mask++) {
+    const bit = mask & -mask;
+    const index = 31 - Math.clz32(bit);
+    sums[mask] = sums[mask ^ bit] + balances[index].net;
+  }
+
+  const groups = new Int8Array(stateCount);
+  const previous = new Int32Array(stateCount);
+  const added = new Int8Array(stateCount);
+  groups.fill(-1);
+  previous.fill(-1);
+  added.fill(-1);
+  groups[0] = 0;
+
+  for (let mask = 0; mask < stateCount; mask++) {
+    if (groups[mask] < 0) continue;
+    for (let index = 0; index < balances.length; index++) {
+      const bit = 1 << index;
+      if (mask & bit) continue;
+      const next = mask | bit;
+      const score = groups[mask] + (sums[next] === 0 ? 1 : 0);
+      if (score <= groups[next]) continue;
+      groups[next] = score;
+      previous[next] = mask;
+      added[next] = index;
+    }
+  }
+
+  const order: number[] = [];
+  for (let mask = stateCount - 1; mask !== 0; mask = previous[mask]) {
+    order.push(added[mask]);
+  }
+  order.reverse();
+
+  const transfers: Transfer[] = [];
+  let group = new Map<number, number>();
+  let sum = 0;
+  for (const index of order) {
+    const balance = balances[index];
+    group.set(balance.id, balance.net);
+    sum += balance.net;
+    if (sum !== 0) continue;
+    transfers.push(...greedySettlementPlan(group));
+    group = new Map();
   }
   return transfers;
 }

@@ -200,6 +200,40 @@ describe("simplifyDebts", () => {
     expect(t.reduce((s, x) => s + x.amountCents, 0)).toBe(730);
     expect(t.length).toBeLessThanOrEqual(3);
   });
+  it("finds fewer transfers than the largest-first greedy plan", () => {
+    const t = simplifyDebts(new Map([[1, -900], [2, -800], [3, 100], [4, 800], [5, 800]]));
+    expect(t).toHaveLength(3);
+    expect(t.reduce((sum, x) => sum + x.amountCents, 0)).toBe(1700);
+  });
+  it("handles the 18-balance exact boundary and preserves every balance", () => {
+    const net = new Map<number, number>();
+    for (let id = 1; id <= 9; id++) net.set(id, -100);
+    for (let id = 10; id <= 18; id++) net.set(id, 100);
+    const transfers = simplifyDebts(net);
+    const settled = new Map<number, number>();
+    for (const transfer of transfers) {
+      settled.set(transfer.from, (settled.get(transfer.from) ?? 0) - transfer.amountCents);
+      settled.set(transfer.to, (settled.get(transfer.to) ?? 0) + transfer.amountCents);
+    }
+    expect(transfers).toHaveLength(9);
+    expect(settled).toEqual(net);
+  });
+  it("uses the deterministic greedy plan above the 18-balance boundary", () => {
+    const net = new Map<number, number>();
+    for (let id = 1; id <= 10; id++) net.set(id, -100);
+    for (let id = 11; id <= 18; id++) net.set(id, 100);
+    net.set(19, 200);
+    const transfers = simplifyDebts(net);
+    expect(transfers).toEqual([
+      { from: 1, to: 19, amountCents: 100 },
+      { from: 2, to: 19, amountCents: 100 },
+      ...Array.from({ length: 8 }, (_, index) => ({
+        from: index + 3,
+        to: index + 11,
+        amountCents: 100,
+      })),
+    ]);
+  });
 });
 
 describe("parseAmountToCents", () => {

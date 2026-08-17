@@ -81,7 +81,7 @@ export function SettleModal({
         });
       } else {
         await api(`/api/groups/${groupId}/settlements`, {
-          body: { payerId, recipientId, amountCents, currency, date, note },
+          body: { payerId, recipientId, amountCents, currency, date, note, settleFullBalance: Boolean(prefill) },
         });
       }
       onSaved();
@@ -98,7 +98,7 @@ export function SettleModal({
       <form onSubmit={submit} className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Who paid">
-            <Select value={payerId} disabled={!!existing} onChange={(e) => setPayerId(Number(e.target.value))}>
+            <Select value={payerId} disabled={!!existing || !!prefill} onChange={(e) => setPayerId(Number(e.target.value))}>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.displayName}
@@ -107,7 +107,7 @@ export function SettleModal({
             </Select>
           </Field>
           <Field label="Who received">
-            <Select value={recipientId} disabled={!!existing} onChange={(e) => setRecipientId(Number(e.target.value))}>
+            <Select value={recipientId} disabled={!!existing || !!prefill} onChange={(e) => setRecipientId(Number(e.target.value))}>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.displayName}
@@ -122,6 +122,8 @@ export function SettleModal({
           date={date} setDate={setDate}
           note={note} setNote={setNote}
           notePlaceholder="Paid in cash"
+          lockAmount={Boolean(prefill && !existing)}
+          lockCurrency={Boolean(prefill && !existing)}
         />
         <ErrorNote message={error} />
         <div className="flex justify-end gap-2">

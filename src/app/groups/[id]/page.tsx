@@ -553,15 +553,17 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     <Link href={`/people/${s.to}`} className="font-semibold hover:text-accent-dark hover:underline">{memberName(s.to)}</Link>
                   </span>
                   <span className="tnum ml-auto font-display text-lg font-semibold">{fmtMoney(s.amountCents, detail.group.currency)}</span>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setSettlePrefill({ payerId: s.from, recipientId: s.to, amountCents: s.amountCents });
-                      setSettleOpen(true);
-                    }}
-                  >
-                    <HandCoins className="h-4 w-4" /> Record payment
-                  </Button>
+                  {(me?.id === s.from || me?.id === s.to) && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setSettlePrefill({ payerId: s.from, recipientId: s.to, amountCents: s.amountCents });
+                        setSettleOpen(true);
+                      }}
+                    >
+                      <HandCoins className="h-4 w-4" /> Record payment
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

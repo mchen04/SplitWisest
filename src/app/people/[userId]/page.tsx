@@ -24,7 +24,7 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
   const { userId } = use(params);
   const me = useMe();
   const { data, error: profileError, status: profileStatus, reload } = useApiData<{ profile: PersonProfile }>(`/api/people/${userId}`);
-  const [settleOpen, setSettleOpen] = useState(false);
+  const [settleSign, setSettleSign] = useState<-1 | 1 | null>(null);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
   const [actionNote, setActionNote] = useState<string | null>(null);
   const [historyQuery, setHistoryQuery] = useState("");
@@ -94,7 +94,7 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
           <PageTitle
             title={profile.person.displayName}
             subtitle={`@${profile.person.username} · ${relationshipLabel[profile.relationship]}`}
-            action={<ProfileActions profile={profile} onSettle={() => setSettleOpen(true)} onPayments={() => setPaymentsOpen(true)} onNudge={nudge} onRemove={removeFriend} onRequest={sendFriendRequest} />}
+            action={<ProfileActions profile={profile} onSettle={setSettleSign} onPayments={() => setPaymentsOpen(true)} onNudge={nudge} onRemove={removeFriend} onRequest={sendFriendRequest} />}
           />
 
           {actionNote && <div className="mb-4 rounded-lg bg-subtle px-3 py-2 text-sm text-ink-soft">{actionNote}</div>}
@@ -159,13 +159,13 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
                   </div>
                 </div>
                 <div className="mt-4 border-t border-line pt-4">
-                  {Object.entries(profile.netByCurrency).length === 0 ? (
+                  {profile.obligations.length === 0 ? (
                     <p className="text-sm text-ink-faint">You&rsquo;re all settled up.</p>
-                  ) : Object.entries(profile.netByCurrency).map(([cur, amt]) => (
-                    <div key={cur}>
-                      <p className="text-xs text-ink-soft">{amt > 0 ? "Owes you" : "You owe"}</p>
-                      <p className={`text-2xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
-                        {fmtMoney(Math.abs(amt), cur)}
+                  ) : profile.obligations.map((item, index) => (
+                    <div key={`${item.groupId ?? "direct"}:${item.currency}:${index}`} className="mb-3 last:mb-0">
+                      <p className="text-xs text-ink-soft">{item.groupName ?? "Direct balance"} · {item.netCents > 0 ? "Owes you" : "You owe"}</p>
+                      <p className={`text-2xl font-semibold tracking-tight tnum ${item.netCents > 0 ? "text-owed" : "text-owe"}`}>
+                        {fmtMoney(Math.abs(item.netCents), item.currency)}
                       </p>
                     </div>
                   ))}
@@ -194,12 +194,14 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
           </div>
 
           <DirectSettleModal
-            friend={settleOpen ? {
+            friend={settleSign ? {
               id: profile.person.id,
               displayName: profile.person.displayName,
+              obligations: profile.obligations,
               netByCurrency: profile.netByCurrency,
             } : null}
-            onClose={() => setSettleOpen(false)}
+            preferredSign={settleSign ?? undefined}
+            onClose={() => setSettleSign(null)}
             onSaved={reload}
           />
           {me && (
@@ -237,16 +239,16 @@ function ProfileActions({
   profile, onSettle, onPayments, onNudge, onRemove, onRequest,
 }: {
   profile: PersonProfile;
-  onSettle: () => void;
+  onSettle: (preferredSign: -1 | 1) => void;
   onPayments: () => void;
   onNudge: () => void;
   onRemove: () => void;
   onRequest: () => void;
 }) {
   if (profile.relationship === "self") return null;
-  const nets = Object.values(profile.netByCurrency);
-  const theyOweMe = nets.some((v) => v > 0);
-  const iOweThem = nets.some((v) => v < 0);
+  const theyOweMe = profile.obligations.some((item) => item.netCents > 0);
+  const iOweThem = profile.obligations.some((item) => item.netCents < 0);
+  const canSettle = profile.canSettleDirectly || profile.obligations.some((item) => item.groupId !== null);
   const dmHref = `/chat?dm=${profile.person.id}`;
 
   // One contextual primary tied to the relationship; everything else overflows.
@@ -254,8 +256,8 @@ function ProfileActions({
   let used = "";
   if (theyOweMe && profile.canNudge) {
     primary = <Button onClick={onNudge}><Bell className="h-4 w-4" /> Remind</Button>; used = "nudge";
-  } else if (iOweThem && profile.canSettleDirectly) {
-    primary = <Button onClick={onSettle}><HandCoins className="h-4 w-4" /> Settle up</Button>; used = "settle";
+  } else if (iOweThem && canSettle) {
+    primary = <Button onClick={() => onSettle(-1)}><HandCoins className="h-4 w-4" /> Settle up</Button>; used = "settle";
   } else if (profile.canChat) {
     primary = <Link href={dmHref}><Button><MessageSquare className="h-4 w-4" /> Chat</Button></Link>; used = "chat";
   } else if (profile.canRequestFriend) {
@@ -264,7 +266,7 @@ function ProfileActions({
 
   const items: React.ReactNode[] = [];
   if (profile.canChat && used !== "chat") items.push(<MenuItem key="chat" icon={<MessageSquare className="h-4 w-4" />} onClick={() => { window.location.href = dmHref; }}>Chat</MenuItem>);
-  if (profile.canSettleDirectly && used !== "settle") items.push(<MenuItem key="settle" icon={<HandCoins className="h-4 w-4" />} onClick={onSettle}>Settle up</MenuItem>);
+  if (canSettle && used !== "settle") items.push(<MenuItem key="settle" icon={<HandCoins className="h-4 w-4" />} onClick={() => onSettle(theyOweMe ? 1 : -1)}>{theyOweMe ? "Record incoming payment" : "Settle up"}</MenuItem>);
   if (profile.canSettleDirectly) items.push(<MenuItem key="pay" icon={<Receipt className="h-4 w-4" />} onClick={onPayments}>Payment history</MenuItem>);
   if (profile.canNudge && used !== "nudge") items.push(<MenuItem key="nudge" icon={<Bell className="h-4 w-4" />} onClick={onNudge}>Remind</MenuItem>);
   if (profile.canRequestFriend && used !== "request") items.push(<MenuItem key="req" icon={<UserPlus className="h-4 w-4" />} onClick={onRequest}>Add friend</MenuItem>);

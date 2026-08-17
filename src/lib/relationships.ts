@@ -1,6 +1,7 @@
 import { sql } from "./db";
 import { forbidden } from "./api";
 import { activityData } from "./activity";
+import { friendGroupObligationsSnapshot } from "./balances";
 
 export type RelationshipState = "self" | "friend" | "shared-group" | "pending" | "none";
 export interface RelationshipCapabilities {
@@ -180,106 +181,95 @@ export async function acceptFriendRequestWithActivity({
   return inserted > 0 ? "accepted" : "already-friends";
 }
 
-export async function removeFriendshipWithActivity(user: { id: number; displayName: string }, friendId: number) {
+export async function removeFriendshipWithActivity(
+  user: { id: number; displayName: string },
+  friendId: number,
+  retryOnChange = true
+): Promise<{
+  removed: boolean;
+  hasDirectBalance: boolean;
+  hasSharedGroupBalance: boolean;
+  hasBalance: boolean;
+  changed: boolean;
+}> {
+  const groupData = await friendGroupObligationsSnapshot(user.id, friendId);
+  const obligations = groupData.byFriend.get(friendId) ?? [];
+  if (obligations.length > 0) {
+    return {
+      removed: false,
+      hasDirectBalance: false,
+      hasSharedGroupBalance: true,
+      hasBalance: true,
+      changed: false,
+    };
+  }
+
   const [a, b] = orderedPair(user.id, friendId);
+  const snapshots = JSON.stringify(
+    groupData.snapshots.map((snapshot) => ({ group_id: snapshot.groupId, balances: snapshot.balances }))
+  );
   const actionText = "removed a friend";
   const summary = `${user.displayName} ${actionText}`;
-  const results = await sql.transaction((tx) => [
+  const [, , rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${a}::int, ${b}::int)`,
     tx`
-    WITH RECURSIVE shared_groups AS MATERIALIZED (
-      SELECT me.group_id, row_number() OVER (ORDER BY me.group_id) AS lock_order
-      FROM group_members me
-      JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${friendId}
-      WHERE me.user_id = ${user.id}
+    WITH RECURSIVE lock_targets AS MATERIALIZED (
+      SELECT group_id, row_number() OVER (ORDER BY group_id) AS lock_order
+      FROM jsonb_to_recordset(${snapshots}::jsonb) AS item(group_id bigint, balances jsonb)
     ),
     group_locks(lock_order, group_id, locked) AS (
-      SELECT lock_order, group_id, pg_advisory_xact_lock(group_id::int) AS locked
-      FROM shared_groups
-      WHERE lock_order = 1
+      SELECT lock_order, group_id, pg_advisory_xact_lock(group_id::int)
+      FROM lock_targets WHERE lock_order = 1
       UNION ALL
-      SELECT sg.lock_order, sg.group_id, pg_advisory_xact_lock(sg.group_id::int) AS locked
-      FROM group_locks gl
-      JOIN shared_groups sg ON sg.lock_order = gl.lock_order + 1
+      SELECT target.lock_order, target.group_id, pg_advisory_xact_lock(target.group_id::int)
+      FROM group_locks held
+      JOIN lock_targets target ON target.lock_order = held.lock_order + 1
     )
     SELECT count(*) FROM group_locks`,
     tx`
-    WITH my_groups AS (
-      SELECT me.group_id, g.currency
+    WITH expected AS (
+      SELECT group_id, balances
+      FROM jsonb_to_recordset(${snapshots}::jsonb) AS item(group_id bigint, balances jsonb)
+    ),
+    current_groups AS (
+      SELECT me.group_id
       FROM group_members me
       JOIN group_members them ON them.group_id = me.group_id AND them.user_id = ${friendId}
-      JOIN groups g ON g.id = me.group_id
       WHERE me.user_id = ${user.id}
     ),
-    direct_totals AS (
-      SELECT currency,
-        SUM(CASE WHEN payer_id = ${user.id} THEN converted_cents ELSE -converted_cents END) AS net_cents
+    current_snapshots AS (
+      SELECT current_groups.group_id,
+        COALESCE(
+          (SELECT jsonb_agg(jsonb_build_array(rows.user_id, rows.net_cents) ORDER BY rows.user_id)
+           FROM group_balance_rows(current_groups.group_id) rows),
+          '[]'::jsonb
+        ) AS balances
+      FROM current_groups
+    ),
+    snapshot_ok AS (
+      SELECT NOT EXISTS (
+        SELECT 1
+        FROM expected
+        FULL JOIN current_snapshots USING (group_id)
+        WHERE expected.group_id IS NULL
+          OR current_snapshots.group_id IS NULL
+          OR expected.balances <> current_snapshots.balances
+      ) AS ok
+    ),
+    direct_balance AS (
+      SELECT currency
       FROM settlements
       WHERE group_id IS NULL
         AND ((payer_id = ${user.id} AND recipient_id = ${friendId})
           OR (payer_id = ${friendId} AND recipient_id = ${user.id}))
       GROUP BY currency
-    ),
-    -- TRUE pairwise balance between the two users (same per-expense largest-
-    -- remainder allocation as group_balance_rows), so the unfriend gate matches
-    -- exactly what the friend balance UI shows — no phantom or hidden debt.
-    relevant_exp AS (
-      SELECT e.id, e.payer_id, e.converted_cents, e.amount_cents, mg.currency AS group_currency
-      FROM expenses e
-      JOIN my_groups mg ON mg.group_id = e.group_id
-    ),
-    alloc AS (
-      SELECT es.expense_id, es.user_id, re.payer_id, re.group_currency,
-        div(es.share_cents::numeric * re.converted_cents, re.amount_cents) AS floor_cents,
-        mod(es.share_cents::numeric * re.converted_cents, re.amount_cents) AS remainder,
-        re.converted_cents AS exp_converted
-      FROM expense_shares es
-      JOIN relevant_exp re ON re.id = es.expense_id
-    ),
-    ranked AS (
-      SELECT a.expense_id, a.user_id, a.payer_id, a.group_currency, a.floor_cents,
-        a.exp_converted - sum(a.floor_cents) OVER (PARTITION BY a.expense_id) AS leftover,
-        row_number() OVER (PARTITION BY a.expense_id ORDER BY a.remainder DESC, a.user_id) AS rr
-      FROM alloc a
-    ),
-    share_alloc AS (
-      SELECT expense_id, user_id, payer_id, group_currency,
-        (floor_cents + CASE WHEN rr <= leftover THEN 1 ELSE 0 END)::bigint AS converted_share
-      FROM ranked
-    ),
-    group_pairs AS (
-      SELECT sa.group_currency AS currency, sa.converted_share AS net_cents
-      FROM share_alloc sa
-      WHERE sa.payer_id = ${user.id} AND sa.user_id = ${friendId}
-      UNION ALL
-      SELECT sa.group_currency AS currency, -sa.converted_share AS net_cents
-      FROM share_alloc sa
-      WHERE sa.payer_id = ${friendId} AND sa.user_id = ${user.id}
-      UNION ALL
-      SELECT mg.currency,
-        CASE WHEN s.payer_id = ${user.id} THEN s.converted_cents ELSE -s.converted_cents END AS net_cents
-      FROM settlements s
-      JOIN my_groups mg ON mg.group_id = s.group_id
-      WHERE (s.payer_id = ${user.id} AND s.recipient_id = ${friendId})
-         OR (s.payer_id = ${friendId} AND s.recipient_id = ${user.id})
-    ),
-    group_balance AS (
-      SELECT currency, SUM(net_cents) AS net_cents FROM group_pairs GROUP BY currency HAVING SUM(net_cents) <> 0
-    ),
-    combined_balance AS (
-      SELECT currency, SUM(net_cents) AS net_cents
-      FROM (
-        SELECT currency, net_cents FROM direct_totals
-        UNION ALL
-        SELECT currency, net_cents FROM group_pairs
-      ) balances
-      GROUP BY currency
-      HAVING SUM(net_cents) <> 0
+      HAVING SUM(CASE WHEN payer_id = ${user.id} THEN converted_cents ELSE -converted_cents END) <> 0
     ),
     deleted AS (
       DELETE FROM friendships
       WHERE user_a = ${a} AND user_b = ${b}
-        AND NOT EXISTS (SELECT 1 FROM combined_balance)
+        AND (SELECT ok FROM snapshot_ok)
+        AND NOT EXISTS (SELECT 1 FROM direct_balance)
       RETURNING 1
     ),
     activity_row AS (
@@ -291,16 +281,19 @@ export async function removeFriendshipWithActivity(user: { id: number; displayNa
     )
     SELECT
       (SELECT count(*) FROM deleted)::int AS deleted,
-      (SELECT count(*) FROM direct_totals WHERE net_cents <> 0)::int AS direct_balance_count,
-      (SELECT count(*) FROM group_balance)::int AS shared_group_balance_count,
-      (SELECT count(*) FROM combined_balance)::int AS combined_balance_count`,
+      (SELECT count(*) FROM direct_balance)::int AS direct_balance_count,
+      (SELECT ok FROM snapshot_ok) AS snapshot_ok`,
   ]);
-  const rows = results[results.length - 1];
+  const hasDirectBalance = Number(rows[0]?.direct_balance_count ?? 0) > 0;
+  if (!Boolean(rows[0]?.snapshot_ok) && retryOnChange) {
+    return removeFriendshipWithActivity(user, friendId, false);
+  }
   return {
     removed: Number(rows[0]?.deleted ?? 0) > 0,
-    hasDirectBalance: Number(rows[0]?.direct_balance_count ?? 0) > 0,
-    hasSharedGroupBalance: Number(rows[0]?.shared_group_balance_count ?? 0) > 0,
-    hasBalance: Number(rows[0]?.combined_balance_count ?? 0) > 0,
+    hasDirectBalance,
+    hasSharedGroupBalance: false,
+    hasBalance: hasDirectBalance,
+    changed: !Boolean(rows[0]?.snapshot_ok),
   };
 }
 
@@ -434,7 +427,7 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
   sharedGroups: { id: number; name: string; currency: string }[];
   hasPendingRequest: boolean;
   request: null | { id: number; direction: "incoming" | "outgoing"; createdAt: string };
-  capabilities: (netByCurrency: Record<string, number>) => RelationshipCapabilities;
+  capabilities: (hasBalance: boolean) => RelationshipCapabilities;
 }> {
   const isSelf = viewerId === personId;
   const [friendship, sharedGroups, requestRows] = await Promise.all([
@@ -473,12 +466,12 @@ export async function loadRelationship(viewerId: number, personId: number): Prom
       direction: Number(requestRows[0].from_id) === viewerId ? "outgoing" : "incoming",
       createdAt: requestRows[0].created_at,
     } : null,
-    capabilities: (netByCurrency) => ({
+    capabilities: (hasBalance) => ({
       canChat: isFriend,
       canSettleDirectly: isFriend,
       canNudge: isFriend || hasSharedGroup,
       canRequestFriend: hasSharedGroup && !isFriend && !hasPendingRequest,
-      canRemoveFriend: isFriend && Object.keys(netByCurrency).length === 0,
+      canRemoveFriend: isFriend && !hasBalance,
     }),
   };
 }

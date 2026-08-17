@@ -8,6 +8,8 @@ import { DirectSettleModal } from "./direct-settle-modal";
 
 interface DirectSettlement {
   id: number;
+  groupId: number | null;
+  groupName: string | null;
   payerId: number;
   recipientId: number;
   payerName: string;
@@ -19,8 +21,7 @@ interface DirectSettlement {
   updatedAt: string;
 }
 
-// History of offline payments recorded directly between you and one friend
-// (outside any group), with edit and delete. Group payments live on the group.
+// History of offline payments between you and one friend, with edit and delete.
 export function DirectPaymentsModal({
   friend,
   meId,
@@ -63,7 +64,7 @@ export function DirectPaymentsModal({
     <>
       <Modal open onClose={onClose} title={`Payments with ${friend.displayName}`}>
         <p className="mb-4 rounded-lg bg-subtle px-3 py-2 text-xs text-ink-soft">
-          Offline payments recorded directly between the two of you, outside any group.
+          Offline payments recorded between the two of you.
         </p>
         {error && <p role="alert" className="mb-3 rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
         {list === null ? (
@@ -83,7 +84,7 @@ export function DirectPaymentsModal({
                     <strong>{s.recipientId === meId ? "you" : s.recipientName}</strong>
                   </span>
                   <span className="block text-xs text-ink-faint">
-                    {fmtDate(s.date)}{s.note ? ` · ${s.note}` : ""}
+                    {s.groupName ? `${s.groupName} · ` : "Direct · "}{fmtDate(s.date)}{s.note ? ` · ${s.note}` : ""}
                   </span>
                 </span>
                 <span className="tnum font-semibold">{fmtMoney(s.amountCents, s.currency)}</span>
@@ -111,7 +112,7 @@ export function DirectPaymentsModal({
       </Modal>
 
       <DirectSettleModal
-        friend={editing ? { id: friend.id, displayName: friend.displayName, netByCurrency: {} } : null}
+        friend={editing ? { id: friend.id, displayName: friend.displayName, obligations: [], netByCurrency: {} } : null}
         onClose={() => setEditing(null)}
         onSaved={() => { reload(); onChanged(); }}
         existing={editing}

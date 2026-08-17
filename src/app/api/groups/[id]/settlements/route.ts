@@ -6,12 +6,14 @@ import { requireUser } from "@/lib/auth";
 import { recordGroupSettlement, settlementFields } from "@/lib/settlements";
 import { parseGroupId, requireGroupMember } from "@/lib/groups";
 import { versionToken } from "@/lib/versions";
+import { groupBalances, suggestSettlements } from "@/lib/balances";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 const Body = z.object({
   payerId: z.number().int().positive(),
   recipientId: z.number().int().positive(),
+  settleFullBalance: z.boolean().optional().default(false),
   ...settlementFields,
 });
 
@@ -54,6 +56,19 @@ export const POST = handler(async (req: NextRequest, { params }: Ctx) => {
   const group = await requireGroupMember(groupId, user.id);
   const body = Body.parse(await req.json());
   if (body.payerId === body.recipientId) badRequest("Payer and recipient must be different");
-  const settlement = await recordGroupSettlement(groupId, group.currency, user.id, body);
+  let expectedBalances: [number, number][] | undefined;
+  if (body.settleFullBalance) {
+    const balances = await groupBalances(groupId);
+    const transfer = suggestSettlements(balances).find(
+      (item) => item.from === body.payerId && item.to === body.recipientId
+    );
+    if (!transfer || transfer.amountCents !== body.amountCents || body.currency !== group.currency) {
+      badRequest("This balance changed. Refresh and try again");
+    }
+    expectedBalances = balances
+      .map((item): [number, number] => [item.userId, item.netCents])
+      .sort((a, b) => a[0] - b[0]);
+  }
+  const settlement = await recordGroupSettlement(groupId, group.currency, user.id, body, expectedBalances);
   return NextResponse.json({ id: settlement.id, updatedAt: settlement.updatedAt });
 });
