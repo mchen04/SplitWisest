@@ -1,5 +1,5 @@
-const STATIC_CACHE = "splitwisest-static-v2";
-const PAGE_CACHE = "splitwisest-pages-v2";
+const STATIC_CACHE = "splitwisest-static-v6";
+const PAGE_CACHE = "splitwisest-pages-v6";
 const META_CACHE = "splitwisest-meta-v2";
 const SHELL_UPDATE_KEY = "/__splitwisest_shell_updated__";
 const VERSION_KEY = "/__splitwisest_version__";
@@ -31,6 +31,16 @@ async function notifyShellUpdate() {
   for (const client of clients) client.postMessage({ type: "APP_SHELL_UPDATED" });
 }
 
+async function clearBuildFiles() {
+  const cache = await caches.open(STATIC_CACHE);
+  const requests = await cache.keys();
+  await Promise.all(
+    requests
+      .filter((request) => new URL(request.url).pathname.startsWith("/_next/static/"))
+      .map((request) => cache.delete(request))
+  );
+}
+
 async function deploymentChanged() {
   try {
     const response = await fetch("/api/version", { cache: "no-store" });
@@ -42,7 +52,7 @@ async function deploymentChanged() {
     const previousVersion = previous ? await previous.text() : null;
     await meta.put(VERSION_KEY, new Response(version));
     if (!previousVersion || previousVersion === version) return false;
-    await caches.delete(STATIC_CACHE);
+    await clearBuildFiles();
     return true;
   } catch {
     return false;
@@ -50,17 +60,30 @@ async function deploymentChanged() {
 }
 
 async function refreshPage(request, cached) {
-  const response = await fetch(request);
+  // Build a fresh request. The browser's navigation request can contain an
+  // If-None-Match header, which would return 304 and leave stale HTML cached.
+  const refreshUrl = new URL(request.url);
+  refreshUrl.searchParams.set("__sw_refresh", String(Date.now()));
+  const response = await fetch(refreshUrl.href, {
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { accept: request.headers.get("accept") || "text/html" },
+  });
   if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) return response;
 
   let changed = await deploymentChanged();
   if (cached) {
     const [oldHtml, nextHtml] = await Promise.all([cached.clone().text(), response.clone().text()]);
-    changed = oldHtml !== nextHtml;
+    changed = changed || oldHtml !== nextHtml;
   }
   const cache = await caches.open(PAGE_CACHE);
   await cache.put(request, response.clone());
-  if (changed) await notifyShellUpdate();
+  if (changed) {
+    // A new page shell can refer to chunk URLs that an older build already
+    // cached. Clear those files before the client reloads for the new shell.
+    await clearBuildFiles();
+    await notifyShellUpdate();
+  }
   return response;
 }
 

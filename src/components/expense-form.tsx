@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Paperclip, Plus, Check, AlertCircle } from "lucide-react";
+import { Paperclip, Plus, Check, AlertCircle, Users, ChevronDown } from "lucide-react";
 import { api, ApiClientError, fmtMoney, todayStr, CURRENCIES, amountInputToCents, useApiData } from "@/lib/client";
 import { Button, Field, Input, Select, Textarea, Modal, ErrorNote } from "./ui";
 import { ParticipantSplit, ItemizedSplit, Method, METHOD_LABELS, ItemRow } from "./expense-splits";
@@ -49,6 +49,7 @@ function adjustmentRate(adjustmentCents: number, subtotalCents: number, fallback
 
 export function ExpenseForm({
   groupId,
+  groupName,
   groupCurrency,
   members,
   meId,
@@ -58,6 +59,7 @@ export function ExpenseForm({
   onSaved,
 }: {
   groupId: number;
+  groupName: string;
   groupCurrency: string;
   members: Member[];
   meId: number;
@@ -73,6 +75,7 @@ export function ExpenseForm({
   const [payerId, setPayerId] = useState(meId);
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [notes, setNotes] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
   const [method, setMethod] = useState<Method>("equal");
   const [selected, setSelected] = useState<Set<number>>(new Set(members.map((m) => m.id)));
   const [values, setValues] = useState<Record<number, string>>({});
@@ -114,6 +117,7 @@ export function ExpenseForm({
       setPayerId(existing.payerId);
       setCategoryId(existing.categoryId ?? "");
       setNotes(existing.notes);
+      setShowDetails(Boolean(existing.notes || existing.attachments.length));
       setMethod(existing.splitMethod as Method);
       setShowSplitOptions(existing.splitMethod !== "equal");
       setSelected(new Set(existing.shares.map((s) => s.userId)));
@@ -145,6 +149,7 @@ export function ExpenseForm({
       setPayerId(meId);
       setCategoryId("");
       setNotes("");
+      setShowDetails(false);
       setMethod("equal");
       setShowSplitOptions(false);
       setSelected(new Set(members.map((m) => m.id)));
@@ -324,6 +329,15 @@ export function ExpenseForm({
   return (
     <Modal open={open} onClose={onClose} title={existing ? "Edit expense" : "Add expense"} wide>
       <form onSubmit={submit} className="space-y-4">
+        <div className={`group-choice group-hue-${groupId % 6} flex items-center gap-3 rounded-xl bg-[var(--group-soft)] px-3 py-2.5 text-[var(--group-ink)]`}>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-card/60">
+            <Users className="h-4 w-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-xs font-medium text-[var(--group-muted)]">Adding to</span>
+            <span className="block truncate text-sm font-semibold">{groupName} · {groupCurrency}</span>
+          </span>
+        </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Title">
             <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="What was it for?" />
@@ -470,62 +484,78 @@ export function ExpenseForm({
           </p>
         )}
 
-        <Field label="Notes">
-          <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000} />
-        </Field>
+        <div className="rounded-xl border border-line">
+          <button
+            type="button"
+            onClick={() => setShowDetails((shown) => !shown)}
+            aria-expanded={showDetails}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-ink-soft hover:bg-subtle"
+          >
+            <Paperclip className="h-4 w-4" />
+            <span className="flex-1">{showDetails ? "Note and receipts" : "Add note or receipt"}</span>
+            <ChevronDown className={`h-4 w-4 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+          </button>
+          {showDetails && (
+            <div className="space-y-4 border-t border-line p-3">
+              <Field label="Notes">
+                <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} maxLength={2000} />
+              </Field>
 
-        <Field label="Receipts" hint="Uploaded after the expense is saved; images or PDF, up to 4 MB each">
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:bg-subtle hover:text-ink">
-              <Paperclip className="h-4 w-4" /> Attach file
-              <input
-                type="file"
-                accept="image/*,application/pdf"
-                className="sr-only"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setFiles((fs) => [...fs, f]);
-                  e.target.value = "";
-                }}
-              />
-            </label>
-            {files.map((f, i) => (
-              <span key={i} className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-xs text-accent-dark">
-                {f.name}
-                <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>
-                  ×
-                </button>
-              </span>
-            ))}
-            {savedAttachments.map((a) => (
-              <span
-                key={a.id}
-                className="inline-flex items-center gap-1.5 rounded-full bg-subtle px-2.5 py-1 text-xs text-ink-soft"
-              >
-                <a href={`/api/attachments/${a.id}`} target="_blank" className="underline">
-                  {a.filename}
-                </a>
-                <button
-                  type="button"
-                  aria-label={`Remove ${a.filename}`}
-                  className="text-ink-faint hover:text-danger"
-                  onClick={async () => {
-                    if (!window.confirm(`Remove the receipt "${a.filename}"?`)) return;
-                    try {
-                      await api(`/api/attachments/${a.id}`, { method: "DELETE" });
-                      setSavedAttachments((xs) => xs.filter((x) => x.id !== a.id));
-                      onSaved();
-                    } catch (err) {
-                      setError(err instanceof ApiClientError ? err.message : "Could not remove the receipt");
-                    }
-                  }}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        </Field>
+              <Field label="Receipts" hint="Images or PDF, up to 4 MB each">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:bg-subtle hover:text-ink">
+                    <Paperclip className="h-4 w-4" /> Attach file
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) setFiles((fs) => [...fs, f]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {files.map((f, i) => (
+                    <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-xs text-accent-dark">
+                      <span className="truncate">{f.name}</span>
+                      <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                  {savedAttachments.map((a) => (
+                    <span
+                      key={a.id}
+                      className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-subtle px-2.5 py-1 text-xs text-ink-soft"
+                    >
+                      <a href={`/api/attachments/${a.id}`} target="_blank" className="truncate underline">
+                        {a.filename}
+                      </a>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${a.filename}`}
+                        className="text-ink-faint hover:text-danger"
+                        onClick={async () => {
+                          if (!window.confirm(`Remove the receipt "${a.filename}"?`)) return;
+                          try {
+                            await api(`/api/attachments/${a.id}`, { method: "DELETE" });
+                            setSavedAttachments((xs) => xs.filter((x) => x.id !== a.id));
+                            onSaved();
+                          } catch (err) {
+                            setError(err instanceof ApiClientError ? err.message : "Could not remove the receipt");
+                          }
+                        }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          )}
+        </div>
 
         <ErrorNote message={error} />
         {/* Sticky so Cancel/Submit stay reachable while the long form scrolls

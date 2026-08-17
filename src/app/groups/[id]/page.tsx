@@ -143,48 +143,82 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     { key: "chat", label: "Chat", icon: MessageSquare },
     { key: "activity", label: "Activity", icon: ScrollText },
   ];
+  const myGroupBalance = me && detail
+    ? detail.balances.find((balance) => balance.userId === me.id)?.netCents ?? 0
+    : 0;
 
   return (
     <AppShell>
-      <div className="mb-4 flex flex-wrap items-center gap-2.5 md:shrink-0">
-        <Link href="/groups" aria-label="Back to groups" className="rounded-lg p-2 text-ink-soft hover:bg-subtle hover:text-ink">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          {detail ? (
-            <>
-              <GroupSwitcher currentId={groupId} currentName={detail.group.name} />
-              <p className="text-xs text-ink-faint">
-                {detail.members.length} {detail.members.length === 1 ? "member" : "members"} · {detail.group.currency}
-              </p>
-            </>
-          ) : (
-            <div className="space-y-1.5">
-              <div className="skeleton h-7 w-48" />
-              <div className="skeleton h-3.5 w-40" />
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            disabled={(detail?.members.length ?? 0) < 2}
-            title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
-            aria-label="Settle up"
-            onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
-          >
-            <HandCoins className="h-4 w-4" /> <span className="hidden sm:inline">Settle up</span>
-          </Button>
-          <Button aria-label="Add expense" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
-            <Plus className="h-4 w-4" /> <span className="hidden sm:inline">Add expense</span>
-          </Button>
+      <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_minmax(16rem,auto)] md:gap-x-4 md:gap-y-1 md:shrink-0`} aria-label="Current group">
+        <div className="flex items-center gap-2 md:col-span-2">
+          <Link href="/groups" aria-label="Back to groups" className="group-context-control">
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <p className="min-w-0 flex-1 text-xs font-semibold text-[var(--group-ink)]">Current group</p>
           <Menu label="Group menu">
             <MenuItem icon={<Copy className="h-4 w-4" />} onClick={copyInviteLink}>Copy invite link</MenuItem>
             <MenuItem icon={<Download className="h-4 w-4" />} onClick={() => { window.location.href = `/api/groups/${groupId}/export`; }}>Export CSV</MenuItem>
             <MenuItem icon={<Settings className="h-4 w-4" />} onClick={() => setSettingsOpen(true)}>Group settings</MenuItem>
           </Menu>
         </div>
-      </div>
+
+        {detail ? (
+          <div className="min-w-0 md:flex md:items-end md:gap-4">
+            <GroupSwitcher
+              currentId={groupId}
+              currentName={detail.group.name}
+              currency={detail.group.currency}
+              memberCount={detail.members.length}
+            />
+            <div className="mt-2 flex items-end justify-between gap-3 md:mt-0 md:flex-1">
+              <div className="min-w-0">
+                <p className="text-xs text-[var(--group-muted)] md:hidden">Your balance here</p>
+                <p className="tnum mt-0.5 text-lg font-bold text-[var(--group-ink)] md:whitespace-nowrap">
+                  {myGroupBalance === 0 ? "Settled up" : (
+                    <>
+                      <span className="md:hidden">{myGroupBalance > 0 ? "You are owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></span>
+                      <span className="hidden md:inline"><Money cents={myGroupBalance} currency={detail.group.currency} signed /></span>
+                    </>
+                  )}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTab("balances")}
+                className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-left text-xs font-medium text-[var(--group-ink)] hover:bg-white/40 md:hidden"
+                aria-label={`View ${detail.members.length} group members and balances`}
+              >
+                <span className="flex -space-x-2" aria-hidden>
+                  {detail.members.slice(0, 3).map((member) => (
+                    <span key={member.id} className="rounded-full ring-2 ring-[var(--group-soft)]"><Avatar name={member.displayName} size="sm" /></span>
+                  ))}
+                </span>
+                {detail.members.length} {detail.members.length === 1 ? "member" : "members"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-2 space-y-2 md:mt-0">
+            <div className="skeleton h-8 w-56" />
+            <div className="skeleton h-5 w-40" />
+          </div>
+        )}
+
+        <div className="mt-3 grid grid-cols-2 gap-2 md:mt-0 md:self-end">
+          <Button
+            variant="secondary"
+            className="w-full border-white/60 bg-white/55 hover:bg-white/80"
+            disabled={(detail?.members.length ?? 0) < 2}
+            title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
+            onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
+          >
+            <HandCoins className="h-4 w-4" /> Settle up
+          </Button>
+          <Button className="w-full bg-[var(--group-color)] hover:bg-[var(--group-ink)]" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
+            <Plus className="h-4 w-4" /> Add expense
+          </Button>
+        </div>
+      </section>
 
       {/* Members rail (desktop) — a nested sidebar instead of a full-width
           horizontal strip, so member balances stop eating vertical space. */}
@@ -234,46 +268,16 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
       </Card>
 
-      {/* Compact member strip (mobile only) */}
-      <Card className="relative mb-2.5 md:hidden">
-        <div className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex items-stretch divide-x divide-line">
-          {detail === null ? (
-            <div className="flex flex-1 items-center gap-4 p-3">
-              {[...Array(3)].map((_, i) => <div key={i} className="skeleton h-8 w-28" />)}
-            </div>
-          ) : (
-            detail.balances.map((b) => (
-              <Link key={b.userId} href={`/people/${b.userId}`} className="flex min-w-28 flex-1 flex-col justify-center gap-0.5 px-3 py-1.5 hover:bg-subtle">
-                <span className="flex items-center gap-1.5 truncate text-xs text-ink-soft">
-                  <Avatar name={b.displayName} size="sm" /> {b.displayName}
-                </span>
-                <span className="font-display text-base font-semibold">
-                  {b.netCents === 0 ? (
-                    <span className="text-ink-faint">settled</span>
-                  ) : (
-                    <Money cents={b.netCents} currency={detail.group.currency} signed />
-                  )}
-                </span>
-              </Link>
-            ))
-          )}
-        </div>
-        </div>
-        {/* Right-edge fade cues that the member strip scrolls horizontally. */}
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-8 rounded-r-[inherit] bg-gradient-to-l from-card to-transparent" aria-hidden />
-      </Card>
-
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Tabs */}
-      <div role="tablist" aria-label="Group sections" className="mb-2.5 flex gap-1 overflow-x-auto rounded-xl border border-line bg-card p-0.5 [scrollbar-width:none] md:shrink-0 [&::-webkit-scrollbar]:hidden">
+      <div role="tablist" aria-label="Group sections" className="mb-2.5 grid grid-cols-5 gap-0.5 rounded-xl border border-line bg-card p-1 md:shrink-0">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:flex-1 ${
+            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition-colors sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -398,7 +402,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         </p>
                       </div>
                       </button>
-                      <div className="flex shrink-0 gap-0.5">
+                      <div className="hidden shrink-0 gap-0.5 sm:flex">
                         <button onClick={() => openEdit(e.id)} aria-label={`Edit ${e.title}`} className="rounded-lg p-2.5 text-ink-faint hover:bg-accent-soft hover:text-accent-dark">
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -629,6 +633,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         <>
           <ExpenseForm
             groupId={groupId}
+            groupName={detail.group.name}
             groupCurrency={detail.group.currency}
             members={detail.members}
             meId={me.id}
@@ -710,10 +715,27 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
 // Inline dropdown so users can jump between groups without going back to the
 // index — groups behave like switchable workspaces.
-function GroupSwitcher({ currentId, currentName }: { currentId: number; currentName: string }) {
+function GroupSwitcher({
+  currentId,
+  currentName,
+  currency,
+  memberCount,
+}: {
+  currentId: number;
+  currentName: string;
+  currency: string;
+  memberCount: number;
+}) {
   const [open, setOpen] = useState(false);
-  const { data } = useApiData<{ groups: { id: number; name: string; unreadMessages?: number }[] }>("/api/groups");
-  const others = (data?.groups ?? []).filter((g) => g.id !== currentId);
+  const { data } = useApiData<{ groups: {
+    id: number;
+    name: string;
+    currency: string;
+    memberCount: number;
+    myNetCents: number;
+    unreadMessages?: number;
+  }[] }>("/api/groups");
+  const groups = data?.groups ?? [];
 
   useEffect(() => {
     if (!open) return;
@@ -728,38 +750,50 @@ function GroupSwitcher({ currentId, currentName }: { currentId: number; currentN
   }, [open]);
 
   return (
-    <div className="relative inline-block max-w-full">
+    <div className="relative mt-0.5">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={`Switch group (current: ${currentName})`}
-        className="flex max-w-full items-center gap-1.5 rounded-lg text-left hover:text-accent-dark"
+        className="flex w-full items-center gap-2 rounded-lg text-left text-[var(--group-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--group-color)]"
       >
-        <span className="truncate font-display text-2xl font-bold tracking-tight">{currentName}</span>
-        <ChevronDown className={`h-4.5 w-4.5 shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-2xl font-bold tracking-tight">{currentName}</span>
+          <span className="block text-xs font-medium text-[var(--group-muted)]">{memberCount} {memberCount === 1 ? "member" : "members"} · {currency}</span>
+        </span>
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/55">
+          <ChevronDown className={`h-4.5 w-4.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        </span>
       </button>
       {open && (
         <div
           role="listbox"
           aria-label="Your groups"
-          className="absolute left-0 top-full z-50 mt-1.5 max-h-72 w-64 overflow-y-auto rounded-xl border border-line bg-card py-1 shadow-pop"
+          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[60dvh] overflow-y-auto rounded-xl border border-line bg-card p-1.5 text-ink shadow-pop"
         >
-          {others.length === 0 ? (
-            <p className="px-3 py-2.5 text-sm text-ink-faint">No other groups yet.</p>
+          {groups.length === 0 ? (
+            <p className="px-3 py-2.5 text-sm text-ink-faint">Loading groups…</p>
           ) : (
-            others.map((g) => (
+            groups.map((g) => (
               <Link
                 key={g.id}
                 href={`/groups/${g.id}`}
                 role="option"
-                aria-selected={false}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm font-medium hover:bg-subtle"
+                aria-selected={g.id === currentId}
+                onClick={() => setOpen(false)}
+                className={`group-hue-${g.id % 6} flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-subtle ${g.id === currentId ? "bg-subtle" : ""}`}
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--group-soft)] text-[var(--group-ink)]">
                   <Users className="h-3.5 w-3.5" />
                 </span>
-                <span className="min-w-0 flex-1 truncate">{g.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-semibold">{g.name}</span>
+                  <span className="block text-xs text-ink-faint">{g.memberCount} {g.memberCount === 1 ? "member" : "members"} · {g.currency}</span>
+                </span>
+                <span className={`tnum text-xs font-semibold ${g.myNetCents > 0 ? "text-owed" : g.myNetCents < 0 ? "text-owe" : "text-ink-faint"}`}>
+                  {g.myNetCents === 0 ? "settled" : <Money cents={g.myNetCents} currency={g.currency} signed />}
+                </span>
                 {!!g.unreadMessages && <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
               </Link>
             ))

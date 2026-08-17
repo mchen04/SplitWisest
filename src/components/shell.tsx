@@ -9,9 +9,16 @@ import {
 } from "lucide-react";
 import { api, useApiData, useMe, useUnread, type Unread } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
-import { Avatar, IconButton } from "./ui";
+import { Avatar, IconButton, Modal } from "./ui";
 
-interface GroupRef { id: number; name: string; unreadMessages?: number }
+interface GroupRef {
+  id: number;
+  name: string;
+  currency: string;
+  memberCount: number;
+  myNetCents: number;
+  unreadMessages?: number;
+}
 
 type BadgeKey = keyof Unread;
 
@@ -22,6 +29,13 @@ const NAV: { href: string; label: string; icon: typeof LayoutDashboard; badge?: 
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/chat", label: "Chat", icon: MessageSquare, badge: "messages" },
   { href: "/activity", label: "Activity", icon: ScrollText, badge: "activity" },
+];
+
+const MOBILE_NAV: { href: string; label: string; icon: typeof LayoutDashboard; badge?: BadgeKey }[] = [
+  { href: "/", label: "Home", icon: LayoutDashboard, badge: "activity" },
+  { href: "/groups", label: "Groups", icon: Users },
+  { href: "/balances", label: "Balances", icon: Scale, badge: "balances" },
+  { href: "/chat", label: "Chat", icon: MessageSquare, badge: "messages" },
 ];
 
 function Badge({ count }: { count: number }) {
@@ -40,8 +54,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   const unread = useUnread();
   const { theme, toggle } = useTheme();
   const { data: groupsData } = useApiData<{ groups: GroupRef[] }>("/api/groups");
-  const firstGroup = groupsData?.groups?.[0];
-  const addExpenseHref = firstGroup ? `/groups/${firstGroup.id}?add=1` : "/groups";
+  const groups = groupsData?.groups ?? [];
+  const currentGroupId = pathname.match(/^\/groups\/(\d+)/)?.[1];
+  const [expensePickerOpen, setExpensePickerOpen] = useState(false);
 
   const [groupsOpen, setGroupsOpen] = useState(false);
   useEffect(() => {
@@ -60,6 +75,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.push("/login");
   }
 
+  function launchExpense() {
+    if (currentGroupId) {
+      router.push(`/groups/${currentGroupId}?add=1`);
+      return;
+    }
+    if (groups.length === 1) {
+      router.push(`/groups/${groups[0].id}?add=1`);
+      return;
+    }
+    if (groups.length === 0) {
+      router.push("/groups");
+      return;
+    }
+    setExpensePickerOpen(true);
+  }
+
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
@@ -74,12 +105,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span className="font-wordmark text-lg font-semibold tracking-tight">SplitWisest</span>
         </Link>
         <div className="px-3 pb-2">
-          <Link
-            href={addExpenseHref}
+          <button
+            type="button"
+            onClick={launchExpense}
             className="flex min-h-[var(--control-h)] w-full items-center justify-center gap-1.5 rounded-[10px] bg-accent px-2.5 py-1.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-dark focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-accent-soft"
           >
             <Plus className="h-4 w-4" /> Add expense
-          </Link>
+          </button>
         </div>
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 py-1">
           {NAV.map(({ href, label, icon: Icon, badge }) => (
@@ -113,12 +145,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Link
                       key={g.id}
                       href={`/groups/${g.id}`}
-                      className={`flex items-center gap-2 rounded-lg py-1.5 pl-9 pr-2.5 text-sm transition-colors ${
+                      className={`group-hue-${g.id % 6} flex items-center gap-2 rounded-lg py-1.5 pl-7 pr-2.5 text-sm transition-colors ${
                         pathname === `/groups/${g.id}`
                           ? "bg-accent-soft font-medium text-accent-dark"
                           : "text-ink-soft hover:bg-subtle hover:text-ink"
                       }`}
                     >
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--group-color)]" aria-hidden />
                       <span className="min-w-0 flex-1 truncate" title={g.name}>{g.name}</span>
                       {!!g.unreadMessages && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
                     </Link>
@@ -154,7 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-card/90 px-4 py-3 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-card/90 px-4 py-2.5 backdrop-blur md:hidden">
         <Link href="/" className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
@@ -168,13 +201,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link href="/settings" aria-label="Settings" title="Settings" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ink-soft hover:bg-subtle hover:text-ink">
             <Settings className="h-[18px] w-[18px]" />
           </Link>
-          <Link
-            href={addExpenseHref}
-            aria-label="Add expense"
-            className="flex h-9 items-center gap-1 rounded-lg bg-accent px-2.5 text-sm font-semibold text-on-accent"
-          >
-            <Plus className="h-[18px] w-[18px]" /> Add
-          </Link>
         </div>
       </header>
 
@@ -184,10 +210,40 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile bottom nav */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-line bg-card/90 backdrop-blur md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-card/95 backdrop-blur md:hidden"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
-        {NAV.map(({ href, label, icon: Icon, badge }) => (
+        {MOBILE_NAV.slice(0, 2).map(({ href, label, icon: Icon, badge }) => (
+          <Link
+            key={href}
+            href={href}
+            className={`relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium ${
+              isActive(href) ? "text-accent" : "text-ink-faint"
+            }`}
+          >
+            <span className="relative">
+              <Icon className="h-5 w-5" />
+              {badge && unread[badge] > 0 && (
+                <span className="absolute -right-1.5 -top-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-bold leading-none text-on-accent">
+                  {unread[badge] > 9 ? "9+" : unread[badge]}
+                </span>
+              )}
+            </span>
+            {label}
+          </Link>
+        ))}
+        <button
+          type="button"
+          onClick={launchExpense}
+          aria-label="Add expense"
+          className="relative flex flex-col items-center gap-0.5 py-2 text-[10px] font-semibold text-accent"
+        >
+          <span className="-mt-5 flex h-11 w-11 items-center justify-center rounded-full border-4 border-paper bg-accent text-on-accent shadow-pop">
+            <Plus className="h-5 w-5" />
+          </span>
+          Add
+        </button>
+        {MOBILE_NAV.slice(2).map(({ href, label, icon: Icon, badge }) => (
           <Link
             key={href}
             href={href}
@@ -207,6 +263,31 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         ))}
       </nav>
+
+      <Modal open={expensePickerOpen} onClose={() => setExpensePickerOpen(false)} title="Add expense to">
+        <p className="mb-3 text-sm text-ink-soft">Choose the group for this expense.</p>
+        <div className="space-y-1.5">
+          {groups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => {
+                setExpensePickerOpen(false);
+                router.push(`/groups/${group.id}?add=1`);
+              }}
+              className={`group-choice group-hue-${group.id % 6} flex w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left hover:bg-subtle`}
+            >
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--group-soft)] text-[var(--group-ink)]">
+                <Users className="h-4.5 w-4.5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{group.name}</span>
+                <span className="block text-xs text-ink-faint">{group.memberCount} {group.memberCount === 1 ? "member" : "members"} · {group.currency}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </Modal>
     </div>
   );
 }

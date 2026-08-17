@@ -303,7 +303,7 @@ export function Modal({
             <X className="h-5 w-5" />
           </IconButton>
         </div>
-        <div className="overflow-y-auto px-4 py-4">{children}</div>
+        <div className="overflow-x-hidden overflow-y-auto px-4 py-4">{children}</div>
         {footer && (
           <div className="flex items-center justify-end gap-2 border-t border-line px-4 py-3">{footer}</div>
         )}

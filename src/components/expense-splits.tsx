@@ -40,6 +40,40 @@ export function ParticipantSplit({
   onToggle: (id: number) => void;
   onValue: (id: number, value: string) => void;
 }) {
+  if (method === "equal") {
+    return (
+      <fieldset>
+        <legend className={LEGEND}>Participants</legend>
+        <div className="grid grid-cols-2 gap-2">
+          {members.map((member) => {
+            const checked = selected.has(member.id);
+            return (
+              <label
+                key={member.id}
+                className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 ${checked ? "border-accent bg-accent-soft" : "border-line bg-card"}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggle(member.id)}
+                  className="h-4 w-4 shrink-0 accent-[var(--color-accent)]"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{member.displayName}</span>
+                  {checked && amountCents > 0 && (
+                    <span className="tnum block truncate text-xs text-ink-faint">
+                      ≈ {fmtMoney(Math.floor(amountCents / Math.max(participantCount, 1)), currency)}
+                    </span>
+                  )}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  }
+
   return (
     <fieldset>
       <legend className={LEGEND}>Participants</legend>
@@ -55,15 +89,10 @@ export function ParticipantSplit({
                 onChange={() => onToggle(m.id)}
                 className="h-4 w-4 accent-[var(--color-accent)]"
               />
-              <label htmlFor={`p-${m.id}`} className="flex-1 truncate text-sm font-medium">
+              <label htmlFor={`p-${m.id}`} className="min-w-0 flex-1 truncate text-sm font-medium">
                 {m.displayName}
               </label>
-              {checked && method === "equal" && amountCents > 0 && (
-                <span className="tnum text-sm text-ink-faint">
-                  ≈ {fmtMoney(Math.floor(amountCents / Math.max(participantCount, 1)), currency)}
-                </span>
-              )}
-              {checked && method !== "equal" && (
+              {checked && (
                 <div className="flex items-center gap-1.5">
                   <Input
                     inputMode="decimal"
@@ -131,7 +160,7 @@ export function ItemizedSplit({
       <div className="space-y-2">
         {items.map((item, idx) => (
           <div key={idx} className="rounded-lg border border-line p-3">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_6.5rem_auto] gap-2">
               <Input
                 value={item.name}
                 onChange={(e) => patch(idx, { name: e.target.value })}
@@ -142,7 +171,7 @@ export function ItemizedSplit({
                 inputMode="decimal"
                 value={item.amount}
                 onChange={(e) => patch(idx, { amount: e.target.value })}
-                className="!w-28 text-right"
+                className="text-right"
                 placeholder="0.00"
                 aria-label={`Item ${idx + 1} amount`}
               />
