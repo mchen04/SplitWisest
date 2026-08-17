@@ -4,9 +4,9 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
+  Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, ChevronDown, Users,
-  SlidersHorizontal,
+  SlidersHorizontal, MoreHorizontal,
 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
@@ -143,19 +143,40 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     { key: "chat", label: "Chat", icon: MessageSquare },
     { key: "activity", label: "Activity", icon: ScrollText },
   ];
+  const PRIMARY_TABS = TABS.filter(({ key }) => ["expenses", "balances", "chat"].includes(key));
+  const MORE_TABS = TABS.filter(({ key }) => ["insights", "activity"].includes(key));
+  const moreTabActive = MORE_TABS.some(({ key }) => key === tab);
   const myGroupBalance = me && detail
     ? detail.balances.find((balance) => balance.userId === me.id)?.netCents ?? 0
     : 0;
 
   return (
     <AppShell>
-      <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_minmax(16rem,auto)] md:gap-x-4 md:gap-y-1 md:shrink-0`} aria-label="Current group">
-        <div className="flex items-center gap-2 md:col-span-2">
-          <Link href="/groups" aria-label="Back to groups" className="group-context-control">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-          <p className="min-w-0 flex-1 text-xs font-semibold text-[var(--group-ink)]">Current group</p>
-          <Menu label="Group menu">
+      <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(16rem,auto)] md:items-center md:gap-x-5 md:shrink-0`} aria-label="Current group">
+        <div className="flex items-start gap-2">
+          {detail ? (
+            <div className="min-w-0 flex-1">
+              <GroupSwitcher
+                currentId={groupId}
+                currentName={detail.group.name}
+                currency={detail.group.currency}
+                memberCount={detail.members.length}
+              />
+            </div>
+          ) : (
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="skeleton h-7 w-56" />
+              <div className="skeleton h-4 w-32" />
+            </div>
+          )}
+          <Menu
+            label="Group menu"
+            trigger={
+              <button type="button" aria-label="Group menu" className="group-context-control">
+                <MoreHorizontal className="h-5 w-5" />
+              </button>
+            }
+          >
             <MenuItem icon={<Copy className="h-4 w-4" />} onClick={copyInviteLink}>Copy invite link</MenuItem>
             <MenuItem icon={<Download className="h-4 w-4" />} onClick={() => { window.location.href = `/api/groups/${groupId}/export`; }}>Export CSV</MenuItem>
             <MenuItem icon={<Settings className="h-4 w-4" />} onClick={() => setSettingsOpen(true)}>Group settings</MenuItem>
@@ -163,48 +184,23 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
 
         {detail ? (
-          <div className="min-w-0 md:flex md:items-end md:gap-4">
-            <GroupSwitcher
-              currentId={groupId}
-              currentName={detail.group.name}
-              currency={detail.group.currency}
-              memberCount={detail.members.length}
-            />
-            <div className="mt-2 flex items-end justify-between gap-3 md:mt-0 md:flex-1">
+          <div className="min-w-0">
               <div className="min-w-0">
-                <p className="text-xs text-[var(--group-muted)] md:hidden">Your balance here</p>
-                <p className="tnum mt-0.5 text-lg font-bold text-[var(--group-ink)] md:whitespace-nowrap">
+                <p className="text-xs font-medium text-[var(--group-muted)]">Your balance here</p>
+                <p className={`tnum mt-0.5 text-3xl font-semibold tracking-tight md:whitespace-nowrap ${myGroupBalance > 0 ? "text-owed" : myGroupBalance < 0 ? "text-owe" : "text-[var(--group-ink)]"}`}>
                   {myGroupBalance === 0 ? "Settled up" : (
-                    <>
-                      <span className="md:hidden">{myGroupBalance > 0 ? "You are owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></span>
-                      <span className="hidden md:inline"><Money cents={myGroupBalance} currency={detail.group.currency} signed /></span>
-                    </>
+                    <>{myGroupBalance > 0 ? "Owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></>
                   )}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setTab("balances")}
-                className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-left text-xs font-medium text-[var(--group-ink)] hover:bg-white/40 md:hidden"
-                aria-label={`View ${detail.members.length} group members and balances`}
-              >
-                <span className="flex -space-x-2" aria-hidden>
-                  {detail.members.slice(0, 3).map((member) => (
-                    <span key={member.id} className="rounded-full ring-2 ring-[var(--group-soft)]"><Avatar name={member.displayName} size="sm" /></span>
-                  ))}
-                </span>
-                {detail.members.length} {detail.members.length === 1 ? "member" : "members"}
-              </button>
-            </div>
           </div>
         ) : (
-          <div className="mt-2 space-y-2 md:mt-0">
-            <div className="skeleton h-8 w-56" />
-            <div className="skeleton h-5 w-40" />
+          <div className="space-y-2">
+            <div className="skeleton h-9 w-44" />
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-2 gap-2 md:mt-0 md:self-end">
+        <div className="mt-3 grid grid-cols-2 gap-2 md:mt-0">
           <Button
             variant="secondary"
             className="w-full border-white/60 bg-white/55 hover:bg-white/80"
@@ -212,10 +208,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
             onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
           >
-            <HandCoins className="h-4 w-4" /> Settle up
+            <HandCoins className="hidden h-4 w-4 sm:block" /> Settle up
           </Button>
           <Button className="w-full bg-[var(--group-color)] hover:bg-[var(--group-ink)]" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add expense
+            <Plus className="hidden h-4 w-4 sm:block" /> Add expense
           </Button>
         </div>
       </section>
@@ -269,15 +265,51 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       </Card>
 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
-      {/* Tabs */}
-      <div role="tablist" aria-label="Group sections" className="mb-2.5 grid grid-cols-5 gap-0.5 rounded-xl border border-line bg-card p-1 md:shrink-0">
+      {/* Three common destinations stay visible on mobile. Less-used views live
+          under More, while desktop keeps the full set in one scan. */}
+      <div role="tablist" aria-label="Group sections" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
+        {PRIMARY_TABS.map(({ key, label, icon: Icon }) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium transition-colors ${
+              tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            <Icon className="h-4 w-4" /> {label}
+          </button>
+        ))}
+        <Menu
+          label="More group sections"
+          trigger={
+            <button
+              type="button"
+              role="tab"
+              aria-selected={moreTabActive}
+              className={`flex w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium transition-colors ${
+                moreTabActive ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              <MoreHorizontal className="h-4 w-4" /> More
+            </button>
+          }
+        >
+          {MORE_TABS.map(({ key, label, icon: Icon }) => (
+            <MenuItem key={key} icon={<Icon className="h-4 w-4" />} onClick={() => setTab(key)}>{label}</MenuItem>
+          ))}
+        </Menu>
+      </div>
+
+      <div role="tablist" aria-label="Group sections" className="mb-2 hidden grid-cols-5 gap-1 rounded-xl border border-line bg-card p-1 sm:grid md:shrink-0">
         {TABS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[10px] font-medium transition-colors sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm ${
+            className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -373,7 +405,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         aria-label={`View ${e.title}`}
                       >
                       <div className="hidden w-12 shrink-0 text-center sm:block">
-                        <p className="text-[11px] font-semibold uppercase text-ink-faint">
+                        <p className="text-xs font-semibold uppercase text-ink-faint">
                           {new Date(String(e.date).slice(0, 10) + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
                         </p>
                         <p className="font-display text-lg font-semibold leading-none">
@@ -387,13 +419,19 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         </p>
                         <p className="truncate text-xs text-ink-faint">
                           <span className="sm:hidden">{fmtDate(e.date)} · </span>
-                          {e.payerName} paid{e.categoryName ? ` · ${e.categoryName}` : ""} · split {e.splitMethod}
+                          {e.payerName} paid
                           {e.currency !== detail?.group.currency && ` · ${fmtMoney(e.amountCents, e.currency)}`}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="tnum font-semibold">{fmtMoney(e.convertedCents, detail?.group.currency ?? e.currency)}</p>
-                        <p className="text-xs text-ink-faint">
+                        <p className="tnum text-sm font-semibold">{fmtMoney(e.convertedCents, detail?.group.currency ?? e.currency)}</p>
+                        <p className={`text-xs font-medium ${
+                          me && e.payerId === me.id && e.convertedCents - myShare > 0
+                            ? "text-owed"
+                            : myShare > 0
+                              ? "text-owe"
+                              : "text-ink-faint"
+                        }`}>
                           {me && e.payerId === me.id
                             ? `you lent ${fmtMoney(e.convertedCents - myShare, detail?.group.currency ?? e.currency)}`
                             : myShare > 0
@@ -750,7 +788,7 @@ function GroupSwitcher({
   }, [open]);
 
   return (
-    <div className="relative mt-0.5">
+    <div className="relative">
       <button
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
         aria-haspopup="listbox"
@@ -784,7 +822,7 @@ function GroupSwitcher({
                 onClick={() => setOpen(false)}
                 className={`group-hue-${g.id % 6} flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-subtle ${g.id === currentId ? "bg-subtle" : ""}`}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--group-soft)] text-[var(--group-ink)]">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--group-soft)] text-[var(--group-ink)]">
                   <Users className="h-3.5 w-3.5" />
                 </span>
                 <span className="min-w-0 flex-1">

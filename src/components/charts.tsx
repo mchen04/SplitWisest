@@ -61,7 +61,7 @@ export function TimeChart({
                 style={{ height: `${Math.max((d.value / max) * 100, 2)}%` }}
                 title={`${d.label}: ${fmtMoney(d.value, currency)}`}
               />
-              <span className="mt-1 block truncate text-center text-[10px] text-ink-faint">{d.label}</span>
+              <span className="mt-1 block truncate text-center text-xs text-ink-faint">{d.label}</span>
             </div>
           ))}
         </div>

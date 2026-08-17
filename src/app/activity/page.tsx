@@ -64,7 +64,7 @@ export default function ActivityPage() {
                 return (
                   <li key={a.id} className="border-b border-line last:border-0">
                     {showDay && (
-                      <p className="bg-subtle px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                      <p className="bg-subtle px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
                         {dayLabel(a.createdAt)}
                       </p>
                     )}

@@ -142,7 +142,7 @@ export default function BalancesPage() {
       {/* Invite — a shareable link, never a raw code on screen. */}
       <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:shrink-0">
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
+          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
             <UserPlus className="h-4 w-4" />
           </span>
           <div>
@@ -343,7 +343,7 @@ function FriendSection({
   if (friends.length === 0) return null;
   return (
     <section>
-      <div className="border-b border-line bg-subtle px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+      <div className="border-b border-line bg-subtle px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-ink-faint">
         {title}
       </div>
       <ul className="divide-y divide-line">

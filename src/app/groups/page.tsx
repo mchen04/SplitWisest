@@ -67,7 +67,7 @@ export default function GroupsPage() {
         {groups === null ? (
           <div className="grid gap-2 sm:grid-cols-2">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="skeleton h-[4.75rem] w-full" />
+              <div key={i} className="skeleton h-20 w-full" />
             ))}
           </div>
         ) : groups.length === 0 ? (
@@ -87,7 +87,7 @@ export default function GroupsPage() {
           <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             {groups.map((g) => (
               <li key={g.id}>
-                <Link href={`/groups/${g.id}`} className={`group-choice group-hue-${g.id % 6} flex min-h-[4.75rem] items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-card transition-colors hover:bg-subtle`}>
+                <Link href={`/groups/${g.id}`} className={`group-choice group-hue-${g.id % 6} flex min-h-20 items-center gap-3 rounded-xl border border-line bg-card px-3.5 py-2.5 shadow-card transition-colors hover:bg-subtle`}>
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--group-soft)] text-[var(--group-ink)]">
                     <Users className="h-5 w-5" />
                   </span>

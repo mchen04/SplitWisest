@@ -5,19 +5,19 @@ import { Wallet } from "lucide-react";
 export function AuthFrame({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh items-center justify-center p-5">
-      <div className="rise-in w-full max-w-[404px]">
-        <div className="mb-[18px] flex flex-col items-center gap-2">
-          <div className="flex items-center justify-center gap-[11px]">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-[23px] text-on-accent">
+      <div className="rise-in w-full max-w-sm">
+        <div className="mb-4 flex flex-col items-center gap-2">
+          <div className="flex items-center justify-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-2xl text-on-accent">
               <Wallet className="h-[1.15em] w-[1.15em]" />
             </span>
-            <span className="font-wordmark text-[25px] font-semibold tracking-tight">SplitWisest</span>
+            <span className="font-wordmark text-2xl font-semibold tracking-tight">SplitWisest</span>
           </div>
           <p className="text-pretty px-2 text-center text-sm text-ink-soft [text-wrap:balance]">
             A private shared-expense ledger for friends — see who owes whom and settle up offline.
           </p>
         </div>
-        <div className="rounded-2xl border border-line bg-card p-[26px] shadow-card">{children}</div>
+        <div className="rounded-2xl border border-line bg-card p-6 shadow-card">{children}</div>
         <p className="mt-4 text-center text-xs text-ink-faint">
           Not a payment app — settlements are records of payments made offline.
         </p>

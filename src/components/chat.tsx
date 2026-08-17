@@ -179,7 +179,7 @@ export function ChatPane({
             value={query}
             onChange={(e) => runSearch(e.target.value)}
             placeholder="Search messages"
-            className="!min-h-9 !py-1.5 pl-8"
+            className="!min-h-[var(--control-h-sm)] !py-1.5 pl-8"
             aria-label="Search messages"
           />
         </div>
@@ -218,7 +218,7 @@ export function ChatPane({
                   >
                     <MessageBody text={m.body} mine={mine} />
                   </div>
-                  <p className="mt-0.5 text-[11px] text-ink-faint">
+                  <p className="mt-0.5 text-xs text-ink-faint">
                     {!mine && <span className="font-medium">{m.senderName} · </span>}
                     {fmtTime(m.createdAt)}
                   </p>
