@@ -149,8 +149,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   return (
     <AppShell>
-      <section className={`group-context group-hue-${groupId % 6} mb-3 md:mb-4 md:shrink-0`} aria-label="Current group">
-        <div className="flex items-center gap-2">
+      <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_minmax(16rem,auto)] md:gap-x-4 md:gap-y-1 md:shrink-0`} aria-label="Current group">
+        <div className="flex items-center gap-2 md:col-span-2">
           <Link href="/groups" aria-label="Back to groups" className="group-context-control">
             <ArrowLeft className="h-5 w-5" />
           </Link>
@@ -163,26 +163,29 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
 
         {detail ? (
-          <>
+          <div className="min-w-0 md:flex md:items-end md:gap-4">
             <GroupSwitcher
               currentId={groupId}
               currentName={detail.group.name}
               currency={detail.group.currency}
               memberCount={detail.members.length}
             />
-            <div className="mt-2 flex items-end justify-between gap-3">
+            <div className="mt-2 flex items-end justify-between gap-3 md:mt-0 md:flex-1">
               <div className="min-w-0">
-                <p className="text-xs text-[var(--group-muted)]">Your balance here</p>
-                <p className="tnum mt-0.5 text-lg font-bold text-[var(--group-ink)]">
+                <p className="text-xs text-[var(--group-muted)] md:hidden">Your balance here</p>
+                <p className="tnum mt-0.5 text-lg font-bold text-[var(--group-ink)] md:whitespace-nowrap">
                   {myGroupBalance === 0 ? "Settled up" : (
-                    <>{myGroupBalance > 0 ? "You are owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></>
+                    <>
+                      <span className="md:hidden">{myGroupBalance > 0 ? "You are owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></span>
+                      <span className="hidden md:inline"><Money cents={myGroupBalance} currency={detail.group.currency} signed /></span>
+                    </>
                   )}
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setTab("balances")}
-                className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-left text-xs font-medium text-[var(--group-ink)] hover:bg-white/40"
+                className="flex shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-left text-xs font-medium text-[var(--group-ink)] hover:bg-white/40 md:hidden"
                 aria-label={`View ${detail.members.length} group members and balances`}
               >
                 <span className="flex -space-x-2" aria-hidden>
@@ -193,15 +196,15 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                 {detail.members.length} {detail.members.length === 1 ? "member" : "members"}
               </button>
             </div>
-          </>
+          </div>
         ) : (
-          <div className="mt-2 space-y-2">
+          <div className="mt-2 space-y-2 md:mt-0">
             <div className="skeleton h-8 w-56" />
             <div className="skeleton h-5 w-40" />
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className="mt-3 grid grid-cols-2 gap-2 md:mt-0 md:self-end">
           <Button
             variant="secondary"
             className="w-full border-white/60 bg-white/55 hover:bg-white/80"
