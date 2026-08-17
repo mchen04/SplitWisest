@@ -93,7 +93,7 @@ export function ExpenseForm({
   ];
   const [newCategory, setNewCategory] = useState("");
   const [addingCat, setAddingCat] = useState(false);
-  const [showSplitOptions, setShowSplitOptions] = useState(false);
+  const [showExpenseOptions, setShowExpenseOptions] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [savedAttachments, setSavedAttachments] = useState<ExistingExpense["attachments"]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -119,7 +119,7 @@ export function ExpenseForm({
       setNotes(existing.notes);
       setShowDetails(Boolean(existing.notes || existing.attachments.length));
       setMethod(existing.splitMethod as Method);
-      setShowSplitOptions(existing.splitMethod !== "equal");
+      setShowExpenseOptions(false);
       setSelected(new Set(existing.shares.map((s) => s.userId)));
       const vals: Record<number, string> = {};
       for (const s of existing.shares) {
@@ -151,7 +151,7 @@ export function ExpenseForm({
       setNotes("");
       setShowDetails(false);
       setMethod("equal");
-      setShowSplitOptions(false);
+      setShowExpenseOptions(false);
       setSelected(new Set(members.map((m) => m.id)));
       setValues({});
       setItems([]);
@@ -187,6 +187,10 @@ export function ExpenseForm({
     method === "itemized" && itemSubtotalCents > 0 ? (itemizedTotalCents / 100).toFixed(2) : amount;
 
   const participantList = members.filter((m) => selected.has(m.id));
+  const payerName = members.find((member) => member.id === payerId)?.displayName ?? "Someone";
+  const dateSummary = date === todayStr()
+    ? "today"
+    : new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
   // Live validation feedback for split inputs
   const splitStatus = useMemo(() => {
@@ -329,113 +333,114 @@ export function ExpenseForm({
   return (
     <Modal open={open} onClose={onClose} title={existing ? "Edit expense" : "Add expense"} wide>
       <form onSubmit={submit} className="space-y-4">
-        <div className={`group-choice group-hue-${groupId % 6} flex items-center gap-3 rounded-xl bg-[var(--group-soft)] px-3 py-2.5 text-[var(--group-ink)]`}>
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card/60">
+        <div className={`group-choice group-hue-${groupId % 6} flex items-center gap-2 rounded-xl bg-[var(--group-soft)] px-3 py-2 text-[var(--group-ink)]`}>
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-card/60">
             <Users className="h-4 w-4" />
           </span>
           <span className="min-w-0">
-            <span className="block text-xs font-medium text-[var(--group-muted)]">Adding to</span>
+            <span className="block text-xs font-medium text-[var(--group-muted)]">Group</span>
             <span className="block truncate text-sm font-semibold">{groupName} · {groupCurrency}</span>
           </span>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Title">
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="What was it for?" />
+        <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2">
+          <Field label={method === "itemized" ? "Total" : "Amount"}>
+            <Input
+              inputMode="decimal"
+              value={displayedAmount}
+              onChange={(e) => setAmount(e.target.value)}
+              required={method !== "itemized"}
+              readOnly={method === "itemized" && itemSubtotalCents > 0}
+              placeholder="0.00"
+              className="!min-h-14 !text-3xl !font-semibold tracking-tight tnum"
+            />
           </Field>
-          <div className="grid grid-cols-[1fr_auto] gap-2">
-            <Field label="Amount">
-              <Input
-                inputMode="decimal"
-                value={displayedAmount}
-                onChange={(e) => setAmount(e.target.value)}
-                required={method !== "itemized"}
-                readOnly={method === "itemized" && itemSubtotalCents > 0}
-                placeholder="0.00"
-              />
-            </Field>
-            <Field label="Currency">
-              <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-24">
-                {CURRENCIES.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-          <Field label="Paid by">
-            <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.displayName}
-                </option>
+          <Field label="Currency">
+            <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="!min-h-14">
+              {CURRENCIES.map((c) => (
+                <option key={c}>{c}</option>
               ))}
             </Select>
           </Field>
-          <Field label="Date">
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-          </Field>
         </div>
 
-        <Field label="Category">
-          <Select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
-          >
-            <option value="">No category</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.custom ? " (custom)" : ""}
-              </option>
-            ))}
-          </Select>
-          {addingCat ? (
-            <div className="mt-2 flex gap-2">
-              <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="New category name" autoFocus />
-              <Button type="button" variant="secondary" onClick={addCategory} disabled={!newCategory.trim()}>Add</Button>
-              <Button type="button" variant="ghost" onClick={() => { setAddingCat(false); setNewCategory(""); }}>Cancel</Button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAddingCat(true)}
-              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
-            >
-              <Plus className="h-3.5 w-3.5" /> New category
-            </button>
-          )}
+        <Field label="Description">
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="Dinner, groceries, tickets…" />
         </Field>
 
-        <div>
-          <span className="mb-1.5 block text-xs font-medium text-ink-soft">Split</span>
-          {!showSplitOptions ? (
-            <div className="flex items-center justify-between gap-3 rounded-lg border border-line bg-subtle px-3 py-2">
-              <span className="text-sm text-ink-soft">Split <span className="font-medium text-ink">equally</span> between everyone selected</span>
-              <button
-                type="button"
-                onClick={() => setShowSplitOptions(true)}
-                className="shrink-0 text-sm font-medium text-accent hover:underline"
-              >
-                Split differently
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Split method">
-              {(Object.keys(METHOD_LABELS) as Method[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={method === m}
-                  onClick={() => setMethod(m)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    method === m
-                      ? "border-accent bg-accent-soft text-accent-dark"
-                      : "border-line text-ink-soft hover:border-line-strong"
-                  }`}
-                >
-                  {METHOD_LABELS[m]}
+        <div className="rounded-xl border border-line">
+          <button
+            type="button"
+            onClick={() => setShowExpenseOptions((shown) => !shown)}
+            aria-expanded={showExpenseOptions}
+            className="flex min-h-[var(--control-h)] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-subtle"
+          >
+            <span className="min-w-0 flex-1 truncate">
+              <span className="font-medium text-ink">{payerName} paid</span>
+              <span className="text-ink-faint"> · {METHOD_LABELS[method]} · {dateSummary}</span>
+            </span>
+            <span className="shrink-0 font-medium text-accent">Change</span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${showExpenseOptions ? "rotate-180" : ""}`} />
+          </button>
+
+          {showExpenseOptions && (
+            <div className="space-y-4 border-t border-line p-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <Field label="Paid by">
+                  <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
+                    {members.map((m) => (
+                      <option key={m.id} value={m.id}>{m.displayName}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Date">
+                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+                </Field>
+                <Field label="Category">
+                  <Select
+                    value={categoryId}
+                    onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
+                  >
+                    <option value="">No category</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}{c.custom ? " (custom)" : ""}</option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+
+              {addingCat ? (
+                <div className="flex gap-2">
+                  <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="New category name" autoFocus />
+                  <Button type="button" variant="secondary" onClick={addCategory} disabled={!newCategory.trim()}>Add</Button>
+                  <Button type="button" variant="ghost" onClick={() => { setAddingCat(false); setNewCategory(""); }}>Cancel</Button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setAddingCat(true)} className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
+                  <Plus className="h-3.5 w-3.5" /> New category
                 </button>
-              ))}
+              )}
+
+              <fieldset>
+                <legend className="mb-1 block text-sm font-medium text-ink-soft">Split method</legend>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Split method">
+                  {(Object.keys(METHOD_LABELS) as Method[]).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="radio"
+                      aria-checked={method === m}
+                      onClick={() => setMethod(m)}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                        method === m
+                          ? "border-accent bg-accent-soft text-accent-dark"
+                          : "border-line text-ink-soft hover:border-line-strong"
+                      }`}
+                    >
+                      {METHOD_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
             </div>
           )}
         </div>

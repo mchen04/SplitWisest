@@ -23,7 +23,7 @@ export interface ItemRow {
   participantIds: number[];
 }
 
-const LEGEND = "mb-1.5 block text-xs font-medium text-ink-soft";
+const LEGEND = "mb-1 block text-sm font-medium text-ink-soft";
 
 // Participant picker for equal/exact/percentage/shares: a checkbox per member
 // plus, for weighted methods, the per-member value input.
