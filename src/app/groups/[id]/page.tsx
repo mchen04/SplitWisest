@@ -4,7 +4,7 @@ import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft, Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
+  Plus, HandCoins, Download, Pencil, Trash2, Receipt, Paperclip,
   RefreshCcw, MessageSquare, ScrollText, Scale, Search, X, PieChart, Settings, Copy, ChevronDown, Users,
   SlidersHorizontal, MoreHorizontal,
 } from "lucide-react";
@@ -154,9 +154,6 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     <AppShell>
       <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(16rem,auto)] md:items-center md:gap-x-5 md:shrink-0`} aria-label="Current group">
         <div className="flex items-start gap-2">
-          <Link href="/groups" aria-label="Back to groups" className="group-context-control">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
           {detail ? (
             <div className="min-w-0 flex-1">
               <GroupSwitcher
@@ -187,7 +184,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         </div>
 
         {detail ? (
-          <div className="flex min-w-0 items-end justify-between gap-3">
+          <div className="min-w-0">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-[var(--group-muted)]">Your balance here</p>
                 <p className={`tnum mt-0.5 text-3xl font-semibold tracking-tight md:whitespace-nowrap ${myGroupBalance > 0 ? "text-owed" : myGroupBalance < 0 ? "text-owe" : "text-[var(--group-ink)]"}`}>
@@ -196,19 +193,6 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   )}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setTab("balances")}
-                className="flex shrink-0 items-center gap-2 rounded-lg px-2 py-1 text-left text-xs font-medium text-[var(--group-ink)] hover:bg-white/40 md:hidden"
-                aria-label={`View ${detail.members.length} group members and balances`}
-              >
-                <span className="flex -space-x-2" aria-hidden>
-                  {detail.members.slice(0, 3).map((member) => (
-                    <span key={member.id} className="rounded-full ring-2 ring-[var(--group-soft)]"><Avatar name={member.displayName} size="sm" /></span>
-                  ))}
-                </span>
-                {detail.members.length} {detail.members.length === 1 ? "member" : "members"}
-              </button>
           </div>
         ) : (
           <div className="space-y-2">
@@ -224,10 +208,10 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
             onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
           >
-            <HandCoins className="h-4 w-4" /> Settle up
+            <HandCoins className="hidden h-4 w-4 sm:block" /> Settle up
           </Button>
           <Button className="w-full bg-[var(--group-color)] hover:bg-[var(--group-ink)]" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
-            <Plus className="h-4 w-4" /> Add expense
+            <Plus className="hidden h-4 w-4 sm:block" /> Add expense
           </Button>
         </div>
       </section>

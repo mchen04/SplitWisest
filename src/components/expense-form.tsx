@@ -375,7 +375,7 @@ export function ExpenseForm({
             className="flex min-h-[var(--control-h)] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-subtle"
           >
             <span className="min-w-0 flex-1 truncate">
-              <span className="font-medium text-ink">{payerName} paid</span>
+              <span className="font-medium text-ink">{payerName.split(" ")[0]} paid</span>
               <span className="text-ink-faint"> · {METHOD_LABELS[method]} · {dateSummary}</span>
             </span>
             <span className="shrink-0 font-medium text-accent">Change</span>
