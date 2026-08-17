@@ -7,9 +7,10 @@ import { currencySymbol } from "@/lib/currencies";
 import { Button, Input } from "./ui";
 import { Member } from "./expense-form";
 
-export type Method = "equal" | "exact" | "percentage" | "shares" | "itemized";
+export type Method = "solo" | "equal" | "exact" | "percentage" | "shares" | "itemized";
 
 export const METHOD_LABELS: Record<Method, string> = {
+  solo: "Solo owes",
   equal: "Equal",
   exact: "Exact amounts",
   percentage: "Percentages",
@@ -40,6 +41,34 @@ export function ParticipantSplit({
   onToggle: (id: number) => void;
   onValue: (id: number, value: string) => void;
 }) {
+  if (method === "solo") {
+    return (
+      <fieldset>
+        <legend className={LEGEND}>Who owes the full amount?</legend>
+        <div className="grid grid-cols-2 gap-2" role="radiogroup">
+          {members.map((member) => {
+            const checked = selected.has(member.id);
+            return (
+              <button
+                key={member.id}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                onClick={() => onToggle(member.id)}
+                className={`min-w-0 rounded-lg border px-2.5 py-2 text-left ${checked ? "border-accent bg-accent-soft" : "border-line bg-card"}`}
+              >
+                <span className="block truncate text-sm font-medium">{member.displayName}</span>
+                {checked && amountCents > 0 && (
+                  <span className="tnum block truncate text-xs text-ink-faint">{fmtMoney(amountCents, currency)}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+    );
+  }
+
   if (method === "equal") {
     return (
       <fieldset>

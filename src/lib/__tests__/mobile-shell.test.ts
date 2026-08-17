@@ -20,4 +20,10 @@ describe("mobile app shell", () => {
     expect(source("src/components/shell.tsx")).toContain("mobile-chat-main");
     expect(source("src/app/chat/page.tsx")).toContain("flex min-h-0 flex-1 flex-col overflow-hidden");
   });
+
+  it("hides mobile navigation while the message field has focus", () => {
+    const css = source("src/app/globals.css");
+    expect(source("src/components/chat.tsx")).toContain('className="chat-composer-input"');
+    expect(css).toMatch(/body:has\(\.chat-composer-input:focus\) \.mobile-nav\s*\{[^}]*display: none !important/);
+  });
 });

@@ -45,7 +45,7 @@ Use the deployed HTTPS URL.
 5. Open a long direct or group conversation.
 6. Scroll message history to both ends.
 7. Focus the message field and show the keyboard.
-8. Confirm the message field and Send stay visible.
+8. Confirm the message field and Send stay visible, and the bottom navigation hides.
 9. Send a message without scrolling the page.
 10. Confirm bottom navigation stays above the Home indicator.
 

@@ -143,6 +143,14 @@ body {
       var(--mobile-nav-height) + var(--safe-area-bottom) + var(--mobile-nav-lift)
     );
   }
+
+  body:has(.chat-composer-input:focus) .mobile-nav {
+    display: none !important;
+  }
+
+  body:has(.chat-composer-input:focus) .mobile-chat-main {
+    padding-bottom: var(--safe-area-bottom) !important;
+  }
 }
 
 /* A stable color gives each group its own workspace identity. */
