@@ -234,6 +234,7 @@ export function ChatPane({
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Write a message…"
           aria-label="Message"
+          className="chat-composer-input"
           maxLength={4000}
         />
         <button

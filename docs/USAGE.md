@@ -24,7 +24,7 @@
 ## Expenses
 
 - **Add expense** from the group page: title, amount (any currency), payer, date, category (or create a custom one), notes, receipts.
-- **Split methods**: expenses split equally by default — choose **Split differently** for Exact amounts, Percentages, Shares, or Itemized bill (assign each line item to the people who shared it — perfect for restaurants). The form shows live per-person amounts and feedback until the split adds up.
+- **Split methods**: one other member owes the full amount by default. Choose Equal, Exact amounts, Percentages, Shares, or Itemized bill when needed. The form shows live per-person amounts and feedback until the split adds up.
 - **Edit or delete** any expense with the pencil/trash icons. Balances update for everyone instantly.
 - **Recurring**: set up weekly/monthly expenses (rent, subscriptions); they post automatically.
 
@@ -44,7 +44,7 @@
 
 Each group has a chat tab; each friend has a direct chat. The **Chat** nav item lists every conversation. Messages and balances update live for everyone viewing — no refresh needed. Long histories load the newest messages first with a "Load earlier messages" affordance.
 
-On phones, scroll inside the message list to read history. Search, the message field, Send, and bottom navigation stay visible. The page itself does not scroll while a conversation is open.
+On phones, scroll inside the message list to read history. Search, the message field, and Send stay visible. The bottom navigation hides while you write a message. The page itself does not scroll while a conversation is open.
 
 ## Install on iPhone
 

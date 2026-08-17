@@ -48,7 +48,7 @@ Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byt
 
 The root viewport uses `viewport-fit=cover`. Mobile safe-area values become CSS variables in `src/app/globals.css`. The bottom navigation adds the iPhone inset plus a small lift. The Chat main area reserves the same height, so the composer never sits under navigation.
 
-The dedicated Chat route uses a bounded `100dvh` flex shell with page overflow disabled. Only the message list has vertical overflow. This layout follows the visual viewport when Safari expands its toolbars or shows the keyboard. See `docs/PWA.md` for the verification contract.
+The dedicated Chat route uses a bounded `100dvh` flex shell with page overflow disabled. Only the message list has vertical overflow. The mobile navigation hides while the composer has focus. This layout follows the visual viewport when Safari expands its toolbars or shows the keyboard. See `docs/PWA.md` for the verification contract.
 
 ## Recurring expenses
 

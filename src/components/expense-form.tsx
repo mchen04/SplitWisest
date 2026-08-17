@@ -76,8 +76,9 @@ export function ExpenseForm({
   const [categoryId, setCategoryId] = useState<number | "">("");
   const [notes, setNotes] = useState("");
   const [showDetails, setShowDetails] = useState(false);
-  const [method, setMethod] = useState<Method>("equal");
-  const [selected, setSelected] = useState<Set<number>>(new Set(members.map((m) => m.id)));
+  const defaultSoloId = members.find((member) => member.id !== meId)?.id ?? meId;
+  const [method, setMethod] = useState<Method>("solo");
+  const [selected, setSelected] = useState<Set<number>>(new Set([defaultSoloId]));
   const [values, setValues] = useState<Record<number, string>>({});
   const [items, setItems] = useState<ItemRow[]>([]);
   const [taxEnabled, setTaxEnabled] = useState(false);
@@ -118,7 +119,7 @@ export function ExpenseForm({
       setCategoryId(existing.categoryId ?? "");
       setNotes(existing.notes);
       setShowDetails(Boolean(existing.notes || existing.attachments.length));
-      setMethod(existing.splitMethod as Method);
+      setMethod(existing.splitMethod === "equal" && existing.shares.length === 1 ? "solo" : existing.splitMethod as Method);
       setShowExpenseOptions(false);
       setSelected(new Set(existing.shares.map((s) => s.userId)));
       const vals: Record<number, string> = {};
@@ -150,9 +151,9 @@ export function ExpenseForm({
       setCategoryId("");
       setNotes("");
       setShowDetails(false);
-      setMethod("equal");
+      setMethod("solo");
       setShowExpenseOptions(false);
-      setSelected(new Set(members.map((m) => m.id)));
+      setSelected(new Set([defaultSoloId]));
       setValues({});
       setItems([]);
       setTaxEnabled(false);
@@ -194,7 +195,7 @@ export function ExpenseForm({
 
   // Live validation feedback for split inputs
   const splitStatus = useMemo(() => {
-    if (method === "equal" || effectiveAmountCents === 0) return null;
+    if (method === "solo" || method === "equal" || effectiveAmountCents === 0) return null;
     if (method === "exact") {
       const sum = participantList.reduce((s, m) => s + (amountInputToCents(values[m.id] || "0") ?? 0), 0);
       const diff = amountCents - sum;
@@ -223,6 +224,10 @@ export function ExpenseForm({
   }, [method, amountCents, participantList, values, itemSubtotalCents, taxCents, tipCents, effectiveAmountCents, currency]);
 
   function toggleMember(id: number) {
+    if (method === "solo") {
+      setSelected(new Set([id]));
+      return;
+    }
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -253,7 +258,7 @@ export function ExpenseForm({
     return participantList.map((m) => ({
       userId: m.id,
       value:
-        method === "equal"
+        method === "solo" || method === "equal"
           ? undefined
           : method === "exact"
             ? amountInputToCents(values[m.id] || "0") ?? 0
@@ -278,7 +283,7 @@ export function ExpenseForm({
       payerId,
       categoryId: categoryId === "" ? null : categoryId,
       notes,
-      splitMethod: method,
+      splitMethod: method === "solo" ? "equal" : method,
       participants,
       items:
         method === "itemized"
@@ -429,7 +434,11 @@ export function ExpenseForm({
                       type="button"
                       role="radio"
                       aria-checked={method === m}
-                      onClick={() => setMethod(m)}
+                      onClick={() => {
+                        if (m === "equal" && method === "solo") setSelected(new Set(members.map((member) => member.id)));
+                        setMethod(m);
+                        if (m === "solo") setSelected(new Set([selected.values().next().value ?? defaultSoloId]));
+                      }}
                       className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                         method === m
                           ? "border-accent bg-accent-soft text-accent-dark"
