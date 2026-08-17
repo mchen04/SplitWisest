@@ -147,6 +147,10 @@ body {
 
 .group-context-control:hover { background: rgb(255 255 255 / 0.45); }
 
+.group-choice {
+  border-left: 3px solid var(--group-color);
+}
+
 [data-theme="dark"] .group-hue-0,
 [data-theme="dark"] .group-hue-1,
 [data-theme="dark"] .group-hue-2,
