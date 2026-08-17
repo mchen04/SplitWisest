@@ -1,26 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="bg" x1="10" x2="56" y1="8" y2="60" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#1fbf8f"/>
-      <stop offset=".58" stop-color="#117a61"/>
-      <stop offset="1" stop-color="#0b4f48"/>
+    <linearGradient id="jade" x1="8" x2="57" y1="6" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1fa67a"/>
+      <stop offset=".52" stop-color="#15795f"/>
+      <stop offset="1" stop-color="#0b4f3d"/>
     </linearGradient>
-    <linearGradient id="coin" x1="20" x2="45" y1="16" y2="46" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ffe9a6"/>
-      <stop offset="1" stop-color="#f4b83d"/>
-    </linearGradient>
-    <filter id="shadow" x="6" y="8" width="52" height="52" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse">
-      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#06352f" flood-opacity=".35"/>
-    </filter>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientTransform="translate(18 12) rotate(50) scale(52)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7de0ba" stop-opacity=".24"/>
+      <stop offset=".7" stop-color="#7de0ba" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect width="64" height="64" rx="15" fill="url(#bg)"/>
-  <path d="M14 43c9-1 13-9 19-10 5-1 8 3 17 1" fill="none" stroke="#8ef3cf" stroke-linecap="round" stroke-width="3" opacity=".38"/>
-  <g filter="url(#shadow)">
-    <path d="M17 24h30a5 5 0 0 1 5 5v14a5 5 0 0 1-5 5H17a5 5 0 0 1-5-5V29a5 5 0 0 1 5-5Z" fill="#fffdf7"/>
-    <path d="m17 24 5-8h22l5 8" fill="none" stroke="#fffdf7" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
-    <circle cx="42" cy="36" r="7" fill="url(#coin)"/>
-    <path d="M42 32v8M38 36h8" stroke="#7a4b00" stroke-linecap="round" stroke-width="2.4"/>
-    <path d="M22 32h10M22 38h7" stroke="#117a61" stroke-linecap="round" stroke-width="3"/>
+  <path d="M0 0h64v64H0z" fill="url(#jade)"/>
+  <path d="M0 0h64v64H0z" fill="url(#glow)"/>
+  <g fill="none" stroke="#fff8e8" stroke-linecap="round" stroke-width="8.5">
+    <path d="M45 20.5C37.8 13.5 25.2 14.1 19.5 22c-5 6.8-2.5 14.3 4.1 18.9l7.8 5.4"/>
+    <path d="M19 44.6c7.2 7 19.8 6.4 25.5-1.5 5-6.8 2.5-14.3-4.1-18.9l-7.8-5.4"/>
   </g>
-  <path d="M49 13 52 8l3 5 5 3-5 3-3 5-3-5-5-3 5-3Z" fill="#fff7cf"/>
 </svg>
