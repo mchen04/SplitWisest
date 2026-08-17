@@ -630,6 +630,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         <>
           <ExpenseForm
             groupId={groupId}
+            groupName={detail.group.name}
             groupCurrency={detail.group.currency}
             members={detail.members}
             meId={me.id}
