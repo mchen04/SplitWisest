@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight, Plus, Users, ScrollText, Bell, HandCoins } from "lucide-react";
 import { fmtMoney, fmtTime, useApiData, useMe, useSync } from "@/lib/client";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
 
 interface Group {
@@ -79,16 +79,12 @@ export default function Dashboard() {
 
   return (
     <AppShell>
-      <PageTitle
-        title={me ? `Hey, ${me.displayName.split(" ")[0]}` : "Home"}
-        subtitle="Here's where things stand with your friends."
-      />
-
       {/* Hero: one net number + the single most useful next step. */}
-      <Card className="mb-4 p-5 md:shrink-0">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+      <Card className="mb-4 p-4 md:shrink-0">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-ink-soft">{currencies.length > 1 ? "Your balances" : "Net balance"}</p>
+            <h1 className="text-lg font-semibold tracking-tight">{currencies.length > 1 ? "Your balances" : "Your balance"}</h1>
+            {me && <p className="text-xs text-ink-faint">Hey, {me.displayName.split(" ")[0]}. Here is where things stand.</p>}
             {friends === null ? (
               <div className="skeleton mt-2 h-9 w-44" />
             ) : currencies.length === 0 ? (
@@ -101,12 +97,10 @@ export default function Dashboard() {
                 {/* Each currency nets separately (never summed across currencies),
                     and each carries an explicit owed/owe word so direction never
                     relies on color alone. */}
-                <div className="mt-1 flex flex-wrap items-stretch gap-y-3">
-                  {currencies.map(([cur, amt], i) => (
-                    // On desktop a vertical rule separates side-by-side currency
-                    // totals so they never read as one sum; on mobile they stack.
-                    <div key={cur} className={`min-w-0 ${i > 0 ? "sm:ml-6 sm:border-l sm:border-line sm:pl-6" : ""}`}>
-                      <p className={`text-4xl font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
+                <div className={`mt-1 ${currencies.length > 1 ? "grid grid-cols-2 gap-x-5 gap-y-3" : "flex"}`}>
+                  {currencies.map(([cur, amt]) => (
+                    <div key={cur} className="min-w-0">
+                      <p className={`${currencies.length > 1 ? "text-2xl sm:text-3xl" : "text-4xl"} font-semibold tracking-tight tnum ${amt > 0 ? "text-owed" : "text-owe"}`}>
                         <Money cents={amt} currency={cur} signed />
                       </p>
                       <p className={`mt-0.5 text-xs font-medium ${amt > 0 ? "text-owed" : "text-owe"}`}>

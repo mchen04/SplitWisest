@@ -152,10 +152,11 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 0.5rem;
+  background: rgb(255 255 255 / 0.45);
   color: var(--group-ink);
 }
 
-.group-context-control:hover { background: rgb(255 255 255 / 0.45); }
+.group-context-control:hover { background: rgb(255 255 255 / 0.75); }
 
 .group-choice {
   border-left: 3px solid var(--group-color);
