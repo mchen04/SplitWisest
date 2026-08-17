@@ -115,6 +115,47 @@ html, body {
 
 body {
   min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* A stable color gives each group its own workspace identity. */
+.group-hue-0 { --group-color: #15795f; --group-soft: #dff0e9; --group-ink: #0d503e; --group-muted: #42685d; }
+.group-hue-1 { --group-color: #3767a6; --group-soft: #e1ebf7; --group-ink: #254b7c; --group-muted: #526b89; }
+.group-hue-2 { --group-color: #9a5b18; --group-soft: #f7e8d4; --group-ink: #70400f; --group-muted: #7d654b; }
+.group-hue-3 { --group-color: #7552a3; --group-soft: #ece4f6; --group-ink: #55397b; --group-muted: #71627f; }
+.group-hue-4 { --group-color: #a4465c; --group-soft: #f6e2e7; --group-ink: #793244; --group-muted: #805e67; }
+.group-hue-5 { --group-color: #32767f; --group-soft: #ddf0f1; --group-ink: #22545b; --group-muted: #4f7074; }
+
+.group-context {
+  border: 1px solid color-mix(in srgb, var(--group-color) 20%, var(--color-line));
+  border-top: 4px solid var(--group-color);
+  border-radius: 0.875rem;
+  background: var(--group-soft);
+  padding: 0.75rem;
+  box-shadow: var(--shadow-card);
+}
+
+.group-context-control {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--group-ink);
+}
+
+.group-context-control:hover { background: rgb(255 255 255 / 0.45); }
+
+[data-theme="dark"] .group-hue-0,
+[data-theme="dark"] .group-hue-1,
+[data-theme="dark"] .group-hue-2,
+[data-theme="dark"] .group-hue-3,
+[data-theme="dark"] .group-hue-4,
+[data-theme="dark"] .group-hue-5 {
+  --group-soft: color-mix(in srgb, var(--group-color) 25%, var(--color-card));
+  --group-ink: var(--color-ink);
+  --group-muted: var(--color-ink-soft);
 }
 
 /* The wordmark is the only place the serif survives — a small mark of identity
