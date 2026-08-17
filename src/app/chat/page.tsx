@@ -294,7 +294,7 @@ function ChatPageInner() {
           <p className="mt-1 text-sm text-ink-soft">Group conversations and direct messages.</p>
         </div>
       </div>
-      <Card className="flex h-[calc(100dvh-8.5rem)] min-h-[24rem] flex-col overflow-hidden md:h-auto md:min-h-0 md:flex-1 md:flex-row">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {listPane}
         {detailPane}
       </Card>

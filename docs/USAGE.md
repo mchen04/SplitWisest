@@ -44,6 +44,14 @@
 
 Each group has a chat tab; each friend has a direct chat. The **Chat** nav item lists every conversation. Messages and balances update live for everyone viewing — no refresh needed. Long histories load the newest messages first with a "Load earlier messages" affordance.
 
+On phones, scroll inside the message list to read history. Search, the message field, Send, and bottom navigation stay visible. The page itself does not scroll while a conversation is open.
+
+## Install on iPhone
+
+Open the deployed site in Safari. Use **Share → Add to Home Screen**, then launch SplitWisest from its Home Screen icon. The bottom navigation stays above the Home indicator.
+
+For release verification, follow `docs/PWA.md`.
+
 ## Staying on top of things
 
 - **Unread badges** on the Chat, Activity, and Balances nav items show new messages, new activity, and pending settle-up nudges. A badge clears once you view the relevant screen.

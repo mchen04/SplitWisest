@@ -104,7 +104,12 @@
   --shadow-pop: 0 10px 30px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --mobile-nav-height: 3.6875rem;
+  --mobile-nav-lift: 0.25rem;
+}
 [data-theme="dark"] { color-scheme: dark; }
 
 html {
@@ -127,6 +132,16 @@ body {
   :root {
     --control-h: 2.75rem;        /* 44 — thumb-safe mobile controls */
     --row-h: 3.25rem;            /* 52 — readable mobile ledger rows */
+  }
+
+  .mobile-nav {
+    padding-bottom: calc(var(--safe-area-bottom) + var(--mobile-nav-lift));
+  }
+
+  .mobile-chat-main {
+    padding-bottom: calc(
+      var(--mobile-nav-height) + var(--safe-area-bottom) + var(--mobile-nav-lift)
+    );
   }
 }
 

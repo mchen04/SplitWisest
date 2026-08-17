@@ -56,6 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: groupsData } = useApiData<{ groups: GroupRef[] }>("/api/groups");
   const groups = groupsData?.groups ?? [];
   const currentGroupId = pathname.match(/^\/groups\/(\d+)/)?.[1];
+  const isChatPage = pathname === "/chat";
   const [expensePickerOpen, setExpensePickerOpen] = useState(false);
 
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -95,7 +96,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <div className="min-h-dvh">
+    <div className={isChatPage ? "flex h-dvh flex-col overflow-hidden md:block" : "min-h-dvh"}>
       {/* Desktop / tablet sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-line bg-card md:flex">
         <Link href="/" className="flex items-center gap-2 px-4 pb-3 pt-4">
@@ -187,7 +188,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-line bg-card/90 px-4 py-2.5 backdrop-blur md:hidden">
+      <header className="sticky top-0 z-40 flex shrink-0 items-center justify-between border-b border-line bg-card/90 px-4 py-2.5 backdrop-blur md:hidden">
         <Link href="/" className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
@@ -204,14 +205,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
 
-      <main className="px-4 pb-24 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0">{children}</div>
+      <main className={`px-4 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8 ${isChatPage ? "mobile-chat-main flex min-h-0 flex-1 flex-col overflow-hidden" : "pb-24"}`}>
+        <div className={`mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0 ${isChatPage ? "min-h-0 flex-1" : ""}`}>{children}</div>
       </main>
 
       {/* Mobile bottom nav */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-card/95 backdrop-blur md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="mobile-nav fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-card/95 backdrop-blur md:hidden"
       >
         {MOBILE_NAV.slice(0, 2).map(({ href, label, icon: Icon, badge }) => (
           <Link
