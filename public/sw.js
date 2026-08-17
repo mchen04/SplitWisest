@@ -1,4 +1,4 @@
-const STATIC_CACHE = "splitwisest-static-v6";
+const STATIC_CACHE = "splitwisest-static-v7";
 const PAGE_CACHE = "splitwisest-pages-v6";
 const META_CACHE = "splitwisest-meta-v2";
 const SHELL_UPDATE_KEY = "/__splitwisest_shell_updated__";
