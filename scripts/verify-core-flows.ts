@@ -1,7 +1,7 @@
 import { assert, assertNoSecretText, baseUrl, cleanupQaUsers, jsonArray, jsonNumber, jsonObject, jsonString, login, request, signup, sql } from "./qa-support";
 
-const password = "core-flow-password";
-const recoveredPassword = "core-flow-recovered-password";
+const password = crypto.randomUUID();
+const recoveredPassword = crypto.randomUUID();
 const suffix = `${Date.now().toString(36).slice(-5)}${Math.random().toString(36).slice(2, 5)}`;
 const today = new Date().toISOString().slice(0, 10);
 
@@ -362,12 +362,34 @@ async function main() {
     body: { friendId: charlie.id, direction: "i-paid", amountCents: 222, currency: "USD", date: today, note: "direct settlement" },
   });
   assert(directSettlement.res.status === 200, `direct settlement returned ${directSettlement.res.status}`);
+  const staleDirectPayoff = await request("/api/settlements", {
+    cookie: charlie.cookie,
+    body: {
+      friendId: alice.id, direction: "i-paid", amountCents: 221, currency: "USD", date: today,
+      note: "stale direct payoff", settleFullBalance: true,
+    },
+  });
+  assert(staleDirectPayoff.res.status === 400, "a stale direct payoff must be rejected");
+  const directPayoff = await request("/api/settlements", {
+    cookie: charlie.cookie,
+    body: {
+      friendId: alice.id, direction: "i-paid", amountCents: 222, currency: "USD", date: today,
+      note: "full direct payoff", settleFullBalance: true,
+    },
+  });
+  assert(directPayoff.res.status === 200, "the exact direct payoff should succeed");
   const directSettlementUpdatedAt = jsonString(directSettlement.json.updatedAt, "direct settlement updatedAt");
   const deleteDirect = await request(`/api/settlements/${Number(directSettlement.json.id)}?expectedUpdatedAt=${encodeURIComponent(directSettlementUpdatedAt)}`, {
     cookie: charlie.cookie,
     method: "DELETE",
   });
   assert(deleteDirect.res.status === 200, `delete direct settlement returned ${deleteDirect.res.status}`);
+  const directPayoffUpdatedAt = jsonString(directPayoff.json.updatedAt, "direct payoff updatedAt");
+  const deleteDirectPayoff = await request(`/api/settlements/${Number(directPayoff.json.id)}?expectedUpdatedAt=${encodeURIComponent(directPayoffUpdatedAt)}`, {
+    cookie: alice.cookie,
+    method: "DELETE",
+  });
+  assert(deleteDirectPayoff.res.status === 200, `delete direct payoff returned ${deleteDirectPayoff.res.status}`);
 
   const groupMsg = await request(`/api/groups/${groupId}/messages`, { cookie: alice.cookie, body: { body: `group hello ${suffix}` } });
   assert(groupMsg.res.status === 200, `group message returned ${groupMsg.res.status}`);
@@ -472,10 +494,7 @@ async function main() {
   const logout = await request("/api/auth/logout", { cookie: newLogin.cookie, method: "POST" });
   assert(logout.res.status === 200, `logout returned ${logout.res.status}`);
 
-  // --- True pairwise friend balances (not a group-wide simplified plan) ---------
-  // A three-person chain where A's GROUP net is zero but A genuinely owes B and is
-  // owed by C. The friend/people balance must show the real two-party nets, never
-  // hide them (the old simplified-plan logic showed A settled with everyone).
+  // --- Friend balances use the same optimized group plan -------------------------
   const triA = await signup("tria", suffix, password, "core");
   const triB = await signup("trib", suffix, password, "core");
   const triC = await signup("tric", suffix, password, "core");
@@ -500,8 +519,41 @@ async function main() {
   assert(triANet === 0, `tri A group net should be zero, got ${triANet}`);
   const triBProfile = jsonObject((await request(`/api/people/${triB.id}`, { cookie: triA.cookie })).json.profile, "tri B profile");
   const triCProfile = jsonObject((await request(`/api/people/${triC.id}`, { cookie: triA.cookie })).json.profile, "tri C profile");
-  assert(jsonNumber(jsonObject(triBProfile.netByCurrency, "tri B net").USD, "tri B USD") === -5000, "A should owe B $50 (true pairwise)");
-  assert(jsonNumber(jsonObject(triCProfile.netByCurrency, "tri C net").USD, "tri C USD") === 5000, "C should owe A $50 (true pairwise)");
+  assert(jsonArray(triBProfile.obligations, "tri B obligations").length === 0, "A should have no optimized obligation to B");
+  assert(jsonArray(triCProfile.obligations, "tri C obligations").length === 0, "A should have no optimized obligation to C");
+  const triCToBProfile = jsonObject((await request(`/api/people/${triB.id}`, { cookie: triC.cookie })).json.profile, "tri C to B profile");
+  const triCToBObligations = jsonArray(triCToBProfile.obligations, "tri C to B obligations").map((item) => jsonObject(item, "tri obligation"));
+  assert(triCToBObligations.length === 1, "C should have one optimized payment");
+  assert(jsonNumber(triCToBObligations[0].groupId, "tri obligation group") === triGroupId, "optimized payment should identify its group");
+  assert(jsonNumber(triCToBObligations[0].netCents, "tri obligation net") === -5000, "C should pay B $50");
+  const blockedFriendRemoval = await request("/api/friends", {
+    cookie: triC.cookie,
+    method: "DELETE",
+    body: { friendId: triB.id },
+  });
+  assert(blockedFriendRemoval.res.status === 400, "a live group obligation should block friend removal");
+  const fabricatedPayment = await request(`/api/groups/${triGroupId}/settlements`, { cookie: triA.cookie, body: {
+    payerId: triC.id, recipientId: triB.id, amountCents: 5000, currency: "USD", date: today, note: "third-party payment",
+  } });
+  assert(fabricatedPayment.res.status === 403, "a third group member must not record another pair's payment");
+  const stalePayment = await request(`/api/groups/${triGroupId}/settlements`, { cookie: triC.cookie, body: {
+    payerId: triC.id, recipientId: triB.id, amountCents: 4999, currency: "USD", date: today,
+    note: "stale friend-page payment", settleFullBalance: true,
+  } });
+  assert(stalePayment.res.status === 400, "a stale full-balance payment must be rejected");
+  const triPayment = await request(`/api/groups/${triGroupId}/settlements`, { cookie: triC.cookie, body: {
+    payerId: triC.id, recipientId: triB.id, amountCents: 5000, currency: "USD", date: today,
+    note: "friend-page group payment", settleFullBalance: true,
+  } });
+  assert(triPayment.res.status === 200, `friend-page group payment returned ${triPayment.res.status}`);
+  const triAfterPayment = jsonObject((await request(`/api/people/${triB.id}`, { cookie: triC.cookie })).json.profile, "tri profile after payment");
+  assert(jsonArray(triAfterPayment.obligations, "tri obligations after payment").length === 0, "group payment should clear the friend obligation");
+  const settledFriendRemoval = await request("/api/friends", {
+    cookie: triC.cookie,
+    method: "DELETE",
+    body: { friendId: triB.id },
+  });
+  assert(settledFriendRemoval.res.status === 200, "settled friends should be removable");
 
   // --- FX snapshot immutability on settlement note edit (M2) --------------------
   // A cross-currency group settlement's converted_cents must not be re-derived at

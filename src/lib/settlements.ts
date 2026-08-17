@@ -43,7 +43,8 @@ export async function recordGroupSettlement(
     currency: string;
     date: string;
     note: string;
-  }
+  },
+  expectedBalances?: [number, number][]
 ): Promise<{ id: number; updatedAt: string }> {
   // The recorder must be a party to the payment. Without this, any group member
   // could fabricate/alter a settlement between two OTHER members and silently
@@ -51,12 +52,21 @@ export async function recordGroupSettlement(
   if (createdBy !== body.payerId && createdBy !== body.recipientId) forbidden("You can't record this settlement");
   const { cents: convertedCents } = await convert(body.amountCents, body.currency, groupCurrency);
   const summary = await settlementSummary(body.payerId, body.recipientId, body.amountCents, body.currency);
+  const expectedSnapshot = expectedBalances ? JSON.stringify(expectedBalances) : null;
   const [, rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
     tx`
-    WITH members_ok AS (
+    WITH balance_unchanged AS (
+      SELECT ${expectedSnapshot}::jsonb IS NULL OR ${expectedSnapshot}::jsonb = COALESCE(
+        (SELECT jsonb_agg(jsonb_build_array(rows.user_id, rows.net_cents) ORDER BY rows.user_id)
+         FROM group_balance_rows(${groupId}) rows),
+        '[]'::jsonb
+      ) AS ok
+    ),
+    members_ok AS (
       SELECT 1
-      WHERE EXISTS (
+      WHERE (SELECT ok FROM balance_unchanged)
+      AND EXISTS (
         SELECT 1 FROM group_members
         WHERE group_id = ${groupId} AND user_id = ${body.payerId}
       )
@@ -85,7 +95,9 @@ export async function recordGroupSettlement(
     )
     SELECT id, updated_at FROM s`,
   ]);
-  if (!rows[0]) badRequest("Both people must be group members");
+  if (!rows[0]) {
+    badRequest(expectedBalances ? "This balance changed. Refresh and try again" : "Both people must be group members");
+  }
   return { id: Number(rows[0].id), updatedAt: versionToken(rows[0].updated_at) };
 }
 
@@ -98,7 +110,8 @@ export async function recordDirectSettlement(
     currency: string;
     date: string;
     note: string;
-  }
+  },
+  settleFullBalance = false
 ): Promise<{ id: number; updatedAt: string }> {
   if (createdBy !== body.payerId && createdBy !== body.recipientId) forbidden("You can't record this settlement");
   const userA = Math.min(body.payerId, body.recipientId);
@@ -107,10 +120,25 @@ export async function recordDirectSettlement(
   const [, rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${userA}::int, ${userB}::int)`,
     tx`
-    WITH friendship_ok AS (
+    WITH balance_ok AS (
+      SELECT ${settleFullBalance}::boolean = false OR EXISTS (
+        SELECT 1
+        FROM settlements
+        WHERE group_id IS NULL
+          AND ((payer_id = ${body.payerId} AND recipient_id = ${body.recipientId})
+            OR (payer_id = ${body.recipientId} AND recipient_id = ${body.payerId}))
+          AND currency = ${body.currency}
+        GROUP BY currency
+        HAVING SUM(
+          CASE WHEN payer_id = ${createdBy} THEN converted_cents ELSE -converted_cents END
+        ) = ${createdBy === body.payerId ? -body.amountCents : body.amountCents}
+      ) AS ok
+    ),
+    friendship_ok AS (
       SELECT 1
       FROM friendships
       WHERE user_a = ${userA} AND user_b = ${userB}
+        AND (SELECT ok FROM balance_ok)
     ),
     s AS (
       INSERT INTO settlements (group_id, payer_id, recipient_id, amount_cents, currency, converted_cents, settled_date, note, created_by)
@@ -132,7 +160,10 @@ export async function recordDirectSettlement(
     )
     SELECT id, updated_at FROM s`,
   ]);
-  if (!rows[0]) forbidden("You are not friends with this user");
+  if (!rows[0]) {
+    if (settleFullBalance) badRequest("This balance changed. Refresh and try again");
+    forbidden("You are not friends with this user");
+  }
   return { id: Number(rows[0].id), updatedAt: versionToken(rows[0].updated_at) };
 }
 

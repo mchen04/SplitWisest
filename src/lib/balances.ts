@@ -26,151 +26,139 @@ export function suggestSettlements(balances: MemberBalance[]): Transfer[] {
   return simplifyDebts(new Map(balances.map((b) => [b.userId, b.netCents])));
 }
 
-// True pairwise balance between the viewer and each co-member, across all shared
-// groups plus direct (group-less) settlements, reported as a per-currency net.
-// This is the REAL two-party balance — what each pair directly owes each other —
-// NOT a group-wide simplified settle-up plan. Using the simplified plan here
-// (largest debtor ↔ largest creditor) would both invent debts to a third party
-// the viewer never transacted with and, when the viewer's group net happens to be
-// zero, hide a real debt to one friend that is offset by a credit from another.
-// The group page's "suggested settle-up" still uses simplifyDebts — that is the
-// correct place for a transaction-minimizing plan.
+export interface FriendObligation {
+  groupId: number | null;
+  groupName: string | null;
+  currency: string;
+  netCents: number; // positive = friend owes viewer, negative = viewer owes friend
+}
+
 export interface FriendBalance {
   friendId: number;
   displayName: string;
   username: string;
-  // positive: friend owes me; negative: I owe friend. Keyed by currency.
+  obligations: FriendObligation[];
   netByCurrency: Record<string, number>;
 }
 
-async function accumulatePairBalances(userId: number, onlyFriendId?: number): Promise<Map<number, Record<string, number>>> {
-  const friendFilter = onlyFriendId ?? null;
-  const pairTotals = new Map<string, number>(); // `${friendId}:${currency}` -> signed cents
+export interface GroupBalanceSnapshot {
+  groupId: number;
+  balances: [number, number][];
+}
 
-  // Group portion and direct (group-less) settlements are independent reads — run
-  // them as one parallel level instead of a serial waterfall over the Neon driver.
-  // Group portion: for every expense in a shared group, allocate converted_cents
-  // across its shares with the SAME per-expense largest-remainder pass that
-  // group_balance_rows uses (exact integer div()/mod()), so converted shares sum
-  // exactly to converted_cents. Then the viewer↔other net is: if the viewer paid,
-  // each other participant owes the viewer their converted share; if someone else
-  // paid and the viewer has a share, the viewer owes that payer their share. Group
-  // settlements between the pair net in the group currency.
-  const [groupRows, direct] = await Promise.all([
-    sql`
-    WITH my_groups AS (
-      SELECT g.id AS group_id, g.currency
-      FROM group_members me
-      JOIN groups g ON g.id = me.group_id
-      WHERE me.user_id = ${userId}
-        AND (${friendFilter}::bigint IS NULL OR EXISTS (
-          SELECT 1 FROM group_members them
-          WHERE them.group_id = g.id AND them.user_id = ${friendFilter}
-        ))
-    ),
-    relevant_exp AS (
-      SELECT e.id, e.payer_id, e.converted_cents, e.amount_cents, mg.currency AS group_currency
-      FROM expenses e
-      JOIN my_groups mg ON mg.group_id = e.group_id
-    ),
-    alloc AS (
-      SELECT es.expense_id, es.user_id, re.payer_id, re.group_currency,
-        div(es.share_cents::numeric * re.converted_cents, re.amount_cents) AS floor_cents,
-        mod(es.share_cents::numeric * re.converted_cents, re.amount_cents) AS remainder,
-        re.converted_cents AS exp_converted
-      FROM expense_shares es
-      JOIN relevant_exp re ON re.id = es.expense_id
-    ),
-    ranked AS (
-      SELECT a.expense_id, a.user_id, a.payer_id, a.group_currency, a.floor_cents,
-        a.exp_converted - sum(a.floor_cents) OVER (PARTITION BY a.expense_id) AS leftover,
-        row_number() OVER (PARTITION BY a.expense_id ORDER BY a.remainder DESC, a.user_id) AS rr
-      FROM alloc a
-    ),
-    share_alloc AS (
-      SELECT expense_id, user_id, payer_id, group_currency,
-        (floor_cents + CASE WHEN rr <= leftover THEN 1 ELSE 0 END)::bigint AS converted_share
-      FROM ranked
-    ),
-    exp_pairs AS (
-      SELECT sa.user_id AS friend_id, sa.group_currency AS currency, sa.converted_share AS net
-      FROM share_alloc sa
-      WHERE sa.payer_id = ${userId} AND sa.user_id <> ${userId}
-      UNION ALL
-      SELECT sa.payer_id AS friend_id, sa.group_currency AS currency, -sa.converted_share AS net
-      FROM share_alloc sa
-      WHERE sa.user_id = ${userId} AND sa.payer_id <> ${userId}
-    ),
-    grp_settle AS (
-      SELECT CASE WHEN s.payer_id = ${userId} THEN s.recipient_id ELSE s.payer_id END AS friend_id,
-        mg.currency,
-        CASE WHEN s.payer_id = ${userId} THEN s.converted_cents ELSE -s.converted_cents END AS net
-      FROM settlements s
-      JOIN my_groups mg ON mg.group_id = s.group_id
-      WHERE s.payer_id = ${userId} OR s.recipient_id = ${userId}
-    ),
-    combined AS (
-      SELECT friend_id, currency, net FROM exp_pairs
-      UNION ALL
-      SELECT friend_id, currency, net FROM grp_settle
+function netObligations(obligations: FriendObligation[]): Record<string, number> {
+  const net: Record<string, number> = {};
+  for (const obligation of obligations) {
+    net[obligation.currency] = (net[obligation.currency] ?? 0) + obligation.netCents;
+    if (net[obligation.currency] === 0) delete net[obligation.currency];
+  }
+  return net;
+}
+
+export async function friendGroupObligationsSnapshot(
+  userId: number,
+  onlyFriendId?: number
+): Promise<{ byFriend: Map<number, FriendObligation[]>; snapshots: GroupBalanceSnapshot[] }> {
+  const friendFilter = onlyFriendId ?? null;
+  const groupRows = await sql`
+    SELECT g.id AS group_id, g.name AS group_name, g.currency,
+      b.user_id, b.display_name, b.net_cents
+    FROM groups g
+    JOIN group_members me ON me.group_id = g.id AND me.user_id = ${userId}
+    CROSS JOIN LATERAL group_balance_rows(g.id) b
+    WHERE ${friendFilter}::bigint IS NULL OR EXISTS (
+      SELECT 1 FROM group_members them
+      WHERE them.group_id = g.id AND them.user_id = ${friendFilter}
     )
-    SELECT friend_id, currency, SUM(net)::bigint AS net_cents
-    FROM combined
-    WHERE (${friendFilter}::bigint IS NULL OR friend_id = ${friendFilter})
-    GROUP BY friend_id, currency`,
+    ORDER BY g.id, b.user_id`;
+
+  const byFriend = new Map<number, FriendObligation[]>();
+  const grouped = new Map<number, typeof groupRows>();
+  for (const row of groupRows) {
+    const groupId = Number(row.group_id);
+    const rows = grouped.get(groupId) ?? [];
+    rows.push(row);
+    grouped.set(groupId, rows);
+  }
+
+  const snapshots: GroupBalanceSnapshot[] = [];
+  for (const [groupId, rows] of grouped) {
+    snapshots.push({
+      groupId,
+      balances: rows.map((row) => [Number(row.user_id), Number(row.net_cents)]),
+    });
+    const plan = simplifyDebts(new Map(rows.map((row) => [Number(row.user_id), Number(row.net_cents)])));
+    for (const transfer of plan) {
+      if (transfer.from !== userId && transfer.to !== userId) continue;
+      const friendId = transfer.from === userId ? transfer.to : transfer.from;
+      if (friendFilter !== null && friendId !== friendFilter) continue;
+      const obligations = byFriend.get(friendId) ?? [];
+      obligations.push({
+        groupId,
+        groupName: String(rows[0].group_name),
+        currency: String(rows[0].currency),
+        netCents: transfer.to === userId ? transfer.amountCents : -transfer.amountCents,
+      });
+      byFriend.set(friendId, obligations);
+    }
+  }
+  return { byFriend, snapshots };
+}
+
+export async function friendObligations(userId: number, onlyFriendId?: number): Promise<Map<number, FriendObligation[]>> {
+  const friendFilter = onlyFriendId ?? null;
+  const [groupData, directRows] = await Promise.all([
+    friendGroupObligationsSnapshot(userId, onlyFriendId),
     sql`
-    SELECT payer_id, recipient_id, currency, SUM(converted_cents) AS amt
+    SELECT CASE WHEN payer_id = ${userId} THEN recipient_id ELSE payer_id END AS friend_id,
+      currency,
+      SUM(CASE WHEN payer_id = ${userId} THEN converted_cents ELSE -converted_cents END) AS net_cents
     FROM settlements
     WHERE group_id IS NULL
       AND (payer_id = ${userId} OR recipient_id = ${userId})
       AND (${friendFilter}::bigint IS NULL OR payer_id = ${friendFilter} OR recipient_id = ${friendFilter})
-    GROUP BY payer_id, recipient_id, currency`,
+    GROUP BY friend_id, currency`,
   ]);
+  const byFriend = groupData.byFriend;
 
-  for (const row of groupRows) {
-    const key = `${Number(row.friend_id)}:${row.currency}`;
-    pairTotals.set(key, (pairTotals.get(key) ?? 0) + Number(row.net_cents));
-  }
-
-  for (const s of direct) {
-    const friendId = Number(s.payer_id) === userId ? Number(s.recipient_id) : Number(s.payer_id);
-    const signed = Number(s.payer_id) === userId ? Number(s.amt) : -Number(s.amt);
-    const key = `${friendId}:${s.currency}`;
-    pairTotals.set(key, (pairTotals.get(key) ?? 0) + signed);
+  for (const row of directRows) {
+    const friendId = Number(row.friend_id);
+    const netCents = Number(row.net_cents);
+    if (netCents === 0) continue;
+    const obligations = byFriend.get(friendId) ?? [];
+    obligations.push({ groupId: null, groupName: null, currency: String(row.currency), netCents });
+    byFriend.set(friendId, obligations);
   }
 
-  const balances = new Map<number, Record<string, number>>();
-  for (const [key, amt] of pairTotals) {
-    if (amt === 0) continue;
-    const idx = key.indexOf(":");
-    const friendId = Number(key.slice(0, idx));
-    const cur = key.slice(idx + 1);
-    const netByCurrency = balances.get(friendId) ?? {};
-    netByCurrency[cur] = (netByCurrency[cur] ?? 0) + amt;
-    if (netByCurrency[cur] === 0) delete netByCurrency[cur];
-    balances.set(friendId, netByCurrency);
+  for (const obligations of byFriend.values()) {
+    obligations.sort((a, b) =>
+      (a.groupName ?? "").localeCompare(b.groupName ?? "") ||
+      a.currency.localeCompare(b.currency) ||
+      a.netCents - b.netCents
+    );
   }
-  for (const [friendId, netByCurrency] of balances) {
-    if (Object.keys(netByCurrency).length === 0) balances.delete(friendId);
-  }
-  return balances;
+  return byFriend;
 }
 
 export async function friendBalances(userId: number): Promise<FriendBalance[]> {
-  const pairBalances = await accumulatePairBalances(userId);
-  const friendIds = [...pairBalances.keys()];
+  const obligationsByFriend = await friendObligations(userId);
+  const friendIds = [...obligationsByFriend.keys()];
   if (friendIds.length === 0) return [];
   const users = await sql`SELECT id, display_name, username FROM users WHERE id = ANY(${friendIds})`;
-  return users.map((u) => ({
-    friendId: Number(u.id),
-    displayName: u.display_name,
-    username: u.username,
-    netByCurrency: pairBalances.get(Number(u.id)) ?? {},
-  }));
+  return users.map((u) => {
+    const obligations = obligationsByFriend.get(Number(u.id)) ?? [];
+    return {
+      friendId: Number(u.id),
+      displayName: u.display_name,
+      username: u.username,
+      obligations,
+      netByCurrency: netObligations(obligations),
+    };
+  });
 }
 
-export async function pairwiseFriendBalance(userId: number, friendId: number): Promise<Record<string, number>> {
-  return (await accumulatePairBalances(userId, friendId)).get(friendId) ?? {};
+export async function pairwiseFriendObligations(userId: number, friendId: number): Promise<FriendObligation[]> {
+  return (await friendObligations(userId, friendId)).get(friendId) ?? [];
 }
 
 export async function isGroupMember(groupId: number, userId: number): Promise<boolean> {

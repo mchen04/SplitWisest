@@ -1,5 +1,6 @@
 import { sql } from "./db";
-import { pairwiseFriendBalance } from "./balances";
+import { pairwiseFriendObligations } from "./balances";
+import type { FriendObligation } from "./balances";
 import { loadRelationship, RelationshipState } from "./relationships";
 import { loadVisibleSettlementHistory } from "./settlements";
 
@@ -21,6 +22,7 @@ export interface PersonProfile {
     currency: string;
   }[];
   netByCurrency: Record<string, number>;
+  obligations: FriendObligation[];
   recentExpenses: {
     id: number;
     groupId: number;
@@ -78,6 +80,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       request,
       sharedGroups: [],
       netByCurrency: {},
+      obligations: [],
       recentExpenses: [],
       recentPayments: [],
       canChat: false,
@@ -90,10 +93,9 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
 
   const groupIds = sharedGroups.map((g) => Number(g.id));
 
-  // Pairwise balance, recent shared expenses, and settlement history are mutually
-  // independent once the shared-group set is known — fetch them concurrently.
-  const [netByCurrency, recentExpenses, recentPayments] = await Promise.all([
-    isSelf ? Promise.resolve({} as Record<string, number>) : pairwiseFriendBalance(viewerId, personId),
+  // Obligations, expenses, and payment history can load at the same time.
+  const [obligations, recentExpenses, recentPayments] = await Promise.all([
+    isSelf ? Promise.resolve([] as FriendObligation[]) : pairwiseFriendObligations(viewerId, personId),
     groupIds.length === 0 ? Promise.resolve([] as Record<string, unknown>[]) : sql`
     SELECT e.id, e.group_id, g.name AS group_name, e.title, e.converted_cents, g.currency,
       e.expense_date, e.payer_id, p.display_name AS payer_name
@@ -112,6 +114,11 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
     LIMIT 20`,
     loadVisibleSettlementHistory({ viewerId, personId, isSelf, isFriend, groupIds }),
   ]);
+  const netByCurrency = obligations.reduce<Record<string, number>>((net, obligation) => {
+    net[obligation.currency] = (net[obligation.currency] ?? 0) + obligation.netCents;
+    if (net[obligation.currency] === 0) delete net[obligation.currency];
+    return net;
+  }, {});
 
   return {
     person,
@@ -123,6 +130,7 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       currency: g.currency,
     })),
     netByCurrency,
+    obligations,
     recentExpenses: recentExpenses.map((e) => ({
       id: Number(e.id),
       groupId: Number(e.group_id),
@@ -135,6 +143,6 @@ export async function loadPersonProfile(viewerId: number, personId: number): Pro
       payerName: e.payer_name,
     })),
     recentPayments,
-    ...capabilities(netByCurrency),
+    ...capabilities(obligations.length > 0),
   };
 }

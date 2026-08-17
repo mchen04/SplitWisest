@@ -15,6 +15,8 @@ export function SettleFields({
   note,
   setNote,
   notePlaceholder,
+  lockAmount = false,
+  lockCurrency = false,
 }: {
   amount: string;
   setAmount: (v: string) => void;
@@ -25,15 +27,29 @@ export function SettleFields({
   note: string;
   setNote: (v: string) => void;
   notePlaceholder: string;
+  lockAmount?: boolean;
+  lockCurrency?: boolean;
 }) {
   return (
     <>
       <div className="grid grid-cols-[1fr_auto] gap-2">
         <Field label="Amount">
-          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
+          <Input
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            readOnly={lockAmount}
+            required
+            placeholder="0.00"
+          />
         </Field>
         <Field label="Currency">
-          <Select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-24">
+          <Select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            disabled={lockCurrency}
+            className="w-24"
+          >
             {CURRENCIES.map((c) => (
               <option key={c}>{c}</option>
             ))}

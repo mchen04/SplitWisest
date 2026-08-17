@@ -41,15 +41,16 @@ export const GET = handler(async () => {
     FROM friend_requests fr JOIN users u ON u.id = fr.to_id
     WHERE fr.from_id = ${user.id} ORDER BY fr.id DESC LIMIT 500`,
   ]);
-  const balanceByFriend = new Map(balances.map((b) => [b.friendId, b.netByCurrency]));
+  const balanceByFriend = new Map(balances.map((b) => [b.friendId, b]));
 
   return NextResponse.json({
     friends: rows.map((f) => ({
       id: Number(f.id),
       displayName: f.display_name,
       username: f.username,
-      netByCurrency: balanceByFriend.get(Number(f.id)) ?? {},
-      canRemoveFriend: Object.keys(balanceByFriend.get(Number(f.id)) ?? {}).length === 0,
+      obligations: balanceByFriend.get(Number(f.id))?.obligations ?? [],
+      netByCurrency: balanceByFriend.get(Number(f.id))?.netByCurrency ?? {},
+      canRemoveFriend: (balanceByFriend.get(Number(f.id))?.obligations.length ?? 0) === 0,
       unreadMessages: Number(f.last_message_id) > Number(f.read_message_id) ? 1 : 0,
     })),
     incomingRequests: incoming.map((r) => ({
@@ -136,6 +137,9 @@ export const DELETE = handler(async (req: NextRequest) => {
   const result = await removeFriendshipWithActivity(user, friendId);
   if (!result.removed && result.hasBalance) {
     badRequest("Settle up with this friend before removing them");
+  }
+  if (!result.removed && result.changed) {
+    badRequest("Balances changed. Try again");
   }
   return NextResponse.json({ ok: true });
 });

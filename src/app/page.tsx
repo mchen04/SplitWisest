@@ -6,6 +6,7 @@ import { ArrowRight, Plus, Users, ScrollText, Bell, HandCoins } from "lucide-rea
 import { fmtMoney, fmtTime, useApiData, useMe, useSync } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
+import type { FriendObligation } from "@/lib/balances";
 
 interface Group {
   id: number;
@@ -19,6 +20,7 @@ interface Group {
 interface Friend {
   id: number;
   displayName: string;
+  obligations: FriendObligation[];
   netByCurrency: Record<string, number>;
 }
 
@@ -58,22 +60,30 @@ export default function Dashboard() {
   const netByCur: Record<string, number> = {};
   let owedTotal = 0;
   let oweTotal = 0;
+  const obligationCurrencies = new Set<string>();
   let topCreditor: { f: Friend; cur: string; amt: number } | null = null; // they owe me
   let topDebt: { f: Friend; cur: string; amt: number } | null = null; // I owe them
   for (const f of friends ?? []) {
     for (const [cur, amt] of Object.entries(f.netByCurrency)) {
       netByCur[cur] = (netByCur[cur] ?? 0) + amt;
-      if (amt > 0) {
-        owedTotal += amt;
-        if (!topCreditor || amt > topCreditor.amt) topCreditor = { f, cur, amt };
-      } else if (amt < 0) {
-        oweTotal += -amt;
-        if (!topDebt || amt < topDebt.amt) topDebt = { f, cur, amt };
+    }
+    for (const obligation of f.obligations) {
+      obligationCurrencies.add(obligation.currency);
+      if (obligation.netCents > 0) {
+        owedTotal += obligation.netCents;
+        if (!topCreditor || obligation.netCents > topCreditor.amt) {
+          topCreditor = { f, cur: obligation.currency, amt: obligation.netCents };
+        }
+      } else {
+        oweTotal -= obligation.netCents;
+        if (!topDebt || obligation.netCents < topDebt.amt) {
+          topDebt = { f, cur: obligation.currency, amt: obligation.netCents };
+        }
       }
     }
   }
   const currencies = Object.entries(netByCur).filter(([, v]) => v !== 0);
-  const singleCur = Object.keys(netByCur).length === 1 ? Object.keys(netByCur)[0] : null;
+  const singleCur = obligationCurrencies.size === 1 ? [...obligationCurrencies][0] : null;
   const addExpenseHref = groups && groups.length > 0 ? `/groups/${groups[0].id}?add=1` : "/groups";
   const activityPeek = (activity ?? []).filter((a) => !/joined the group|are now friends|created the group|joined SplitWisest/i.test(a.summary));
 
@@ -87,13 +97,16 @@ export default function Dashboard() {
             {me && <p className="text-xs text-ink-faint">Hey, {me.displayName.split(" ")[0]}. Here is where things stand.</p>}
             {friends === null ? (
               <div className="skeleton mt-2 h-9 w-44" />
-            ) : currencies.length === 0 ? (
+            ) : currencies.length === 0 && !(friends ?? []).some((f) => f.obligations.length > 0) ? (
               <>
                 <p className="mt-1 text-3xl font-semibold tracking-tight text-ink">You&rsquo;re all settled up</p>
                 <p className="mt-1 text-sm text-ink-faint">Nothing outstanding with your friends right now.</p>
               </>
             ) : (
               <>
+                {currencies.length === 0 && (
+                  <p className="mt-1 text-2xl font-semibold tracking-tight text-ink">Your balances offset overall</p>
+                )}
                 {/* Each currency nets separately (never summed across currencies),
                     and each carries an explicit owed/owe word so direction never
                     relies on color alone. */}
@@ -230,22 +243,20 @@ export default function Dashboard() {
             ) : (
               <ul className="divide-y divide-line">
                 {friends.map((f) => {
-                  const nets = Object.entries(f.netByCurrency).filter(([, v]) => v !== 0);
+                  const obligations = f.obligations;
                   return (
                     <li key={f.id}>
                       <Link href={`/people/${f.id}`} className="flex min-h-[var(--row-h)] items-center gap-3 px-4 py-2.5 hover:bg-subtle">
                         <Avatar name={f.displayName} size="sm" />
                         <span className="min-w-0 flex-1 truncate text-sm font-medium" title={f.displayName}>{f.displayName}</span>
                         <span className="text-right text-sm font-medium">
-                          {nets.length === 0 ? (
+                          {obligations.length === 0 ? (
                             <span className="text-ink-faint">settled</span>
                           ) : (
-                            nets.map(([cur, amt]) => (
-                              // Word + color + amount (matches Balances) so direction
-                              // isn't carried by color alone.
-                              <span key={cur} className={`block ${amt > 0 ? "text-owed" : "text-owe"}`}>
-                                <span className="text-xs font-normal opacity-90">{amt > 0 ? "owes you " : "you owe "}</span>
-                                <span className="tnum">{fmtMoney(Math.abs(amt), cur)}</span>
+                            obligations.map((item, index) => (
+                              <span key={`${item.groupId ?? "direct"}:${item.currency}:${index}`} className={`block ${item.netCents > 0 ? "text-owed" : "text-owe"}`}>
+                                <span className="text-xs font-normal opacity-90">{item.groupName ?? "Direct"} · {item.netCents > 0 ? "owes you " : "you owe "}</span>
+                                <span className="tnum">{fmtMoney(Math.abs(item.netCents), item.currency)}</span>
                               </span>
                             ))
                           )}

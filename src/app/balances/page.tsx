@@ -8,11 +8,13 @@ import { AppShell, PageTitle } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, ErrorNote, Menu, MenuItem } from "@/components/ui";
 import { DirectPaymentsModal } from "@/components/direct-payments-modal";
 import { DirectSettleModal } from "@/components/direct-settle-modal";
+import type { FriendObligation } from "@/lib/balances";
 
 interface Friend {
   id: number;
   displayName: string;
   username: string;
+  obligations: FriendObligation[];
   netByCurrency: Record<string, number>;
   canRemoveFriend: boolean;
 }
@@ -49,7 +51,7 @@ export default function BalancesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addNote, setAddNote] = useState<string | null>(null);
   const [code, setCode] = useState("");
-  const [settleFriend, setSettleFriend] = useState<Friend | null>(null);
+  const [settleChoice, setSettleChoice] = useState<{ friendId: number; preferredSign: -1 | 1 } | null>(null);
   const [historyFriend, setHistoryFriend] = useState<Friend | null>(null);
   const [nudgedId, setNudgedId] = useState<number | null>(null);
   const [query, setQuery] = useState("");
@@ -63,8 +65,9 @@ export default function BalancesPage() {
     const q = query.trim().toLowerCase();
     return !q || f.displayName.toLowerCase().includes(q) || f.username.toLowerCase().includes(q);
   });
-  const activeFriends = filteredFriends.filter((f) => Object.keys(f.netByCurrency).length > 0);
-  const settledFriends = filteredFriends.filter((f) => Object.keys(f.netByCurrency).length === 0);
+  const activeFriends = filteredFriends.filter((f) => f.obligations.length > 0);
+  const settledFriends = filteredFriends.filter((f) => f.obligations.length === 0);
+  const settleFriend = friends?.find((friend) => friend.id === settleChoice?.friendId) ?? null;
 
   async function nudge(f: Friend) {
     try {
@@ -269,7 +272,7 @@ export default function BalancesPage() {
               title="Active balances"
               friends={activeFriends}
               nudgedId={nudgedId}
-              onSettle={setSettleFriend}
+              onSettle={(friend, preferredSign) => setSettleChoice({ friendId: friend.id, preferredSign })}
               onHistory={setHistoryFriend}
               onNudge={nudge}
               onRemove={removeFriend}
@@ -278,7 +281,7 @@ export default function BalancesPage() {
               title="Settled up"
               friends={settledFriends}
               nudgedId={nudgedId}
-              onSettle={setSettleFriend}
+              onSettle={(friend, preferredSign) => setSettleChoice({ friendId: friend.id, preferredSign })}
               onHistory={setHistoryFriend}
               onNudge={nudge}
               onRemove={removeFriend}
@@ -307,7 +310,8 @@ export default function BalancesPage() {
 
       <DirectSettleModal
         friend={settleFriend}
-        onClose={() => setSettleFriend(null)}
+        preferredSign={settleChoice?.preferredSign}
+        onClose={() => setSettleChoice(null)}
         onSaved={reload}
       />
 
@@ -335,7 +339,7 @@ function FriendSection({
   title: string;
   friends: Friend[];
   nudgedId: number | null;
-  onSettle: (friend: Friend) => void;
+  onSettle: (friend: Friend, preferredSign: -1 | 1) => void;
   onHistory: (friend: Friend) => void;
   onNudge: (friend: Friend) => void;
   onRemove: (friend: Friend) => void;
@@ -348,9 +352,9 @@ function FriendSection({
       </div>
       <ul className="divide-y divide-line">
         {friends.map((f) => {
-          const entries = Object.entries(f.netByCurrency);
-          const theyOweMe = entries.some(([, amt]) => amt > 0);
-          const iOweThem = entries.some(([, amt]) => amt < 0);
+          const entries = f.obligations;
+          const theyOweMe = entries.some((item) => item.netCents > 0);
+          const iOweThem = entries.some((item) => item.netCents < 0);
           const hasBalance = entries.length > 0;
           return (
             <li key={f.id} className="flex min-h-[var(--row-h)] items-center gap-3 px-4 py-2.5 hover:bg-subtle">
@@ -364,10 +368,10 @@ function FriendSection({
                     {!hasBalance ? (
                       <span className="text-ink-faint">settled up</span>
                     ) : (
-                      entries.map(([cur, amt]) => (
-                        <span key={cur} className={`block ${amt > 0 ? "text-owed" : "text-owe"}`}>
-                          {amt > 0 ? "owes you " : "you owe "}
-                          <span className="tnum font-semibold">{fmtMoney(Math.abs(amt), cur)}</span>
+                      entries.map((item, index) => (
+                        <span key={`${item.groupId ?? "direct"}:${item.currency}:${index}`} className={`block ${item.netCents > 0 ? "text-owed" : "text-owe"}`}>
+                          {item.groupName ? `${item.groupName}: ` : "Direct: "}{item.netCents > 0 ? "owes you " : "you owe "}
+                          <span className="tnum font-semibold">{fmtMoney(Math.abs(item.netCents), item.currency)}</span>
                         </span>
                       ))
                     )}
@@ -378,10 +382,11 @@ function FriendSection({
                 {!hasBalance ? (
                   <span className="text-ink-faint">settled up</span>
                 ) : (
-                  entries.map(([cur, amt]) => (
-                    <p key={cur} className={amt > 0 ? "text-owed" : "text-owe"}>
-                      {amt > 0 ? "owes you" : "you owe"}{" "}
-                      <span className="tnum font-semibold">{fmtMoney(Math.abs(amt), cur)}</span>
+                  entries.map((item, index) => (
+                    <p key={`${item.groupId ?? "direct"}:${item.currency}:${index}`} className={item.netCents > 0 ? "text-owed" : "text-owe"}>
+                      <span className="text-xs text-ink-faint">{item.groupName ?? "Direct"} · </span>
+                      {item.netCents > 0 ? "owes you" : "you owe"}{" "}
+                      <span className="tnum font-semibold">{fmtMoney(Math.abs(item.netCents), item.currency)}</span>
                     </p>
                   ))
                 )}
@@ -392,13 +397,13 @@ function FriendSection({
                     {nudgedId === f.id ? <><Check className="h-4 w-4 text-owed" /> Reminded</> : <><Bell className="h-4 w-4" /> Remind</>}
                   </Button>
                 ) : iOweThem ? (
-                  <Button variant="secondary" onClick={() => onSettle(f)}>
+                  <Button variant="secondary" onClick={() => onSettle(f, -1)}>
                     <HandCoins className="h-4 w-4" /> Settle up
                   </Button>
                 ) : null}
                 <Menu label={`More actions for ${f.displayName}`}>
                   {hasBalance && theyOweMe && (
-                    <MenuItem icon={<HandCoins className="h-4 w-4" />} onClick={() => onSettle(f)}>Settle up</MenuItem>
+                    <MenuItem icon={<HandCoins className="h-4 w-4" />} onClick={() => onSettle(f, 1)}>Record incoming payment</MenuItem>
                   )}
                   <MenuItem icon={<UserRound className="h-4 w-4" />} onClick={() => { window.location.href = `/people/${f.id}`; }}>View profile</MenuItem>
                   <MenuItem icon={<Receipt className="h-4 w-4" />} onClick={() => onHistory(f)}>Payment history</MenuItem>

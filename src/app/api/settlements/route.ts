@@ -7,23 +7,29 @@ import { recordDirectSettlement, settlementFields } from "@/lib/settlements";
 import { canSettleDirectly } from "@/lib/relationships";
 import { versionToken } from "@/lib/versions";
 
-// History of direct (group-less) settlements involving the caller, optionally
-// narrowed to a single friend. Group settlements are listed per-group instead.
+// Payment history involving the caller, optionally narrowed to one friend.
 export const GET = handler(async (req: NextRequest) => {
   const user = await requireUser();
   const friendId = intParam(req.nextUrl.searchParams.get("friendId"));
   const rows = await sql`
-    SELECT s.id, s.payer_id, s.recipient_id, s.amount_cents, s.currency, s.settled_date, s.note, s.updated_at,
+    SELECT s.id, s.group_id, g.name AS group_name, s.payer_id, s.recipient_id,
+      s.amount_cents, s.currency, s.settled_date, s.note, s.updated_at,
       to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
       p.display_name AS payer_name, r.display_name AS recipient_name
     FROM settlements s
+    LEFT JOIN groups g ON g.id = s.group_id
     JOIN users p ON p.id = s.payer_id JOIN users r ON r.id = s.recipient_id
-    WHERE s.group_id IS NULL AND (s.payer_id = ${user.id} OR s.recipient_id = ${user.id})
+    WHERE (s.payer_id = ${user.id} OR s.recipient_id = ${user.id})
       AND (${friendId}::bigint IS NULL OR s.payer_id = ${friendId} OR s.recipient_id = ${friendId})
+      AND (s.group_id IS NULL OR EXISTS (
+        SELECT 1 FROM group_members gm WHERE gm.group_id = s.group_id AND gm.user_id = ${user.id}
+      ))
     ORDER BY s.settled_date DESC, s.id DESC LIMIT 200`;
   return NextResponse.json({
     settlements: rows.map((s) => ({
       id: Number(s.id),
+      groupId: s.group_id === null ? null : Number(s.group_id),
+      groupName: s.group_name,
       payerId: Number(s.payer_id),
       recipientId: Number(s.recipient_id),
       payerName: s.payer_name,
@@ -41,6 +47,7 @@ export const GET = handler(async (req: NextRequest) => {
 const Body = z.object({
   friendId: z.number().int().positive(),
   direction: z.enum(["i-paid", "they-paid"]),
+  settleFullBalance: z.boolean().optional().default(false),
   ...settlementFields,
 });
 
@@ -52,13 +59,17 @@ export const POST = handler(async (req: NextRequest) => {
 
   const payerId = body.direction === "i-paid" ? user.id : body.friendId;
   const recipientId = body.direction === "i-paid" ? body.friendId : user.id;
-  const settlement = await recordDirectSettlement(user.id, {
-    payerId,
-    recipientId,
-    amountCents: body.amountCents,
-    currency: body.currency,
-    date: body.date,
-    note: body.note,
-  });
+  const settlement = await recordDirectSettlement(
+    user.id,
+    {
+      payerId,
+      recipientId,
+      amountCents: body.amountCents,
+      currency: body.currency,
+      date: body.date,
+      note: body.note,
+    },
+    body.settleFullBalance
+  );
   return NextResponse.json({ id: settlement.id, updatedAt: settlement.updatedAt });
 });
