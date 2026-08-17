@@ -153,7 +153,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   return (
     <AppShell>
       <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(16rem,auto)] md:items-center md:gap-x-5 md:shrink-0`} aria-label="Current group">
-        <div className="flex items-start gap-2">
+        <div className="flex items-center gap-2">
           {detail ? (
             <div className="min-w-0 flex-1">
               <GroupSwitcher
