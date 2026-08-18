@@ -52,7 +52,7 @@ export default function ExpensesPage() {
 
   return (
     <AppShell>
-      <PageTitle title="All expenses" subtitle="Search and filter across every group you're in." />
+      <PageTitle title="All expenses" />
 
       <Card className="mb-4 p-2 md:shrink-0">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">

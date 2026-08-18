@@ -28,7 +28,7 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <PageTitle title="Settings" subtitle="Manage your account, security, and recovery." />
+      <PageTitle title="Settings" />
       {/* Two balanced columns so everything fits one screen on desktop. */}
       <div className="md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
@@ -36,10 +36,7 @@ export default function SettingsPage() {
             <ProfileCard me={me} onSaved={setSavedMe} />
             <AppearanceCard />
             <Card className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div>
-                <p className="font-medium">Log out</p>
-                <p className="text-sm text-ink-faint">End your session on this device.</p>
-              </div>
+              <p className="font-medium">Log out</p>
               <Button variant="danger" onClick={logout}>
                 <LogOut className="h-4 w-4" /> Log out
               </Button>
@@ -62,12 +59,7 @@ function AppearanceCard() {
     <Card>
       <CardHeader title={<span className="flex items-center gap-2"><Palette className="h-4 w-4" /> Appearance</span>} />
       <div className="flex flex-wrap items-center justify-between gap-3 p-4">
-        <div>
-          <p className="font-medium">Dark mode</p>
-          <p className="text-sm text-ink-faint">
-            {dark ? "Using the dark theme." : "Using the light theme."}
-          </p>
-        </div>
+        <p className="font-medium">Dark mode</p>
         <Button variant="secondary" onClick={toggle}>
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           {dark ? "Switch to light" : "Switch to dark"}

@@ -50,7 +50,7 @@ export default function ActivityPage() {
 
   return (
     <AppShell>
-      <PageTitle title="Activity" subtitle="Everything happening across your groups and friends." />
+      <PageTitle title="Activity" />
       <Card className="flex flex-col md:min-h-0 md:flex-1">
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (
