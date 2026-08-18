@@ -26,6 +26,14 @@ const RULES: { name: string; pattern: RegExp; componentsOnly?: boolean }[] = [
     pattern: /#[0-9a-fA-F]{3,8}\b/g,
     componentsOnly: true,
   },
+  {
+    // 18px sits a 1.11 step under 20px, too close to read as its own level.
+    // The ramp runs 12 / 14 / 16 / 20 / 24 / 32 / 40 and `--text-lg` is unset,
+    // so this class would silently render at the browser default.
+    name: "off-ramp text size (text-lg)",
+    pattern: /\btext-lg\b/g,
+    componentsOnly: true,
+  },
 ];
 
 export function findUiTokenViolations(source: string, file = "component.tsx"): UiTokenViolation[] {

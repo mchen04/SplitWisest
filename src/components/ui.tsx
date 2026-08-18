@@ -203,7 +203,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex min-h-11 items-center justify-between gap-2 border-b border-line px-4 py-2">
-      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       {action}
     </div>
   );
@@ -298,7 +298,7 @@ export function Modal({
         className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card shadow-pop sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
           <IconButton label="Close" onClick={onClose}>
             <X className="h-5 w-5" />
           </IconButton>

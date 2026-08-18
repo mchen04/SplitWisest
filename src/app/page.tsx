@@ -87,7 +87,7 @@ export default function Dashboard() {
   const activityPeek = (activity ?? []).filter((a) => !/joined the group|are now friends|created the group|joined SplitWisest/i.test(a.summary));
 
   return (
-    <AppShell>
+    <AppShell title="Home">
       {/* Hero: one net number + the single most useful next step. */}
       <Card className="mb-4 p-4 md:shrink-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

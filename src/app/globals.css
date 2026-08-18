@@ -45,22 +45,37 @@
   --shadow-card: 0 1px 2px rgba(20, 23, 28, 0.04);
   --shadow-pop: 0 10px 30px rgba(20, 23, 28, 0.12), 0 2px 6px rgba(20, 23, 28, 0.06);
 
-  /* ─── Type ramp — optical roles on a 4px baseline. ─── */
-  --text-xs: 0.75rem;            /* 12 / 16 — captions and metadata */
+  /* ─── Type ramp — one role per step, every size on the 4px baseline.
+     The app has no page-title bar, so the section heading is the top of the
+     chrome hierarchy and money is the only thing allowed to outrank it.
+
+       12  metadata     timestamps, counts, currency codes
+       14  body         secondary text, labels, compact rows
+       16  row title    the primary text of a list row, and controls
+       20  section      card and dialog headings, the current group's name
+       24  display      a balance for a group, a person, or a dialog
+       32  display xl   a currency tile on Home, and the amount field
+       40  hero         the one net balance on Home
+
+     18 is deliberately absent. Against 20 it is a 1.11 step — close enough to
+     read as an accident rather than a level, which is what made the old
+     hierarchy feel arbitrary. `text-lg` is unset here and rejected by
+     `pnpm verify:ui-tokens`, so it cannot creep back in. ─── */
+  --text-xs: 0.75rem;            /* 12 / 16 */
   --text-xs--line-height: 1rem;
-  --text-sm: 0.875rem;           /* 14 / 20 — labels and compact rows */
+  --text-sm: 0.875rem;           /* 14 / 20 */
   --text-sm--line-height: 1.25rem;
-  --text-base: 1rem;             /* 16 / 24 — body and mobile controls */
+  --text-base: 1rem;             /* 16 / 24 */
   --text-base--line-height: 1.5rem;
-  --text-lg: 1.125rem;           /* 18 / 24 — section headings */
-  --text-lg--line-height: 1.5rem;
-  --text-xl: 1.25rem;            /* 20 / 28 — compact display */
+  --text-lg: initial;
+  --text-lg--line-height: initial;
+  --text-xl: 1.25rem;            /* 20 / 28 */
   --text-xl--line-height: 1.75rem;
-  --text-2xl: 1.5rem;            /* 24 / 28 — page titles */
-  --text-2xl--line-height: 1.75rem;
-  --text-3xl: 2rem;              /* 32 / 36 — balances */
+  --text-2xl: 1.5rem;            /* 24 / 32 */
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 2rem;              /* 32 / 36 */
   --text-3xl--line-height: 2.25rem;
-  --text-4xl: 2.5rem;            /* 40 / 44 — home balance only */
+  --text-4xl: 2.5rem;            /* 40 / 44 */
   --text-4xl--line-height: 2.75rem;
 
   /* ─── Control metrics — single source for interactive sizing ─── */
@@ -107,7 +122,6 @@
 :root {
   color-scheme: light;
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
-  --mobile-nav-height: 3.6875rem;
   --mobile-nav-lift: 0.25rem;
 }
 [data-theme="dark"] { color-scheme: dark; }
@@ -139,22 +153,62 @@ body {
     --row-h: 3.25rem;            /* 52 — readable mobile ledger rows */
   }
 
-  .mobile-nav {
-    padding-bottom: calc(var(--safe-area-bottom) + var(--mobile-nav-lift));
+  /* The mobile app is a locked frame, not a scrolling document. The frame owns
+     the visible viewport, exactly one region inside it scrolls, and navigation
+     is the frame's last row.
+
+     Navigation used to be `position: fixed; bottom: 0`, measured against the
+     viewport while the document scrolled behind it. iOS resolves that bottom
+     edge differently depending on whether the document can scroll at all, so
+     the bar sat in one place on Home (1442px of content) and another on Groups,
+     Balances, and Chat, each of which fits in a single screen. A row in normal
+     flow has no viewport to drift against. */
+  /* Only routes that own a frame may lock the document. Login, signup, and
+     recovery render outside the shell and have no scrolling region of their
+     own, so locking them unconditionally put their submit button below an
+     unreachable fold in landscape. */
+  html:has(.app-frame),
+  html:has(.app-frame) body {
+    height: 100%;
+    overflow: hidden;
   }
 
-  .mobile-chat-main {
-    padding-bottom: calc(
-      var(--mobile-nav-height) + var(--safe-area-bottom) + var(--mobile-nav-lift)
-    );
+  .app-frame {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* The one scrolling region. `min-height: 0` is what lets it shrink below its
+     content instead of pushing navigation off the bottom of the frame. */
+  .app-scroll {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Chat scrolls its own message list, so its region never scrolls itself. */
+  .app-fixed {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .mobile-nav {
+    flex: 0 0 auto;
+    padding-bottom: calc(var(--safe-area-bottom) + var(--mobile-nav-lift));
   }
 
   body:has(.chat-composer-input:focus) .mobile-nav {
     display: none !important;
-  }
-
-  body:has(.chat-composer-input:focus) .mobile-chat-main {
-    padding-bottom: var(--safe-area-bottom) !important;
   }
 }
 
@@ -190,6 +244,16 @@ body {
 
 .group-choice {
   border-left: 3px solid var(--group-color);
+}
+
+/* The control wash is a white veil over the group's color. On the dark canvas
+   that reads as a pale chip instead of a recess, so the veil inverts. */
+[data-theme="dark"] .group-context-control {
+  background: rgb(0 0 0 / 0.25);
+}
+
+[data-theme="dark"] .group-context-control:hover {
+  background: rgb(0 0 0 / 0.4);
 }
 
 [data-theme="dark"] .group-hue-0,

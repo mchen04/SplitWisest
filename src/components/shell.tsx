@@ -47,7 +47,7 @@ function Badge({ count }: { count: number }) {
   );
 }
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ title, children }: { title?: string; children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const me = useMe();
@@ -96,14 +96,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <div className={isChatPage ? "flex h-dvh flex-col overflow-hidden md:block" : "min-h-dvh"}>
+    <div className="app-frame">
       {/* Desktop / tablet sidebar */}
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-56 flex-col border-r border-line bg-card md:flex">
         <Link href="/" className="flex items-center gap-2 px-4 pb-3 pt-4">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
             <Wallet className="h-4 w-4" />
           </span>
-          <span className="font-wordmark text-lg font-semibold tracking-tight">SplitWisest</span>
+          <span className="font-wordmark text-xl font-semibold tracking-tight">SplitWisest</span>
         </Link>
         <div className="px-3 pb-2">
           <button
@@ -124,7 +124,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     : "text-ink-soft hover:bg-subtle hover:text-ink"
                 }`}
               >
-                <Link href={href} className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-sm font-medium">
+                <Link href={href} aria-current={isActive(href) ? "page" : undefined} className="flex min-w-0 flex-1 items-center gap-2.5 px-2.5 py-2 text-sm font-medium">
                   <Icon className="h-4 w-4 shrink-0" />
                   <span className="flex-1 truncate">{label}</span>
                   {badge && <Badge count={unread[badge]} />}
@@ -187,18 +187,23 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className={`px-4 pt-3 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8 ${isChatPage ? "mobile-chat-main flex min-h-0 flex-1 flex-col overflow-hidden" : "pb-24"}`}>
-        <div className={`mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0 ${isChatPage ? "min-h-0 flex-1" : ""}`}>{children}</div>
+      {/* No route shows a title, but every route still needs one: without it
+          these pages have no heading at all, and a screen reader announces
+          nothing on navigation. */}
+      <main className={`px-4 pt-3 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8 ${isChatPage ? "app-fixed flex min-h-0 flex-1 flex-col overflow-hidden" : "app-scroll pb-4"}`}>
+        <div className={`mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0 ${isChatPage ? "min-h-0 flex-1" : ""}`}>
+          {title && <h1 className="sr-only">{title}</h1>}
+          {children}
+        </div>
       </main>
 
       {/* Mobile bottom nav */}
-      <nav
-        className="mobile-nav fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-card/95 backdrop-blur md:hidden"
-      >
+      <nav className="mobile-nav relative z-40 grid grid-cols-5 border-t border-line bg-card md:hidden">
         {MOBILE_NAV.slice(0, 2).map(({ href, label, icon: Icon, badge }) => (
           <Link
             key={href}
             href={href}
+            aria-current={isActive(href) ? "page" : undefined}
             className={`relative flex flex-col items-center gap-0.5 py-2 text-xs font-medium ${
               isActive(href) ? "text-accent" : "text-ink-faint"
             }`}
@@ -229,6 +234,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Link
             key={href}
             href={href}
+            aria-current={isActive(href) ? "page" : undefined}
             className={`relative flex flex-col items-center gap-0.5 py-2 text-xs font-medium ${
               isActive(href) ? "text-accent" : "text-ink-faint"
             }`}
@@ -270,18 +276,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
         </div>
       </Modal>
-    </div>
-  );
-}
-
-export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
-  return (
-    <div className="mb-3 flex flex-wrap items-end justify-between gap-3 md:mb-4 md:shrink-0">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
-      </div>
-      {action}
     </div>
   );
 }

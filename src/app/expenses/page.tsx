@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
 import { fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Card, EmptyState, Input, Select, Button, Chip } from "@/components/ui";
 
 interface Expense {
@@ -51,9 +51,7 @@ export default function ExpensesPage() {
   const categories = categoriesData?.categories ?? [];
 
   return (
-    <AppShell>
-      <PageTitle title="All expenses" />
-
+    <AppShell title="All expenses">
       <Card className="mb-4 p-2 md:shrink-0">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
           <div className="relative col-span-2 sm:col-span-3 lg:col-span-2">

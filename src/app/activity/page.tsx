@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { ScrollText } from "lucide-react";
 import { fmtTime, markRead, useApiData, useSync } from "@/lib/client";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Card, EmptyState, Button } from "@/components/ui";
 import { ActivitySummary } from "@/components/activity-summary";
 
@@ -49,8 +49,7 @@ export default function ActivityPage() {
   });
 
   return (
-    <AppShell>
-      <PageTitle title="Activity" />
+    <AppShell title="Activity">
       <Card className="flex flex-col md:min-h-0 md:flex-1">
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
           {activity === null ? (

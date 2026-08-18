@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Users, KeyRound } from "lucide-react";
 import { api, useApiData, useFormState, CURRENCIES } from "@/lib/client";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Card, Money, EmptyState, Button, Modal, Field, Input, Select, ErrorNote } from "@/components/ui";
 
 interface Group {
@@ -29,6 +29,9 @@ export default function GroupsPage() {
   const [code, setCode] = useState("");
   const { error, setError, busy, run } = useFormState();
 
+  const openCreate = () => { setCreateOpen(true); setError(null); setName(""); };
+  const openJoin = () => { setJoinOpen(true); setError(null); setCode(""); };
+
   function create(e: React.FormEvent) {
     e.preventDefault();
     run(async () => {
@@ -46,21 +49,7 @@ export default function GroupsPage() {
   }
 
   return (
-    <AppShell>
-      <PageTitle
-        title="Groups"
-        action={
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => { setJoinOpen(true); setError(null); setCode(""); }}>
-              <KeyRound className="h-4 w-4" /> Join
-            </Button>
-            <Button onClick={() => { setCreateOpen(true); setError(null); setName(""); }}>
-              <Plus className="h-4 w-4" /> New group
-            </Button>
-          </div>
-        }
-      />
-
+    <AppShell title="Groups">
       <div className="flex flex-col md:min-h-0 md:flex-1">
         <div className="md:min-h-0 md:flex-1 md:overflow-y-auto">
         {groups === null ? (
@@ -74,11 +63,16 @@ export default function GroupsPage() {
             <EmptyState
               icon={<Users className="h-8 w-8" />}
               title="No groups yet"
-              hint="Create your first group, or join one with an invite code."
+              hint="Create one, or join with an invite code."
               action={
-                <Button onClick={() => setCreateOpen(true)}>
-                  <Plus className="h-4 w-4" /> Create a group
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={openCreate}>
+                    <Plus className="h-4 w-4" /> New group
+                  </Button>
+                  <Button variant="secondary" onClick={openJoin}>
+                    <KeyRound className="h-4 w-4" /> Join
+                  </Button>
+                </div>
               }
             />
           </Card>
@@ -110,6 +104,16 @@ export default function GroupsPage() {
                 </Link>
               </li>
             ))}
+            <li>
+              <div className="flex min-h-20 items-center gap-2 rounded-xl border border-dashed border-line-strong px-3.5 py-2.5">
+                <Button className="flex-1" onClick={openCreate}>
+                  <Plus className="h-4 w-4" /> New group
+                </Button>
+                <Button variant="secondary" className="flex-1" onClick={openJoin}>
+                  <KeyRound className="h-4 w-4" /> Join
+                </Button>
+              </div>
+            </li>
           </ul>
         )}
         </div>
