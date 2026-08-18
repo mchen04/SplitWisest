@@ -134,7 +134,6 @@ export default function BalancesPage() {
     <AppShell>
       <PageTitle
         title="Balances"
-        subtitle="See who owes whom, and settle up."
         action={
           <Button onClick={() => { setAddOpen(true); setError(null); }}>
             <UserPlus className="h-4 w-4" /> Add friend
@@ -148,10 +147,7 @@ export default function BalancesPage() {
           <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
             <UserPlus className="h-4 w-4" />
           </span>
-          <div>
-            <p className="text-sm font-medium">Invite a friend</p>
-            <p className="text-xs text-ink-faint">Share your link — they&rsquo;re connected to you the moment they join.</p>
-          </div>
+          <p className="text-sm font-medium">Invite a friend</p>
         </div>
         <Button variant="secondary" onClick={copyInviteLink} disabled={!inviteCode}>
           {copied ? <><Check className="h-4 w-4 text-owed" /> Copied</> : <><Copy className="h-4 w-4" /> Copy invite link</>}

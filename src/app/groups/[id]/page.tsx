@@ -146,6 +146,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const PRIMARY_TABS = TABS.filter(({ key }) => ["expenses", "balances", "chat"].includes(key));
   const MORE_TABS = TABS.filter(({ key }) => ["insights", "activity"].includes(key));
   const moreTabActive = MORE_TABS.some(({ key }) => key === tab);
+  const canSettle = (detail?.members.length ?? 0) >= 2;
   const myGroupBalance = me && detail
     ? detail.balances.find((balance) => balance.userId === me.id)?.netCents ?? 0
     : 0;
@@ -187,7 +188,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           <div className="min-w-0">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-[var(--group-muted)]">Your balance here</p>
-                <p className={`tnum mt-0.5 text-3xl font-semibold tracking-tight md:whitespace-nowrap ${myGroupBalance > 0 ? "text-owed" : myGroupBalance < 0 ? "text-owe" : "text-[var(--group-ink)]"}`}>
+                <p className={`tnum mt-0.5 text-2xl font-semibold tracking-tight md:whitespace-nowrap ${myGroupBalance > 0 ? "text-owed" : myGroupBalance < 0 ? "text-owe" : "text-[var(--group-ink)]"}`}>
                   {myGroupBalance === 0 ? "Settled up" : (
                     <>{myGroupBalance > 0 ? "Owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></>
                   )}
@@ -200,18 +201,23 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </div>
         )}
 
-        <div className="mt-3 grid grid-cols-2 gap-2 md:mt-0">
+        {/* Adding an expense here is already one tap away — the bottom nav's "+" and the
+            desktop sidebar both target the current group — so settling is the only
+            action this header needs to carry. */}
+        <div className="mt-3 md:mt-0">
           <Button
-            variant="secondary"
-            className="w-full border-white/60 bg-white/55 hover:bg-white/80"
-            disabled={(detail?.members.length ?? 0) < 2}
-            title={(detail?.members.length ?? 0) < 2 ? "Invite a friend first" : undefined}
+            /* The group color is per-instance, so it comes in as an inline style:
+               a utility class for it loses to the shared disabled: styling that every
+               Button carries. Dropping the style when disabled lets that grey show. */
+            variant="ghost"
+            /* opacity is the one hover affordance an inline background cannot swallow. */
+            className="w-full hover:opacity-90"
+            style={canSettle ? { background: "var(--group-color)", color: "var(--color-white)" } : undefined}
+            disabled={!canSettle}
+            title={canSettle ? undefined : "Invite a friend first"}
             onClick={() => { setSettlePrefill(null); setSettleOpen(true); }}
           >
             <HandCoins className="hidden h-4 w-4 sm:block" /> Settle up
-          </Button>
-          <Button className="w-full bg-[var(--group-color)] hover:bg-[var(--group-ink)]" onClick={() => { setEditing(null); setExpenseOpen(true); }}>
-            <Plus className="hidden h-4 w-4 sm:block" /> Add expense
           </Button>
         </div>
       </section>
@@ -799,11 +805,11 @@ function GroupSwitcher({
         className="flex w-full items-center gap-2 rounded-lg text-left text-[var(--group-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--group-color)]"
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-2xl font-bold tracking-tight">{currentName}</span>
+          <span className="block truncate text-xl font-semibold tracking-tight">{currentName}</span>
           <span className="block text-xs font-medium text-[var(--group-muted)]">{memberCount} {memberCount === 1 ? "member" : "members"} · {currency}</span>
         </span>
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/55">
-          <ChevronDown className={`h-4.5 w-4.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        <span className="group-context-control shrink-0">
+          <ChevronDown className={`h-5 w-5 transition-transform ${open ? "rotate-180" : ""}`} />
         </span>
       </button>
       {open && (

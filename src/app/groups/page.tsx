@@ -49,7 +49,6 @@ export default function GroupsPage() {
     <AppShell>
       <PageTitle
         title="Groups"
-        subtitle="Choose a group to see its expenses, balances, and chat."
         action={
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => { setJoinOpen(true); setError(null); setCode(""); }}>

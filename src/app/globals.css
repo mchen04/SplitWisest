@@ -113,6 +113,11 @@
 [data-theme="dark"] { color-scheme: dark; }
 
 html {
+  /* Reserve the scrollbar gutter on every route so the fixed bottom nav keeps
+     one width whether or not the page happens to scroll. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-body);

@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
-import { ArrowRight, Plus, Users, ScrollText, Bell, HandCoins } from "lucide-react";
+import { ArrowRight, Users, ScrollText, Bell, HandCoins } from "lucide-react";
 import { fmtMoney, fmtTime, useApiData, useMe, useSync } from "@/lib/client";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
@@ -84,7 +84,6 @@ export default function Dashboard() {
   }
   const currencies = Object.entries(netByCur).filter(([, v]) => v !== 0);
   const singleCur = obligationCurrencies.size === 1 ? [...obligationCurrencies][0] : null;
-  const addExpenseHref = groups && groups.length > 0 ? `/groups/${groups[0].id}?add=1` : "/groups";
   const activityPeek = (activity ?? []).filter((a) => !/joined the group|are now friends|created the group|joined SplitWisest/i.test(a.summary));
 
   return (
@@ -93,15 +92,19 @@ export default function Dashboard() {
       <Card className="mb-4 p-4 md:shrink-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold tracking-tight">{currencies.length > 1 ? "Your balances" : "Your balance"}</h1>
-            {me && <p className="text-xs text-ink-faint">Hey, {me.displayName.split(" ")[0]}. Here is where things stand.</p>}
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-sm font-medium text-ink-soft">{currencies.length > 1 ? "Your balances" : "Your balance"}</h1>
+              {/* The mobile shell has no top bar, so the hero carries the account entry point. */}
+              {me && (
+                <Link href="/settings" aria-label="Account settings" className="-my-2 -mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full md:hidden">
+                  <Avatar name={me.displayName} size="sm" />
+                </Link>
+              )}
+            </div>
             {friends === null ? (
               <div className="skeleton mt-2 h-9 w-44" />
             ) : currencies.length === 0 && !(friends ?? []).some((f) => f.obligations.length > 0) ? (
-              <>
-                <p className="mt-1 text-3xl font-semibold tracking-tight text-ink">You&rsquo;re all settled up</p>
-                <p className="mt-1 text-sm text-ink-faint">Nothing outstanding with your friends right now.</p>
-              </>
+              <p className="mt-1 text-2xl font-semibold tracking-tight text-ink">You&rsquo;re all settled up</p>
             ) : (
               <>
                 {currencies.length === 0 && (
@@ -133,10 +136,11 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* One contextual next step — the sidebar owns the persistent "Add
-              expense" primary, so the hero coaches the most useful action. When the
+          {/* One contextual next step. Adding an expense is always a tap away in the
+              bottom nav, so the hero only surfaces a settle or remind action. When the
               friend's balance spans multiple currencies, drop the single amount so
               the CTA doesn't imply one payment clears a mixed-currency relationship. */}
+          {(topDebt || topCreditor) && (
           <div className="flex shrink-0 sm:justify-end">
             {topDebt ? (
               <Link href={`/people/${topDebt.f.id}`} className="w-full sm:w-auto">
@@ -152,14 +156,9 @@ export default function Dashboard() {
                   {Object.values(topCreditor.f.netByCurrency).filter((v) => v !== 0).length === 1 && <> · <Money cents={topCreditor.amt} currency={topCreditor.cur} /></>}
                 </Button>
               </Link>
-            ) : (
-              <Link href={addExpenseHref} className="w-full sm:w-auto">
-                <Button variant="secondary" className="w-full sm:w-auto">
-                  <Plus className="h-4 w-4" /> Add an expense
-                </Button>
-              </Link>
-            )}
+            ) : null}
           </div>
+          )}
         </div>
       </Card>
 

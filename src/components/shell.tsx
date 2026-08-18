@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import {
   LayoutDashboard, Users, Scale, Receipt, LogOut, Wallet,
-  MessageSquare, ScrollText, Settings, Moon, Sun, Plus, ChevronDown,
+  MessageSquare, ScrollText, Moon, Sun, Plus, ChevronDown,
 } from "lucide-react";
 import { api, useApiData, useMe, useUnread, type Unread } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
@@ -187,25 +187,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile top bar */}
-      <header className="sticky top-0 z-40 flex shrink-0 items-center justify-between border-b border-line bg-card/90 px-4 py-2.5 backdrop-blur md:hidden">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-on-accent">
-            <Wallet className="h-4 w-4" />
-          </span>
-          <span className="font-wordmark text-base font-semibold">SplitWisest</span>
-        </Link>
-        <div className="flex items-center gap-1">
-          <IconButton label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} onClick={toggle}>
-            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-          </IconButton>
-          <Link href="/settings" aria-label="Settings" title="Settings" className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-soft hover:bg-subtle hover:text-ink">
-            <Settings className="h-5 w-5" />
-          </Link>
-        </div>
-      </header>
-
-      <main className={`px-4 pt-4 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8 ${isChatPage ? "mobile-chat-main flex min-h-0 flex-1 flex-col overflow-hidden" : "pb-24"}`}>
+      <main className={`px-4 pt-3 sm:px-6 md:ml-56 md:h-dvh md:overflow-y-auto md:pb-6 md:pt-6 lg:px-8 ${isChatPage ? "mobile-chat-main flex min-h-0 flex-1 flex-col overflow-hidden" : "pb-24"}`}>
         <div className={`mx-auto flex w-full max-w-6xl flex-col md:h-full md:min-h-0 ${isChatPage ? "min-h-0 flex-1" : ""}`}>{children}</div>
       </main>
 
@@ -294,9 +276,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 export function PageTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-wrap items-end justify-between gap-3 md:shrink-0">
+    <div className="mb-3 flex flex-wrap items-end justify-between gap-3 md:mb-4 md:shrink-0">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="text-xl font-semibold tracking-tight md:text-2xl">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-ink-soft">{subtitle}</p>}
       </div>
       {action}
