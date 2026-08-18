@@ -73,7 +73,7 @@ async function refreshPage(request, cached) {
 
   let changed = await deploymentChanged();
   if (cached) {
-    const [oldHtml, nextHtml] = await Promise.all([cached.clone().text(), response.clone().text()]);
+    const [oldHtml, nextHtml] = await Promise.all([cached.text(), response.clone().text()]);
     changed = changed || oldHtml !== nextHtml;
   }
   const cache = await caches.open(PAGE_CACHE);
@@ -103,8 +103,12 @@ self.addEventListener("fetch", (event) => {
       return networkPromise;
     };
 
+    // The refresh needs its own copy. A Response body can be read once, and the
+    // respondWith below consumes the one it is given, so passing the same object
+    // made refreshPage throw on a body already used — a rejection this catch
+    // swallowed, leaving the stale page cached and the update unsignalled.
     event.waitUntil(
-      cachedPromise.then((cached) => cached ? network(cached).catch(() => undefined) : undefined)
+      cachedPromise.then((cached) => cached ? network(cached.clone()).catch(() => undefined) : undefined)
     );
     event.respondWith(
       cachedPromise.then((cached) => {
@@ -119,7 +123,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
         if (response.ok) {
-          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone())));
+          // Clone before returning: `caches.open` resolves after respondWith has
+          // already begun consuming the body below.
+          const copy = response.clone();
+          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy)));
         }
         return response;
       }))
@@ -131,7 +138,8 @@ self.addEventListener("fetch", (event) => {
     caches.match(request).then((cached) => {
       const update = fetch(request).then((response) => {
         if (response.ok) {
-          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, response.clone())));
+          const copy = response.clone();
+          event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.put(request, copy)));
         }
         return response;
       });
