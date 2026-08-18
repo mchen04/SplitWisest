@@ -3,7 +3,7 @@
 ## Getting in
 
 - **Sign up** with a display name, username, and password. An invite code is optional; a friend's personal code makes you friends immediately, and a group code joins that group.
-- **Invite a friend** from the Balances page — **Copy invite link** shares a sign-up link that connects them to you automatically. You can also add someone by entering their invite code.
+- **Invite a friend** from the Balances page — **Copy link** shares a sign-up link that connects them to you automatically. You can also add someone by entering their invite code.
 - **Forgot your password?** Use the "Forgot your password?" link on login and one of your recovery codes (generate these in Settings) to set a new one.
 
 ## Account & settings
