@@ -62,19 +62,53 @@ Use the deployed HTTPS URL.
 
 Test portrait and landscape. Repeat once with increased text size if the release changes mobile spacing.
 
-## Update check
+## Update and cache contract
 
-An installed app must pick up a new deploy on its own. `sw.js` is byte-identical
-between deploys, so `registration.update()` never installs a new worker, and the
-worker's HTML diff needs a navigation that an app restored from memory never
-makes. The client therefore polls `/api/version` and compares it with the
-`NEXT_PUBLIC_BUILD_ID` its own bundle was compiled from.
+Every deploy ships a byte-different `/sw.js`: `pnpm build` runs
+`scripts/generate-sw.ts`, which writes `public/sw.js` (gitignored) from
+`src/sw/sw.template.js` with the deployment id embedded. The worker script, the
+client bundle (`NEXT_PUBLIC_BUILD_ID`), `/api/version`, and the `x-build-id`
+response header all derive from one id in `src/lib/deployment-id.ts`.
 
-To verify against two real builds:
+The browser's own service-worker update algorithm is the update mechanism:
+`registration.update()` fetches `/sw.js` (served `Cache-Control: no-cache`),
+new bytes install, `skipWaiting` + `clients.claim` fire `controllerchange`, and
+the client reconciles. Detection runs on resume and connectivity signals —
+`visibilitychange`, `pageshow` (including back/forward-cache restores),
+`online`, history changes (soft navigations), and a 60 s interval as backstop.
 
-1. `pnpm build && PORT=3100 pnpm start`, then open the app and let it settle.
-2. `GITHUB_SHA=<a-different-value> pnpm build`, then restart on the same port.
-3. Bring the app to the foreground, or wait for the five-minute poll.
-4. The page reloads once. `performance.getEntriesByType('navigation')[0].type`
-   reads `reload`, and the served HTML carries the new build id.
-5. Bring it to the foreground again. It must not reload a second time.
+One function decides what happens: `decideUpdateAction` in
+`src/lib/update-policy.ts`. It reloads at most once per detected version,
+never reloads a first install, never reloads a page already on the server's
+build, stops instead of looping when a reload fails to land, and defers (never
+discards) while a form field holds unsubmitted text.
+
+Caching (`src/sw/sw.template.js`):
+
+- Navigations are network-first with a 3.5 s timeout, falling back to the page
+  cache, then the cached start_url shell, then `offline.html`. The first
+  navigation after a deploy therefore carries the new build.
+- `/_next/static/` files are cache-first (content-hashed, immutable). They are
+  never purged by a version bump; stale-build files are swept only once every
+  open window reports it runs the current build.
+- RSC payloads (`?_rsc=`) are never cached, and a payload the server minted
+  for a different build is refused so the router hard-navigates instead of
+  mixing builds.
+- `/api/**` is never touched by the worker.
+- Both runtime caches are entry-bounded; cached entries carry build tags in
+  the meta cache.
+
+## Two-build verification
+
+`node scripts/pwa-swap-harness.mjs all` (or `build` then `suite`) runs the
+whole contract against two local production builds differing only in
+GITHUB_SHA, swapped on one origin behind a local TLS proxy, driven as an
+INSTALLED app: Playwright WebKit, iPhone profile, `navigator.standalone`,
+display-mode standalone, launched at the manifest start_url, logged in.
+Scenarios cover first install, cold start, cold start across a swap,
+foreground-resume across a swap, in-session navigation across a swap,
+three-cycle reload stability, offline cold start, and poisoned-cache repair.
+Negative controls — `--mutate no-swap | break-manifest | no-sw | flap-sw |
+flap-version-no-sw | break-precache | swallow-precache | bloat-storage` — each
+force a named check red; runs are retained as `.pwa-harness/neg-*.log`. See
+docs/pwa-cache-ledger.md for measured results.

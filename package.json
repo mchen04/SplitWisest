@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "tsx scripts/generate-sw.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "verify:ui-tokens": "tsx scripts/check-ui-tokens.ts",
@@ -26,6 +26,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "playwright-core": "1.62.1",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5",

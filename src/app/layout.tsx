@@ -48,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${fraunces.variable} ${instrument.variable}`} suppressHydrationWarning>
       <head>
+        <meta name="build-id" content={process.env.NEXT_PUBLIC_BUILD_ID} />
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="antialiased">

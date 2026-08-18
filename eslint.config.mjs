@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local two-build harness artifacts and the generated worker script.
+    ".pwa-harness/**",
+    "public/sw.js",
   ]),
 ]);
 

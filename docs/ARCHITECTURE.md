@@ -52,9 +52,29 @@ On mobile the app is a locked frame rather than a scrolling document. `.app-fram
 
 No route renders a page title. A title row that differed per page is what made the header appear to change size between tabs, so each page's actions live in its content and `AppShell` takes a `title` for an `sr-only` heading. See `docs/PWA.md` for the verification contract.
 
-The worker handed the same `Response` to `event.respondWith` and to its own background refresh. A body can be read once, so the refresh threw on a used body, the rejection vanished into a bare `catch`, and every line after it — replacing the cached page, signalling the client — was dead. Nothing cached a `/_next/static/` chunk either, for the same reason one branch down. Copies are now cloned before the response is handed over. An app installed before that fix cannot be rescued by a deploy: it serves its cached page before any new code runs, so it has to be removed from the Home Screen and re-added.
+The service worker is generated per deploy: `pnpm build` runs
+`scripts/generate-sw.ts`, which writes `public/sw.js` (gitignored) from
+`src/sw/sw.template.js` with the deployment id embedded, so every deploy ships a
+byte-different worker and the browser's own update algorithm installs it. The
+deployment id comes from one place (`src/lib/deployment-id.ts`) and reaches the
+worker, the client bundle (`NEXT_PUBLIC_BUILD_ID`), `/api/version`, and the
+`x-build-id` response header. Navigations are network-first with a bounded
+timeout falling back to cached pages and then `offline.html`; content-hashed
+`/_next/static/` files are cache-first and swept only when no open window still
+runs their build; RSC payloads are never cached and a cross-build payload is
+refused so the router hard-navigates instead of mixing builds. One function
+(`decideUpdateAction` in `src/lib/update-policy.ts`) makes every reload
+decision: at most one reload per detected version, no first-install reload, no
+reload of a page already current, a stop instead of a loop when a reload fails
+to land, and a deferral while any form field holds unsubmitted text. The full
+contract and its two-build WebKit verification harness are described in
+`docs/PWA.md`; measured evidence lives in `docs/pwa-cache-ledger.md`.
 
-`sw.js` is byte-identical between deploys, so `registration.update()` never installs a new worker, and the worker's other update route — diffing HTML on a navigation — needs a navigation that an iOS PWA restored from memory never makes. `ServiceWorkerRegistration` therefore polls `/api/version` and compares it with the `NEXT_PUBLIC_BUILD_ID` its own bundle was compiled from; on a mismatch it clears the page cache and the build's chunks, records the incoming version so the worker does not bounce the page a second time, and reloads once. A `sessionStorage` guard keyed on the version stops a reload loop if the new build never lands.
+(Historical note: the pre-2026-08 worker handed the same `Response` object to
+`event.respondWith` and its own background refresh — a body can be read once,
+so the refresh died in a bare `catch` for weeks. An app installed before commit
+7201b9f serves its cached page before any new code runs and must be re-added to
+the Home Screen.)
 
 ## Recurring expenses
 

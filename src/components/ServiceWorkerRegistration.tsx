@@ -1,41 +1,75 @@
 "use client";
 
 import { useEffect } from "react";
+import { decideUpdateAction } from "@/lib/update-policy";
 
 const BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID;
-const META_CACHE = "splitwisest-meta-v2";
-const SHELL_UPDATE_KEY = "/__splitwisest_shell_updated__";
-const VERSION_KEY = "/__splitwisest_version__";
 const RELOAD_KEY = "splitwisest.reloadedFor";
-const UPDATE_INTERVAL_MS = 5 * 60 * 1000;
-const CHECK_THROTTLE_MS = 60 * 1000;
+const POLL_INTERVAL_MS = 60 * 1000;
+const SIGNAL_THROTTLE_MS = 5 * 1000;
+const DEFER_RETRY_MS = 15 * 1000;
 
-/** Clear what the next navigation has to re-fetch, keeping the offline shell. */
-async function dropStaleCaches(version: string) {
-  if (!("caches" in window)) return;
-  const names = await caches.keys();
-  await Promise.all(
-    names.map(async (name) => {
-      if (name.startsWith("splitwisest-pages")) {
-        await caches.delete(name);
-        return;
-      }
-      if (!name.startsWith("splitwisest-static")) return;
-      // Keep the offline page and the icons; only the build's chunks are stale.
-      const cache = await caches.open(name);
-      const requests = await cache.keys();
-      await Promise.all(
-        requests
-          .filter((request) => new URL(request.url).pathname.startsWith("/_next/static/"))
-          .map((request) => cache.delete(request))
-      );
-    })
-  );
-  // Record the build about to load, so the worker's own change detection does
-  // not read this reload as a second update and bounce the page again.
-  const meta = await caches.open(META_CACHE);
-  await meta.put(VERSION_KEY, new Response(version));
-  await meta.delete(SHELL_UPDATE_KEY);
+// Safari private mode throws on sessionStorage writes; an update path that
+// dies on that throw is silent forever. Fall back to per-page memory (weaker
+// loop protection, but the decide() guard still stops the common loop).
+const memoryStore = new Map<string, string>();
+function storageGet(key: string): string | null {
+  try {
+    return window.sessionStorage.getItem(key);
+  } catch {
+    return memoryStore.get(key) ?? null;
+  }
+}
+function storageSet(key: string, value: string) {
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    memoryStore.set(key, value);
+  }
+}
+
+/**
+ * A half-written expense or chat message must survive an update. React keeps
+ * `defaultValue` in sync on controlled inputs, so comparing value to
+ * defaultValue can never detect typing; instead, track the fields the user has
+ * actually typed into and treat any of them still holding text as unsaved.
+ */
+const touchedFields = new Set<HTMLInputElement | HTMLTextAreaElement>();
+function trackInput(event: Event) {
+  const target = event.target;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    touchedFields.add(target);
+  }
+}
+function hasUnsavedInput(): boolean {
+  for (const field of touchedFields) {
+    if (!field.isConnected) {
+      touchedFields.delete(field);
+      continue;
+    }
+    if (field instanceof HTMLInputElement) {
+      const skip = ["hidden", "checkbox", "radio", "submit", "button", "range"];
+      if (skip.includes(field.type) || field.readOnly || field.disabled) continue;
+    }
+    if (field.value.trim() !== "") return true;
+  }
+  return false;
+}
+
+/** Ask the controlling worker which build its script was generated from. */
+function askControllerBuild(): Promise<string | null> {
+  const controller = navigator.serviceWorker.controller;
+  if (!controller) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = window.setTimeout(() => resolve(null), 3000);
+    channel.port1.onmessage = (event) => {
+      window.clearTimeout(timer);
+      const build = event.data?.build;
+      resolve(typeof build === "string" && build ? build : null);
+    };
+    controller.postMessage({ type: "GET_BUILD" }, [channel.port2]);
+  });
 }
 
 export function ServiceWorkerRegistration() {
@@ -53,81 +87,122 @@ export function ServiceWorkerRegistration() {
       }
       return;
     }
-    // When an updated SW takes control (skipWaiting + clients.claim), reload once so
-    // the page picks up the new build's chunks instead of risking a chunk-load
-    // error mid-session. Skip the reload on the very first install (no prior
-    // controller), which isn't an update.
-    const hadController = !!navigator.serviceWorker.controller;
-    let reloaded = false;
-    let lastCheck = 0;
+
     let registration: ServiceWorkerRegistration | null = null;
-    const reloadForUpdate = async (force = false) => {
-      if (reloaded) return;
-      let pending = force;
-      if ("caches" in window) {
-        const meta = await caches.open(META_CACHE);
-        pending = (await meta.match(SHELL_UPDATE_KEY)) !== undefined || pending;
-        if (pending) await meta.delete(SHELL_UPDATE_KEY);
+    let reloading = false;
+    let updateDeferred = false;
+    let lastCheck = 0;
+
+    // Every signal ends here. /sw.js embeds the build id, so the browser's own
+    // update algorithm is the mechanism: registration.update() fetches the
+    // script, new bytes install and take control, and this reconciliation sees
+    // a controller whose build differs from the one compiled into this page.
+    // Without a controlling worker (first visit, private mode, evicted
+    // registration) the same decision runs on /api/version instead.
+    let reconciling = false;
+    const reconcile = async () => {
+      // The latch keeps two overlapping signals from racing past decide() into
+      // a second reload.
+      if (reloading || reconciling) return;
+      reconciling = true;
+      try {
+        await reconcileInner();
+      } finally {
+        reconciling = false;
       }
-      if (!pending) return;
-      reloaded = true;
-      window.location.reload();
     };
-    // A deploy never changes sw.js, so `registration.update()` finds no new
-    // worker and the install path never runs. The worker's other update route —
-    // diffing HTML on a navigation — needs a navigation, which an iOS PWA
-    // restored from memory never makes. Left to those two, an installed app can
-    // sit on a build for days. Asking the server which build is live closes it.
-    const checkVersion = async () => {
-      if (!BUILD_ID || reloaded) return;
-      let payload: { version?: unknown };
+    const reconcileInner = async () => {
+      const controllerBuild = await askControllerBuild();
+      // The server's build is only needed to tell "page behind" from "worker
+      // behind" — skip the request in the common everything-agrees case.
+      const serverBuild = !controllerBuild || controllerBuild !== BUILD_ID
+        ? await fetchServerBuild()
+        : null;
+      const action = decideUpdateAction({
+        pageBuild: BUILD_ID,
+        controllerBuild,
+        serverBuild,
+        alreadyReloadedFor: storageGet(RELOAD_KEY),
+        hasUnsavedInput: hasUnsavedInput(),
+      });
+      if (action === "reload") {
+        storageSet(RELOAD_KEY, (controllerBuild ?? serverBuild) as string);
+        reloading = true;
+        window.location.reload();
+        return;
+      }
+      updateDeferred = action === "defer";
+      if (controllerBuild && BUILD_ID) {
+        // Report truthfully which build this window runs; the worker frees the
+        // previous build's files only when every window is current.
+        navigator.serviceWorker.controller?.postMessage({ type: "CLIENT_READY", build: BUILD_ID });
+      }
+    };
+
+    const fetchServerBuild = async (): Promise<string | null> => {
       try {
         const response = await fetch("/api/version", { cache: "no-store" });
-        if (!response.ok) return;
-        payload = await response.json();
+        if (!response.ok) return null;
+        const version: unknown = (await response.json()).version;
+        return typeof version === "string" && version ? version : null;
       } catch {
-        return; // Offline, or the deploy is mid-flight. The next check retries.
+        return null; // Offline, or the deploy is mid-flight. The next signal retries.
       }
-      const version = payload.version;
-      if (typeof version !== "string" || !version || version === BUILD_ID) return;
-      // If a reload already failed to land this build, stop instead of looping.
-      if (sessionStorage.getItem(RELOAD_KEY) === version) return;
-      sessionStorage.setItem(RELOAD_KEY, version);
-      reloaded = true;
-      await dropStaleCaches(version);
-      window.location.reload();
     };
-    const onChange = () => {
-      if (hadController) reloadForUpdate(true);
-    };
-    const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === "APP_SHELL_UPDATED") reloadForUpdate(true);
-    };
-    const checkForUpdate = () => {
+
+    const check = () => {
       if (document.visibilityState !== "visible" || !navigator.onLine) return;
-      if (Date.now() - lastCheck < CHECK_THROTTLE_MS) return;
+      if (Date.now() - lastCheck < SIGNAL_THROTTLE_MS) return;
       lastCheck = Date.now();
       registration?.update().catch(() => {});
-      checkVersion();
+      void reconcile();
     };
-    navigator.serviceWorker.addEventListener("controllerchange", onChange);
-    navigator.serviceWorker.addEventListener("message", onMessage);
+
+    const onControllerChange = () => void reconcile();
+    const onFocusOut = () => {
+      if (updateDeferred) void reconcile();
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
     navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
       .then((next) => {
         registration = next;
-        reloadForUpdate();
-        checkForUpdate();
+        check();
       })
       .catch(() => {});
-    document.addEventListener("visibilitychange", checkForUpdate);
-    window.addEventListener("online", checkForUpdate);
-    const timer = window.setInterval(checkForUpdate, UPDATE_INTERVAL_MS);
+    // iOS pauses timers in the background, so resume and connectivity signals
+    // — not the interval alone — drive detection: visibilitychange, pageshow
+    // (including restore from the back/forward cache), and online.
+    document.addEventListener("input", trackInput, true);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("pageshow", check);
+    window.addEventListener("online", check);
+    // A soft navigation is also a moment the user expects freshness, and the
+    // App Router may serve it from its prefetch cache with no request this
+    // worker ever sees. Piggyback the check on history changes.
+    const origPushState = window.history.pushState.bind(window.history);
+    const origReplaceState = window.history.replaceState.bind(window.history);
+    window.history.pushState = (...args) => { origPushState(...args); setTimeout(check, 1000); };
+    window.history.replaceState = (...args) => { origReplaceState(...args); setTimeout(check, 1000); };
+    window.addEventListener("popstate", check);
+    document.addEventListener("focusout", onFocusOut);
+    const timer = window.setInterval(check, POLL_INTERVAL_MS);
+    const deferTimer = window.setInterval(() => {
+      if (updateDeferred) void reconcile();
+    }, DEFER_RETRY_MS);
+    navigator.storage?.persist?.().catch(() => {});
     return () => {
       window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", checkForUpdate);
-      window.removeEventListener("online", checkForUpdate);
-      navigator.serviceWorker.removeEventListener("controllerchange", onChange);
-      navigator.serviceWorker.removeEventListener("message", onMessage);
+      window.clearInterval(deferTimer);
+      document.removeEventListener("input", trackInput, true);
+      document.removeEventListener("visibilitychange", check);
+      window.removeEventListener("pageshow", check);
+      window.removeEventListener("online", check);
+      window.history.pushState = origPushState;
+      window.history.replaceState = origReplaceState;
+      window.removeEventListener("popstate", check);
+      document.removeEventListener("focusout", onFocusOut);
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
     };
   }, []);
   return null;

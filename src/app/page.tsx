@@ -102,7 +102,13 @@ export default function Dashboard() {
               )}
             </div>
             {friends === null ? (
-              <div className="skeleton mt-2 h-9 w-44" />
+              // Reserve the loaded hero's typical footprint (balance line +
+              // direction line); a thin bar here shifted the whole grid down
+              // when data arrived (measured CLS 0.25 → the page's whole score).
+              <div className="mt-2 space-y-2">
+                <div className="skeleton h-9 w-44" />
+                <div className="skeleton h-4 w-56" />
+              </div>
             ) : currencies.length === 0 && !(friends ?? []).some((f) => f.obligations.length > 0) ? (
               <p className="mt-1 text-2xl font-semibold tracking-tight text-ink">You&rsquo;re all settled up</p>
             ) : (
@@ -140,6 +146,13 @@ export default function Dashboard() {
               bottom nav, so the hero only surfaces a settle or remind action. When the
               friend's balance spans multiple currencies, drop the single amount so
               the CTA doesn't imply one payment clears a mixed-currency relationship. */}
+          {friends === null && (
+            // Placeholder for the settle/remind action so the button's arrival
+            // does not push the content below it.
+            <div className="flex shrink-0 sm:justify-end">
+              <div className="skeleton h-11 w-full rounded-lg sm:w-48" />
+            </div>
+          )}
           {(topDebt || topCreditor) && (
           <div className="flex shrink-0 sm:justify-end">
             {topDebt ? (

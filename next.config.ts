@@ -1,33 +1,37 @@
 import type { NextConfig } from "next";
-import { createHash } from "crypto";
-import { execFileSync } from "child_process";
-import { readFileSync } from "fs";
+import { deploymentId } from "./src/lib/deployment-id";
 
-function localSourceId() {
-  const files = execFileSync(
-    "git",
-    ["ls-files", "-co", "--exclude-standard", "src", "public", "next.config.ts", "package.json"],
-    { encoding: "utf8" }
-  ).trim().split("\n").filter(Boolean).sort();
-  const hash = createHash("sha256");
-  for (const file of files) {
-    hash.update(file);
-    hash.update(readFileSync(file));
-  }
-  return hash.digest("hex").slice(0, 20);
-}
-
-const deploymentId = process.env.VERCEL_GIT_COMMIT_SHA
-  ?? process.env.GITHUB_SHA
-  ?? localSourceId();
+// One id per deploy, shared by the client bundle (NEXT_PUBLIC_BUILD_ID), the
+// generated service worker (scripts/generate-sw.ts), /api/version, and the
+// x-build-id response header. deploymentId() throws on an empty id.
+const id = deploymentId();
 
 const nextConfig: NextConfig = {
   // Hide the floating dev-tools indicator so it never overlaps the app chrome
   // (it was being mistaken for the user avatar in design review captures).
   devIndicators: false,
-  generateBuildId: async () => deploymentId,
+  generateBuildId: async () => id,
   env: {
-    NEXT_PUBLIC_BUILD_ID: deploymentId,
+    NEXT_PUBLIC_BUILD_ID: id,
+  },
+  async headers() {
+    return [
+      {
+        // The worker script must always revalidate: the browser's update
+        // algorithm compares bytes, and a cached /sw.js would pin old code.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+      {
+        // Lets the worker tag cached documents with the build that produced
+        // them, and lets verification identify a build without parsing HTML.
+        source: "/:path*",
+        headers: [{ key: "x-build-id", value: id }],
+      },
+    ];
   },
 };
 
