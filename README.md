@@ -18,7 +18,8 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 - Group chat + direct friend chat with link rendering and search
 - Realtime via lightweight polling sync cursor (serverless-friendly)
 - Modern, clean, minimal UI from a single design-token system — flat surfaces, one sans typeface, tabular money; light + dark theme toggle in the sidebar, mobile header, and Settings — persists and respects OS preference
-- Installable PWA with iPhone safe-area support, fixed chat controls, and responsive layouts from small phones to ultrawide
+- Installable PWA with iPhone safe-area support, a locked app frame whose navigation never shifts between tabs, and responsive layouts from small phones to ultrawide
+- Picks up a new deploy on its own — the client compares its build id against the server's and reloads once
 
 ## Stack
 

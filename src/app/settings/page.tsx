@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Copy, Check, KeyRound, LogOut, ShieldCheck, UserCog, Palette, Moon, Sun } from "lucide-react";
 import { api, useApiData, useFormState } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Button, Field, Input, ErrorNote } from "@/components/ui";
 
 interface Me {
@@ -27,8 +27,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <AppShell>
-      <PageTitle title="Settings" />
+    <AppShell title="Settings">
       {/* Two balanced columns so everything fits one screen on desktop. */}
       <div className="md:min-h-0 md:flex-1 md:overflow-y-auto md:pb-2">
         <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">

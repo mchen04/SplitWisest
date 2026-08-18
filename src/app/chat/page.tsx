@@ -287,13 +287,7 @@ function ChatPageInner() {
   );
 
   return (
-    <AppShell>
-      <div className="mb-4 hidden items-end justify-between md:flex md:shrink-0">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Chat</h1>
-          <p className="mt-1 text-sm text-ink-soft">Group conversations and direct messages.</p>
-        </div>
-      </div>
+    <AppShell title="Chat">
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {listPane}
         {detailPane}

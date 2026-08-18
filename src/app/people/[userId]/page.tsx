@@ -6,7 +6,7 @@ import {
   ArrowLeft, Bell, HandCoins, MessageSquare, Receipt, Search, UserMinus, UserPlus, Users, X,
 } from "lucide-react";
 import { api, ApiClientError, fmtDate, fmtMoney, useApiData, useMe } from "@/lib/client";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Avatar, Button, Card, CardHeader, EmptyState, Input, Menu, MenuItem } from "@/components/ui";
 import { DirectPaymentsModal } from "@/components/direct-payments-modal";
 import { DirectSettleModal } from "@/components/direct-settle-modal";
@@ -91,11 +91,17 @@ export default function PersonPage({ params }: { params: Promise<{ userId: strin
     <AppShell>
       {profile ? (
         <>
-          <PageTitle
-            title={profile.person.displayName}
-            subtitle={`@${profile.person.username} · ${relationshipLabel[profile.relationship]}`}
-            action={<ProfileActions profile={profile} onSettle={setSettleSign} onPayments={() => setPaymentsOpen(true)} onNudge={nudge} onRemove={removeFriend} onRequest={sendFriendRequest} />}
-          />
+          <div className="mb-3 flex items-center gap-3 md:shrink-0">
+            <Avatar name={profile.person.displayName} />
+            {/* Inline from sm up. On a phone the handle and the actions leave the
+                name no width at all, so it stacks — at no cost in height, since
+                both lines together are the avatar's height. */}
+            <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-baseline sm:gap-1.5">
+              <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">{profile.person.displayName}</h1>
+              <p className="min-w-0 truncate text-xs text-ink-faint">@{profile.person.username} · {relationshipLabel[profile.relationship]}</p>
+            </div>
+            <ProfileActions profile={profile} onSettle={setSettleSign} onPayments={() => setPaymentsOpen(true)} onNudge={nudge} onRemove={removeFriend} onRequest={sendFriendRequest} />
+          </div>
 
           {actionNote && <div className="mb-4 rounded-lg bg-subtle px-3 py-2 text-sm text-ink-soft">{actionNote}</div>}
 

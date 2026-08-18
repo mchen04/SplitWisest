@@ -124,7 +124,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
 
   if (loadError) {
     return (
-      <AppShell>
+      <AppShell title="Group">
         <EmptyState title={loadError} action={<Link href="/groups"><Button variant="secondary">Back to groups</Button></Link>} />
       </AppShell>
     );
@@ -152,8 +152,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     : 0;
 
   return (
-    <AppShell>
-      <section className={`group-context group-hue-${groupId % 6} mb-3 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(16rem,auto)] md:items-center md:gap-x-5 md:shrink-0`} aria-label="Current group">
+    <AppShell title={detail?.group.name ?? "Group"}>
+      <section className={`group-context group-hue-${groupId % 6} mb-3 md:shrink-0 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_minmax(10rem,auto)] lg:items-center lg:gap-x-5`} aria-label="Current group">
         <div className="flex items-center gap-2">
           {detail ? (
             <div className="min-w-0 flex-1">
@@ -165,9 +165,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               />
             </div>
           ) : (
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="skeleton h-7 w-56" />
-              <div className="skeleton h-4 w-32" />
+            <div className="min-w-0 flex-1">
+              <div className="skeleton h-8 w-56" />
             </div>
           )}
           <Menu
@@ -184,34 +183,28 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </Menu>
         </div>
 
-        {detail ? (
-          <div className="min-w-0">
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-[var(--group-muted)]">Your balance here</p>
-                <p className={`tnum mt-0.5 text-2xl font-semibold tracking-tight md:whitespace-nowrap ${myGroupBalance > 0 ? "text-owed" : myGroupBalance < 0 ? "text-owe" : "text-[var(--group-ink)]"}`}>
-                  {myGroupBalance === 0 ? "Settled up" : (
-                    <>{myGroupBalance > 0 ? "Owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></>
-                  )}
-                </p>
-              </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="skeleton h-9 w-44" />
-          </div>
-        )}
-
-        {/* Adding an expense here is already one tap away — the bottom nav's "+" and the
-            desktop sidebar both target the current group — so settling is the only
-            action this header needs to carry. */}
-        <div className="mt-3 md:mt-0">
+        {/* Below lg the balance and the action it justifies share one row.
+            `lg:contents` hands both straight to the section's grid at lg.
+            Adding an expense here is already one tap away — the bottom nav's "+"
+            and the desktop sidebar both target the current group — so settling is
+            the only action this panel needs to carry. */}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 lg:mt-0 lg:contents">
+          {detail ? (
+            <p className={`tnum whitespace-nowrap text-2xl font-semibold tracking-tight ${myGroupBalance > 0 ? "text-owed" : myGroupBalance < 0 ? "text-owe" : "text-[var(--group-ink)]"}`}>
+              {myGroupBalance === 0 ? "Settled up" : (
+                <>{myGroupBalance > 0 ? "Owed " : "You owe "}<Money cents={Math.abs(myGroupBalance)} currency={detail.group.currency} /></>
+              )}
+            </p>
+          ) : (
+            <div className="skeleton h-8 w-44" />
+          )}
           <Button
             /* The group color is per-instance, so it comes in as an inline style:
                a utility class for it loses to the shared disabled: styling that every
                Button carries. Dropping the style when disabled lets that grey show. */
             variant="ghost"
             /* opacity is the one hover affordance an inline background cannot swallow. */
-            className="w-full hover:opacity-90"
+            className="shrink-0 hover:opacity-90 lg:w-full"
             style={canSettle ? { background: "var(--group-color)", color: "var(--color-white)" } : undefined}
             disabled={!canSettle}
             title={canSettle ? undefined : "Invite a friend first"}
@@ -274,17 +267,17 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       {/* Three common destinations stay visible on mobile. Less-used views live
           under More, while desktop keeps the full set in one scan. */}
       <div role="tablist" aria-label="Group sections" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
-        {PRIMARY_TABS.map(({ key, label, icon: Icon }) => (
+        {PRIMARY_TABS.map(({ key, label }) => (
           <button
             key={key}
             role="tab"
             aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex min-w-0 items-center justify-center rounded-lg px-0.5 py-2.5 text-xs font-medium transition-colors ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
-            <Icon className="h-4 w-4" /> {label}
+            <span className="truncate">{label}</span>
           </button>
         ))}
         <Menu
@@ -294,11 +287,11 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               type="button"
               role="tab"
               aria-selected={moreTabActive}
-              className={`flex w-full min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-xs font-medium transition-colors ${
+              className={`flex w-full min-w-0 items-center justify-center rounded-lg px-0.5 py-2.5 text-xs font-medium transition-colors ${
                 moreTabActive ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
               }`}
             >
-              <MoreHorizontal className="h-4 w-4" /> More
+              <span className="truncate">More</span>
             </button>
           }
         >
@@ -414,7 +407,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         <p className="text-xs font-semibold uppercase text-ink-faint">
                           {new Date(String(e.date).slice(0, 10) + "T00:00:00").toLocaleDateString("en-US", { month: "short" })}
                         </p>
-                        <p className="font-display text-lg font-semibold leading-none">
+                        <p className="font-display text-base font-semibold leading-none">
                           {new Date(String(e.date).slice(0, 10) + "T00:00:00").getDate()}
                         </p>
                       </div>
@@ -558,7 +551,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     should pay{" "}
                     <Link href={`/people/${s.to}`} className="font-semibold hover:text-accent-dark hover:underline">{memberName(s.to)}</Link>
                   </span>
-                  <span className="tnum ml-auto font-display text-lg font-semibold">{fmtMoney(s.amountCents, detail.group.currency)}</span>
+                  <span className="tnum ml-auto font-display text-base font-semibold">{fmtMoney(s.amountCents, detail.group.currency)}</span>
                   {(me?.id === s.from || me?.id === s.to) && (
                     <Button
                       variant="secondary"
@@ -804,9 +797,12 @@ function GroupSwitcher({
         aria-label={`Switch group (current: ${currentName})`}
         className="flex w-full items-center gap-2 rounded-lg text-left text-[var(--group-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--group-color)]"
       >
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-xl font-semibold tracking-tight">{currentName}</span>
-          <span className="block text-xs font-medium text-[var(--group-muted)]">{memberCount} {memberCount === 1 ? "member" : "members"} · {currency}</span>
+        {/* Name and metadata sit on one baseline. Stacked, they made a two-line
+            block, and both 32px controls centred against it instead of against
+            the name — which is what read as misalignment. */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+          <span className="min-w-0 truncate text-xl font-semibold tracking-tight">{currentName}</span>
+          <span className="shrink-0 text-xs font-medium text-[var(--group-muted)]">{memberCount} {memberCount === 1 ? "member" : "members"} · {currency}</span>
         </span>
         <span className="group-context-control shrink-0">
           <ChevronDown className={`h-5 w-5 transition-transform ${open ? "rotate-180" : ""}`} />

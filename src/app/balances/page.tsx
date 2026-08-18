@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Copy, Check, MessageSquare, UserPlus, UserMinus, HandCoins, Scale, Receipt, Bell, X, Search, UserRound } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtTime, useApiData, useFormState, useMe } from "@/lib/client";
-import { AppShell, PageTitle } from "@/components/shell";
+import { AppShell } from "@/components/shell";
 import { Card, CardHeader, EmptyState, Button, Avatar, Modal, Field, Input, ErrorNote, Menu, MenuItem } from "@/components/ui";
 import { DirectPaymentsModal } from "@/components/direct-payments-modal";
 import { DirectSettleModal } from "@/components/direct-settle-modal";
@@ -131,27 +131,18 @@ export default function BalancesPage() {
   }
 
   return (
-    <AppShell>
-      <PageTitle
-        title="Balances"
-        action={
+    <AppShell title="Balances">
+      {/* Invite — a shareable link, never a raw code on screen. */}
+      <Card className="mb-3 flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 md:shrink-0">
+        <p className="text-sm font-medium">Invite a friend</p>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={copyInviteLink} disabled={!inviteCode}>
+            {copied ? <><Check className="h-4 w-4 text-owed" /> Copied</> : <><Copy className="h-4 w-4" /> Copy link</>}
+          </Button>
           <Button onClick={() => { setAddOpen(true); setError(null); }}>
             <UserPlus className="h-4 w-4" /> Add friend
           </Button>
-        }
-      />
-
-      {/* Invite — a shareable link, never a raw code on screen. */}
-      <Card className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft text-accent-dark">
-            <UserPlus className="h-4 w-4" />
-          </span>
-          <p className="text-sm font-medium">Invite a friend</p>
         </div>
-        <Button variant="secondary" onClick={copyInviteLink} disabled={!inviteCode}>
-          {copied ? <><Check className="h-4 w-4 text-owed" /> Copied</> : <><Copy className="h-4 w-4" /> Copy invite link</>}
-        </Button>
       </Card>
 
       {addNote && (
@@ -253,7 +244,7 @@ export default function BalancesPage() {
           <EmptyState
             icon={<Scale className="h-7 w-7" />}
             title="No friends yet"
-            hint="Share your invite link, or add a friend with their code."
+            hint="Copy your invite link, or add a friend with their code."
             action={<Button variant="secondary" onClick={() => setAddOpen(true)}><UserPlus className="h-4 w-4" /> Add friend</Button>}
           />
         ) : filteredFriends.length === 0 ? (
@@ -287,13 +278,9 @@ export default function BalancesPage() {
         </div>
       </Card>
 
-      <p className="mt-3 text-center text-xs text-ink-faint md:shrink-0">
-        Settling up records a payment made offline — SplitWisest tracks who owes whom, it never moves money.
-      </p>
-
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add a friend">
         <form onSubmit={addFriend} className="space-y-4">
-          <Field label="Friend's invite code" hint="We'll send them a request — you become friends once they accept.">
+          <Field label="Friend's invite code">
             <Input value={code} onChange={(e) => setCode(e.target.value)} required autoFocus />
           </Field>
           <ErrorNote message={error} />
