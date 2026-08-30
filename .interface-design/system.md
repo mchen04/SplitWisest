@@ -17,7 +17,7 @@ ornament. Consistency beats novelty; these decisions compound — follow them.
   **Never hard-code hex in components** — the only exception is the deterministic
   Avatar hue.
 - Light: canvas `paper #f5f6f7`, `card #ffffff`, `subtle #eef0f2` (fills/hover),
-  `ink #181b1f`, `ink-soft #545b63`, `ink-faint #6c747d`, `line #e5e7ea`.
+  `ink #181b1f`, `ink-soft #545b63`, `ink-faint #565d64`, `line #e5e7ea`.
 - Dark: `[data-theme="dark"]` flips the same token names. Cards **lift** above the
   canvas (`paper #131619` → `card #1c2024`) — depth is a surface-lightness step, not a
   shadow (shadows are invisible in dark UIs).
@@ -39,13 +39,12 @@ ornament. Consistency beats novelty; these decisions compound — follow them.
   Do not reintroduce it anywhere else.
 - Money & aligned figures use `.tnum` (tabular figures) so columns line up and digits
   don't reflow as values change.
-- Ramp (overridden in `globals.css`): `xs` 12/16, `sm` 14/20, `base` 16/24,
-  `lg` 18/24, `xl` 20/28, `2xl` 24/28, `3xl` 32/36, `4xl` 40/44.
-- Roles: page title `text-2xl font-semibold tracking-tight`; card header
-  `text-lg font-semibold`; row title `text-sm/base font-medium` (semibold when
-  unread); metadata `text-xs text-ink-faint`; balance money `text-3xl/4xl font-semibold
-  tnum`; form label `text-xs font-medium text-ink-soft` (**sentence case**, not
-  uppercase — reserve uppercase only for true section dividers).
+- Ramp: `xs` 12/16, `sm` 14/20, `base` 16/24, `xl` 20/28,
+  `2xl` 24/32, `3xl` 32/36, `4xl` 40/44. The 18px `lg` step is disabled.
+- Roles: card and dialog headers use `text-xl font-semibold tracking-tight`.
+- Row titles use `text-sm/base font-medium`. Unread rows can use semibold.
+- Metadata uses `text-xs text-ink-faint`. Balance money uses `text-2xl/3xl/4xl font-semibold tnum`.
+- Form labels use `text-sm font-medium text-ink-soft` and sentence case.
 
 ## Spacing & density
 
@@ -72,14 +71,18 @@ Never introduce other radius values.
   primary / secondary / ghost / danger. **One primary per surface** — destructive uses
   `danger` and is never visually dominant. Secondary actions collapse into an
   `IconButton` group or a `Menu` (overflow `⋯`), never a row of 4–5 equal buttons.
-- **IconButton / Menu**: icon-only actions carry an `aria-label` + tooltip and a
-  ≥38px hit area. Use `Menu` for secondary/overflow actions.
-- **Input / Select / Textarea**: 38px height; `bg-subtle`; focus = `border-accent` +
+- **IconButton / Menu**: icon-only actions carry an `aria-label` and tooltip.
+  Their hit area uses `--control-h`. Menus support arrows, Home, End, Escape, and focus return.
+- **Input / Select / Textarea**: `--control-h`; `bg-card`; focus = `border-accent` +
   3px `ring-accent-soft`. `Select` renders a custom chevron (no raw native arrow).
 - **Card**: `border-line` + `shadow-card`, content-sized (never full-height filler).
   `CardHeader` `min-h-11`, sentence-case header, optional single action link.
-- **Modal**: bottom-sheet on mobile (`rounded-t-2xl items-end`), centered on `sm+`;
-  focus-trapped; Escape closes; primary action in a sticky footer.
+- **Modal**: bottom sheet on mobile and centered on `sm+`. The mobile panel includes the bottom safe area.
+- Modal focus skips hidden and disabled controls. Escape closes and focus returns to the opener.
+- Long forms keep their actions in a sticky footer.
+- **Expense form**: keep Paid by, Date, and Category visible after the core fields.
+- Default payer to the current user. Use local today and no category as the other defaults.
+- Keep split method, notes, and receipts in separate disclosures.
 - **Avatar**: deterministic `hsl(hash 52% 45%)`, initials, sizes sm 24 / md 32 / lg 40.
   The current user is colored like everyone else (never a black/empty circle).
 - **Money**: `tnum`; when signed, pair color **and** an explicit `+ / −` and, in
@@ -91,7 +94,7 @@ Never introduce other radius values.
 - Hover: `hover:bg-subtle` on rows, `hover:bg-accent-dark` on primary.
 - Focus: every interactive element shows a visible ring —
   `focus-visible:ring-[3px] focus-visible:ring-accent-soft` (built into Button/inputs).
-- Disabled: `opacity-50 pointer-events-none`. Busy buttons show a spinner and disable.
+- Disabled buttons use neutral surface and text tokens. Busy buttons keep their tone, show a spinner, and disable.
 
 ## Layout shell
 
@@ -101,11 +104,13 @@ Never introduce other radius values.
   weight.
 - Home is a glance surface: **one** hero net-balance number + a contextual next step,
   then groups / friends / a short activity peek.
-- Mobile: sticky top bar + bottom nav with safe-area padding; full-page flows; primary
-  actions thumb-reachable. Headers never expose raw invite hashes or clip the title.
+- Mobile: locked app frame and bottom navigation with safe-area padding.
+- The content region scrolls. Chat keeps its own message-list scroll.
+- Primary actions stay thumb-reachable. Modal actions include the bottom safe area.
 - Master-detail (Messages): left list pane (`md:w-80`) + detail in one Card; desktop
   auto-selects the most recent conversation; mobile shows list, then full-screen thread.
 - Switchers, not back-outs: group title is a switcher dropdown.
+- Group tabs and switchers support arrow keys. Menus also support Home, End, and Escape.
 
 ## Content & copy rules
 
