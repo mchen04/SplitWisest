@@ -486,7 +486,7 @@ export function ExpenseForm({
                         setMethod(m);
                         if (m === "solo") setSelected(new Set([selected.values().next().value ?? defaultSoloId]));
                       }}
-                      className={`min-h-[var(--control-h)] rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      className={`min-h-11 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors sm:min-h-[var(--control-h)] ${
                         method === m
                           ? "border-accent bg-accent-soft text-accent-dark"
                           : "border-line text-ink-soft hover:border-line-strong"
