@@ -57,6 +57,7 @@ export function ExpenseForm({
   open,
   onClose,
   onSaved,
+  onCategoryAdded,
 }: {
   groupId: number;
   groupName: string;
@@ -67,6 +68,7 @@ export function ExpenseForm({
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  onCategoryAdded?: () => void;
 }) {
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -85,7 +87,11 @@ export function ExpenseForm({
   const [taxRate, setTaxRate] = useState(CALIFORNIA_TAX_RATE);
   const [tipEnabled, setTipEnabled] = useState(false);
   const [tipRate, setTipRate] = useState("20");
-  const { data: categoriesData } = useApiData<{ categories: Category[] }>("/api/categories", 0, { sync: false });
+  const {
+    data: categoriesData,
+    error: categoriesError,
+    reload: reloadCategories,
+  } = useApiData<{ categories: Category[] }>("/api/categories", 0, { sync: false });
   const [addedCategories, setAddedCategories] = useState<Category[]>([]);
   const baseCategories = categoriesData?.categories ?? [];
   const categories = [
@@ -94,6 +100,7 @@ export function ExpenseForm({
   ];
   const [newCategory, setNewCategory] = useState("");
   const [addingCat, setAddingCat] = useState(false);
+  const [categoryBusy, setCategoryBusy] = useState(false);
   const [showExpenseOptions, setShowExpenseOptions] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [savedAttachments, setSavedAttachments] = useState<ExistingExpense["attachments"]>([]);
@@ -108,6 +115,7 @@ export function ExpenseForm({
     setBusy(false);
     setFiles([]);
     setAddingCat(false);
+    setCategoryBusy(false);
     setNewCategory("");
     setSavedAttachments(existing?.attachments ?? []);
     if (existing) {
@@ -188,11 +196,6 @@ export function ExpenseForm({
     method === "itemized" && itemSubtotalCents > 0 ? (itemizedTotalCents / 100).toFixed(2) : amount;
 
   const participantList = members.filter((m) => selected.has(m.id));
-  const payerName = members.find((member) => member.id === payerId)?.displayName ?? "Someone";
-  const dateSummary = date === todayStr()
-    ? "today"
-    : new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
   // Live validation feedback for split inputs
   const splitStatus = useMemo(() => {
     if (method === "solo" || method === "equal" || effectiveAmountCents === 0) return null;
@@ -237,15 +240,20 @@ export function ExpenseForm({
   }
 
   async function addCategory() {
-    if (!newCategory.trim()) return;
+    if (!newCategory.trim() || categoryBusy) return;
+    setCategoryBusy(true);
     try {
       const c = await api<Category>("/api/categories", { body: { name: newCategory.trim() } });
       setAddedCategories((current) => [...current, c]);
       setCategoryId(c.id);
       setNewCategory("");
       setAddingCat(false);
+      reloadCategories();
+      onCategoryAdded?.();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Could not add category");
+    } finally {
+      setCategoryBusy(false);
     }
   }
 
@@ -269,7 +277,11 @@ export function ExpenseForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (effectiveAmountCents <= 0) return setError("Enter a positive amount");
+    if (effectiveAmountCents <= 0) {
+      setError("Enter a positive amount");
+      document.getElementById("expense-amount")?.focus();
+      return;
+    }
     if (method !== "itemized" && participantList.length === 0) return setError("Pick at least one participant");
 
     const participants = buildParticipants();
@@ -309,7 +321,6 @@ export function ExpenseForm({
         const r = await api<{ id: number }>(`/api/groups/${groupId}/expenses`, { body });
         expenseId = r.id;
       }
-      onSaved();
       try {
         for (const f of files) {
           const form = new FormData();
@@ -317,7 +328,10 @@ export function ExpenseForm({
           await api(`/api/expenses/${expenseId}/attachments`, { form });
         }
       } catch (err) {
-        const message = err instanceof ApiClientError ? err.message : "Receipt upload failed";
+        const message = !navigator.onLine
+          ? "You are offline. Reconnect and try again."
+          : err instanceof ApiClientError ? err.message : "Receipt upload failed";
+        onSaved();
         if (createdNewExpense) {
           onClose();
           window.alert(`Expense saved, but receipt upload failed: ${message}`);
@@ -330,7 +344,11 @@ export function ExpenseForm({
       onSaved();
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not save expense");
+      setError(
+        !navigator.onLine
+          ? "You are offline. Reconnect to save this expense."
+          : err instanceof ApiClientError ? err.message : "Could not save expense"
+      );
       setBusy(false);
     }
   }
@@ -350,7 +368,9 @@ export function ExpenseForm({
         <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-2">
           <Field label={method === "itemized" ? "Total" : "Amount"}>
             <Input
+              id="expense-amount"
               inputMode="decimal"
+              enterKeyHint="next"
               value={displayedAmount}
               onChange={(e) => setAmount(e.target.value)}
               required={method !== "itemized"}
@@ -369,8 +389,71 @@ export function ExpenseForm({
         </div>
 
         <Field label="Description">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="Dinner, groceries, tickets…" />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} enterKeyHint="next" required maxLength={120} placeholder="Dinner, groceries, tickets…" />
         </Field>
+
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line p-3 min-[22rem]:grid-cols-2 sm:grid-cols-3">
+          <Field label="Paid by">
+            <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.displayName}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Date">
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+          </Field>
+          <div className="col-span-1 min-[22rem]:col-span-2 sm:col-span-1">
+            <Field label="Category">
+              <Select
+                value={categoryId}
+                onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
+                aria-describedby={categoriesError ? "expense-category-error" : undefined}
+              >
+                <option value="">No category</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}{c.custom ? " (custom)" : ""}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          {categoriesError && (
+            <p id="expense-category-error" role="status" className="col-span-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
+              Categories could not load.{" "}
+              <button type="button" onClick={reloadCategories} className="min-h-[var(--control-h)] font-semibold underline">
+                Try again
+              </button>
+            </p>
+          )}
+
+          {addingCat ? (
+            <div className="col-span-1 flex gap-2 min-[22rem]:col-span-2 sm:col-span-3">
+              <Input
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
+                  e.preventDefault();
+                  void addCategory();
+                }}
+                placeholder="New category name"
+                disabled={categoryBusy}
+                autoFocus
+              />
+              <Button type="button" variant="secondary" onClick={addCategory} busy={categoryBusy} disabled={!newCategory.trim()}>Add</Button>
+              <Button type="button" variant="ghost" onClick={() => { setAddingCat(false); setNewCategory(""); }} disabled={categoryBusy}>Cancel</Button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAddingCat(true)}
+              className="col-span-1 inline-flex min-h-[var(--control-h)] items-center gap-1 justify-self-start text-xs font-medium text-accent hover:underline min-[22rem]:col-span-2 sm:col-span-3"
+            >
+              <Plus className="h-3.5 w-3.5" /> New category
+            </button>
+          )}
+        </div>
 
         <div className="rounded-xl border border-line">
           <button
@@ -380,51 +463,15 @@ export function ExpenseForm({
             className="flex min-h-[var(--control-h)] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-subtle"
           >
             <span className="min-w-0 flex-1 truncate">
-              <span className="font-medium text-ink">{payerName.split(" ")[0]} paid</span>
-              <span className="text-ink-faint"> · {METHOD_LABELS[method]} · {dateSummary}</span>
+              <span className="font-medium text-ink">Split</span>
+              <span className="text-ink-faint"> · {METHOD_LABELS[method]}</span>
             </span>
             <span className="shrink-0 font-medium text-accent">Change</span>
             <ChevronDown className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${showExpenseOptions ? "rotate-180" : ""}`} />
           </button>
 
           {showExpenseOptions && (
-            <div className="space-y-4 border-t border-line p-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <Field label="Paid by">
-                  <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
-                    {members.map((m) => (
-                      <option key={m.id} value={m.id}>{m.displayName}</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Date">
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-                </Field>
-                <Field label="Category">
-                  <Select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
-                  >
-                    <option value="">No category</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}{c.custom ? " (custom)" : ""}</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-
-              {addingCat ? (
-                <div className="flex gap-2">
-                  <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="New category name" autoFocus />
-                  <Button type="button" variant="secondary" onClick={addCategory} disabled={!newCategory.trim()}>Add</Button>
-                  <Button type="button" variant="ghost" onClick={() => { setAddingCat(false); setNewCategory(""); }}>Cancel</Button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setAddingCat(true)} className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline">
-                  <Plus className="h-3.5 w-3.5" /> New category
-                </button>
-              )}
-
+            <div className="border-t border-line p-3">
               <fieldset>
                 <legend className="mb-1 block text-sm font-medium text-ink-soft">Split method</legend>
                 <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Split method">
@@ -439,7 +486,7 @@ export function ExpenseForm({
                         setMethod(m);
                         if (m === "solo") setSelected(new Set([selected.values().next().value ?? defaultSoloId]));
                       }}
-                      className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      className={`min-h-[var(--control-h)] rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
                         method === m
                           ? "border-accent bg-accent-soft text-accent-dark"
                           : "border-line text-ink-soft hover:border-line-strong"
@@ -503,7 +550,7 @@ export function ExpenseForm({
             type="button"
             onClick={() => setShowDetails((shown) => !shown)}
             aria-expanded={showDetails}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-ink-soft hover:bg-subtle"
+            className="flex min-h-[var(--control-h)] w-full items-center gap-2 px-3 py-2.5 text-left text-sm font-medium text-ink-soft hover:bg-subtle"
           >
             <Paperclip className="h-4 w-4" />
             <span className="flex-1">{showDetails ? "Note and receipts" : "Add note or receipt"}</span>
@@ -517,7 +564,7 @@ export function ExpenseForm({
 
               <Field label="Receipts" hint="Images or PDF, up to 4 MB each">
                 <div className="flex flex-wrap items-center gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:bg-subtle hover:text-ink">
+                  <label className="inline-flex min-h-[var(--control-h)] cursor-pointer items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-sm font-medium text-ink-soft hover:bg-subtle hover:text-ink">
                     <Paperclip className="h-4 w-4" /> Attach file
                     <input
                       type="file"
@@ -533,7 +580,7 @@ export function ExpenseForm({
                   {files.map((f, i) => (
                     <span key={i} className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent-soft px-2.5 py-1 text-xs text-accent-dark">
                       <span className="truncate">{f.name}</span>
-                      <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>
+                      <button type="button" className="-mr-2 inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center" aria-label={`Remove ${f.name}`} onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))}>
                         ×
                       </button>
                     </span>
@@ -549,7 +596,7 @@ export function ExpenseForm({
                       <button
                         type="button"
                         aria-label={`Remove ${a.filename}`}
-                        className="text-ink-faint hover:text-danger"
+                        className="-mr-2 inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center text-ink-faint hover:text-danger"
                         onClick={async () => {
                           if (!window.confirm(`Remove the receipt "${a.filename}"?`)) return;
                           try {
@@ -579,7 +626,7 @@ export function ExpenseForm({
             Cancel
           </Button>
           <Button type="submit" busy={busy} disabled={splitStatus ? !splitStatus.ok : false}>
-            {existing ? "Save expense changes" : "Create expense"}
+            {busy ? existing ? "Saving changes…" : "Creating expense…" : existing ? "Save expense changes" : "Create expense"}
           </Button>
         </div>
       </form>

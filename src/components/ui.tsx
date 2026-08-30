@@ -256,15 +256,15 @@ export function Modal({
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const focusables = () =>
-      panelRef.current?.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      ) ?? [];
+      [...(panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? [])].filter((element) => element.getClientRects().length > 0);
     const first = focusables()[0];
     first?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCloseRef.current();
       if (e.key === "Tab") {
-        const els = [...focusables()];
+        const els = focusables();
         if (els.length === 0) return;
         const idx = els.indexOf(document.activeElement as HTMLElement);
         if (e.shiftKey && (idx <= 0 || idx === -1)) {
@@ -295,7 +295,7 @@ export function Modal({
     >
       <div
         ref={panelRef}
-        className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card shadow-pop sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
+        className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card pb-[var(--safe-area-bottom)] shadow-pop sm:rounded-2xl sm:pb-0 ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <h2 className="text-xl font-semibold tracking-tight">{title}</h2>

@@ -36,7 +36,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   // filters
   const { filters, setFilter, reset: resetFilters, active: filtersActive } =
     useFilters({ q: "", cat: "", payer: "", from: "", to: "" });
-  const { data: categoriesData } = useApiData<{ categories: { id: number; name: string }[] }>(
+  const { data: categoriesData, reload: reloadCategories } = useApiData<{ categories: { id: number; name: string }[] }>(
     "/api/categories", 0, { sync: false }
   );
   const categories = categoriesData?.categories ?? [];
@@ -680,6 +680,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             open={expenseOpen}
             onClose={() => setExpenseOpen(false)}
             onSaved={refreshAll}
+            onCategoryAdded={reloadCategories}
           />
           <SettleModal
             open={settleOpen}
