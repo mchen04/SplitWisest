@@ -101,7 +101,6 @@ export function ExpenseForm({
   const [newCategory, setNewCategory] = useState("");
   const [addingCat, setAddingCat] = useState(false);
   const [categoryBusy, setCategoryBusy] = useState(false);
-  const [showExpenseOptions, setShowExpenseOptions] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [savedAttachments, setSavedAttachments] = useState<ExistingExpense["attachments"]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +127,6 @@ export function ExpenseForm({
       setNotes(existing.notes);
       setShowDetails(Boolean(existing.notes || existing.attachments.length));
       setMethod(existing.splitMethod === "equal" && existing.shares.length === 1 ? "solo" : existing.splitMethod as Method);
-      setShowExpenseOptions(false);
       setSelected(new Set(existing.shares.map((s) => s.userId)));
       const vals: Record<number, string> = {};
       for (const s of existing.shares) {
@@ -160,7 +158,6 @@ export function ExpenseForm({
       setNotes("");
       setShowDetails(false);
       setMethod("solo");
-      setShowExpenseOptions(false);
       setSelected(new Set([defaultSoloId]));
       setValues({});
       setItems([]);
@@ -393,7 +390,7 @@ export function ExpenseForm({
           <Input value={title} onChange={(e) => setTitle(e.target.value)} enterKeyHint="next" required maxLength={120} placeholder="Dinner, groceries, tickets…" />
         </Field>
 
-        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line p-3 min-[22rem]:grid-cols-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line p-3 min-[25rem]:grid-cols-2 sm:grid-cols-3">
           <Field label="Paid by">
             <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
               {members.map((m) => (
@@ -404,7 +401,7 @@ export function ExpenseForm({
           <Field label="Date">
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </Field>
-          <div className="col-span-1 min-[22rem]:col-span-2 sm:col-span-1">
+          <div className="col-span-1 min-[25rem]:col-span-2 sm:col-span-1">
             <Field label="Category">
               <Select
                 id="expense-category"
@@ -421,7 +418,7 @@ export function ExpenseForm({
           </div>
 
           {categoriesError && (
-            <div className="col-span-1 flex flex-wrap items-center gap-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
+            <div className="col-span-1 flex flex-wrap items-center gap-1 text-xs text-danger min-[25rem]:col-span-2 sm:col-span-3">
               <p id="expense-category-error" role="alert">Categories could not load.</p>
               <button type="button" onClick={reloadCategories} className="min-h-[var(--control-h)] font-semibold underline">
                 Try again
@@ -430,7 +427,7 @@ export function ExpenseForm({
           )}
 
           {addingCat ? (
-            <div className="col-span-1 flex gap-2 min-[22rem]:col-span-2 sm:col-span-3">
+            <div className="col-span-1 flex gap-2 min-[25rem]:col-span-2 sm:col-span-3">
               <Input
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
@@ -463,58 +460,38 @@ export function ExpenseForm({
               type="button"
               id="expense-new-category"
               onClick={() => setAddingCat(true)}
-              className="col-span-1 inline-flex min-h-[var(--control-h)] items-center gap-1 justify-self-start text-xs font-medium text-accent hover:underline min-[22rem]:col-span-2 sm:col-span-3"
+              className="col-span-1 inline-flex min-h-[var(--control-h)] items-center gap-1 justify-self-start text-xs font-medium text-accent hover:underline min-[25rem]:col-span-2 sm:col-span-3"
             >
               <Plus className="h-3.5 w-3.5" /> New category
             </button>
           )}
         </div>
 
-        <div className="rounded-xl border border-line">
-          <button
-            type="button"
-            onClick={() => setShowExpenseOptions((shown) => !shown)}
-            aria-expanded={showExpenseOptions}
-            className="flex min-h-[var(--control-h)] w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-subtle"
-          >
-            <span className="min-w-0 flex-1 truncate">
-              <span className="font-medium text-ink">Split</span>
-              <span className="text-ink-faint"> · {METHOD_LABELS[method]}</span>
-            </span>
-            <span className="shrink-0 font-medium text-accent">Change</span>
-            <ChevronDown className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${showExpenseOptions ? "rotate-180" : ""}`} />
-          </button>
-
-          {showExpenseOptions && (
-            <div className="border-t border-line p-3">
-              <fieldset>
-                <legend className="mb-1 block text-sm font-medium text-ink-soft">Split method</legend>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Split method">
-                  {(Object.keys(METHOD_LABELS) as Method[]).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      role="radio"
-                      aria-checked={method === m}
-                      onClick={() => {
-                        if (m === "equal" && method === "solo") setSelected(new Set(members.map((member) => member.id)));
-                        setMethod(m);
-                        if (m === "solo") setSelected(new Set([selected.values().next().value ?? defaultSoloId]));
-                      }}
-                      className={`min-h-11 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors sm:min-h-[var(--control-h)] ${
-                        method === m
-                          ? "border-accent bg-accent-soft text-accent-dark"
-                          : "border-line text-ink-soft hover:border-line-strong"
-                      }`}
-                    >
-                      {METHOD_LABELS[m]}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-            </div>
-          )}
-        </div>
+        <fieldset className="rounded-xl border border-line p-3">
+          <legend className="mb-1 block text-sm font-medium text-ink-soft">Split method</legend>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Split method">
+            {(Object.keys(METHOD_LABELS) as Method[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={method === m}
+                onClick={() => {
+                  if (m === "equal" && method === "solo") setSelected(new Set(members.map((member) => member.id)));
+                  setMethod(m);
+                  if (m === "solo") setSelected(new Set([selected.values().next().value ?? defaultSoloId]));
+                }}
+                className={`min-h-11 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors sm:min-h-[var(--control-h)] ${
+                  method === m
+                    ? "border-accent bg-accent-soft text-accent-dark"
+                    : "border-line text-ink-soft hover:border-line-strong"
+                }`}
+              >
+                {METHOD_LABELS[m]}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         {method !== "itemized" ? (
           <ParticipantSplit
