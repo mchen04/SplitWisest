@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 const template = readFileSync(join(process.cwd(), "src/sw/sw.template.js"), "utf8");
 const manifest = JSON.parse(readFileSync(join(process.cwd(), "public/manifest.json"), "utf8"));
+const offline = readFileSync(join(process.cwd(), "public/offline.html"), "utf8");
 const layout = readFileSync(join(process.cwd(), "src/app/layout.tsx"), "utf8");
 const client = readFileSync(join(process.cwd(), "src/components/ServiceWorkerRegistration.tsx"), "utf8");
 
@@ -49,6 +50,21 @@ describe("manifest ↔ worker ↔ client agreement", () => {
     expect(manifest.display).toBe("standalone");
   });
 
+  it("uses the current app colors in install and offline surfaces", () => {
+    expect(manifest.background_color).toBe("#f5f6f7");
+    expect(manifest.theme_color).toBe("#15795f");
+    expect(offline).toContain("background: #f5f6f7");
+    expect(offline).toContain("background: #15795f");
+  });
+
+  it("keeps the offline action clear of device safe areas", () => {
+    expect(offline).toContain("viewport-fit=cover");
+    expect(offline).toContain("env(safe-area-inset-top)");
+    expect(offline).toContain("env(safe-area-inset-right)");
+    expect(offline).toContain("env(safe-area-inset-bottom)");
+    expect(offline).toContain("env(safe-area-inset-left)");
+  });
+
   it("the worker precaches and repairs exactly the launched start_url", () => {
     expect(template).toContain(`const START_URL = "${manifest.start_url}"`);
   });
@@ -59,5 +75,11 @@ describe("manifest ↔ worker ↔ client agreement", () => {
 
   it("the client registers the worker at the scope root", () => {
     expect(client).toContain('navigator.serviceWorker.register("/sw.js"');
+  });
+
+  it("checks form choices before a deploy reload", () => {
+    expect(client).toContain('document.addEventListener("change", draftGuard.trackChoice, true)');
+    expect(client).toContain('document.addEventListener("click", draftGuard.trackStatefulButton, true)');
+    expect(client).toContain("hasUnsavedInput: draftGuard.hasUnsavedInput()");
   });
 });

@@ -2,32 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Offline | SplitWisest</title>
+    <script>
+      (function () {
+        var saved = null;
+        try { saved = localStorage.getItem("splitwisest-theme"); } catch (error) {}
+        var dark = typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = saved === "light" || saved === "dark" ? saved : dark ? "dark" : "light";
+      })();
+    </script>
     <style>
+      html { color-scheme: light; }
       body {
         margin: 0;
         min-height: 100vh;
+        min-height: 100dvh;
+        box-sizing: border-box;
         display: grid;
         place-items: center;
-        background: #faf9f5;
-        color: #1f2a26;
+        padding: calc(1rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) calc(1rem + env(safe-area-inset-bottom)) calc(1rem + env(safe-area-inset-left));
+        background: #f5f6f7;
+        color: #181b1f;
         font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
         text-align: center;
       }
-      .card { padding: 2rem; }
+      .card { box-sizing: border-box; width: min(28rem, 100%); padding: 1rem; }
       img { width: 72px; height: 72px; border-radius: 18px; }
       h1 { font-size: 1.25rem; margin: 1rem 0 0.25rem; }
-      p { color: #5b6b65; margin: 0 0 1.25rem; }
+      p { color: #545b63; margin: 0 0 1.25rem; }
       button {
-        background: #16735a;
+        min-height: 44px;
+        background: #15795f;
         color: #fff;
         border: 0;
         border-radius: 8px;
         padding: 0.6rem 1.2rem;
         font-size: 0.9rem;
+        font-weight: 600;
         cursor: pointer;
       }
+      button:hover { background: #0f5a46; }
+      button:focus-visible { outline: 3px solid #e7f1ed; outline-offset: 2px; }
+      html[data-theme="dark"] { color-scheme: dark; }
+      html[data-theme="dark"] body { background: #131619; color: #e9ecef; }
+      html[data-theme="dark"] p { color: #aab3bc; }
+      html[data-theme="dark"] button { background: #3fb488; color: #07130d; }
+      html[data-theme="dark"] button:hover { background: #63c79f; }
+      html[data-theme="dark"] button:focus-visible { outline-color: #1b362b; }
     </style>
   </head>
   <body>
