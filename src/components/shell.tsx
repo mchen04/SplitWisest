@@ -100,6 +100,16 @@ export function AppShell({ title, children }: { title?: string; children: ReactN
     setExpensePickerOpen(true);
   }
 
+  useEffect(() => {
+    const resolvedGroups = groupsData?.groups;
+    if (!expensePickerOpen || !resolvedGroups || resolvedGroups.length > 1) return;
+    // A quick tap can open the picker before groups load. Apply the same
+    // zero/one-group shortcut as soon as that request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpensePickerOpen(false);
+    router.push(resolvedGroups.length === 1 ? `/groups/${resolvedGroups[0].id}?add=1` : "/groups");
+  }, [expensePickerOpen, groupsData, router]);
+
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 

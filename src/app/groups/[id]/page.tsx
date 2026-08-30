@@ -160,6 +160,21 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     setTab(next);
     requestAnimationFrame(() => tablist?.querySelector<HTMLButtonElement>(`[data-group-tab="${next}"]`)?.focus());
   }
+  function moveMobileTabFocus(event: React.KeyboardEvent<HTMLButtonElement>, key: Tab | "more") {
+    const tabs: (Tab | "more")[] = [...PRIMARY_TABS.map((item) => item.key), "more"];
+    const index = tabs.indexOf(key);
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const next = tabs[nextIndex];
+    const tablist = event.currentTarget.closest('[role="tablist"]');
+    if (next !== "more") setTab(next);
+    requestAnimationFrame(() => tablist?.querySelector<HTMLButtonElement>(`[data-group-tab="${next}"]`)?.focus());
+  }
   const canSettle = (detail?.members.length ?? 0) >= 2;
   const myGroupBalance = me && detail
     ? detail.balances.find((balance) => balance.userId === me.id)?.netCents ?? 0
@@ -280,8 +295,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Three common destinations stay visible on mobile. Less-used views live
           under More, while desktop keeps the full set in one scan. */}
-      <div className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
-        <div role="tablist" aria-label="Group sections" className="col-span-3 grid grid-cols-3 gap-1">
+      <div role="tablist" aria-label="Group sections" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
+        <div className="col-span-3 grid grid-cols-3 gap-1">
           {PRIMARY_TABS.map(({ key, label }) => (
             <button
               key={key}
@@ -289,9 +304,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               aria-selected={tab === key}
               aria-controls="group-tab-panel"
               data-group-tab={key}
-              tabIndex={tab === key || (moreTabActive && key === PRIMARY_TABS[0].key) ? 0 : -1}
+              tabIndex={tab === key ? 0 : -1}
               onClick={() => setTab(key)}
-              onKeyDown={(event) => moveTabFocus(event, key, PRIMARY_TABS)}
+              onKeyDown={(event) => moveMobileTabFocus(event, key)}
               className={`flex min-h-[var(--control-h)] min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
                 tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
               }`}
@@ -305,7 +320,13 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           trigger={
             <button
               type="button"
+              role="tab"
+              aria-selected={moreTabActive}
+              aria-controls="group-tab-panel"
               aria-label={moreTabActive ? `More group sections, ${TABS.find(({ key }) => key === tab)?.label} selected` : "More group sections"}
+              data-group-tab="more"
+              tabIndex={moreTabActive ? 0 : -1}
+              onKeyDown={(event) => moveMobileTabFocus(event, "more")}
               className={`flex min-h-[var(--control-h)] w-full min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
                 moreTabActive ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
               }`}
