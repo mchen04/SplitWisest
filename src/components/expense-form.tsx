@@ -390,7 +390,7 @@ export function ExpenseForm({
           <Input value={title} onChange={(e) => setTitle(e.target.value)} enterKeyHint="next" required maxLength={120} placeholder="Dinner, groceries, tickets…" />
         </Field>
 
-        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line p-3 min-[25rem]:grid-cols-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 rounded-xl border border-line p-3 min-[22rem]:grid-cols-2 sm:grid-cols-3">
           <Field label="Paid by">
             <Select value={payerId} onChange={(e) => setPayerId(Number(e.target.value))}>
               {members.map((m) => (
@@ -401,7 +401,7 @@ export function ExpenseForm({
           <Field label="Date">
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           </Field>
-          <div className="col-span-1 min-[25rem]:col-span-2 sm:col-span-1">
+          <div className="col-span-1 min-[22rem]:col-span-2 sm:col-span-1">
             <Field label="Category">
               <Select
                 id="expense-category"
@@ -418,7 +418,7 @@ export function ExpenseForm({
           </div>
 
           {categoriesError && (
-            <div className="col-span-1 flex flex-wrap items-center gap-1 text-xs text-danger min-[25rem]:col-span-2 sm:col-span-3">
+            <div className="col-span-1 flex flex-wrap items-center gap-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
               <p id="expense-category-error" role="alert">Categories could not load.</p>
               <button type="button" onClick={reloadCategories} className="min-h-[var(--control-h)] font-semibold underline">
                 Try again
@@ -427,7 +427,7 @@ export function ExpenseForm({
           )}
 
           {addingCat ? (
-            <div className="col-span-1 flex gap-2 min-[25rem]:col-span-2 sm:col-span-3">
+            <div className="col-span-1 flex gap-2 min-[22rem]:col-span-2 sm:col-span-3">
               <Input
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
@@ -460,7 +460,7 @@ export function ExpenseForm({
               type="button"
               id="expense-new-category"
               onClick={() => setAddingCat(true)}
-              className="col-span-1 inline-flex min-h-[var(--control-h)] items-center gap-1 justify-self-start text-xs font-medium text-accent hover:underline min-[25rem]:col-span-2 sm:col-span-3"
+              className="col-span-1 inline-flex min-h-[var(--control-h)] items-center gap-1 justify-self-start text-xs font-medium text-accent hover:underline min-[22rem]:col-span-2 sm:col-span-3"
             >
               <Plus className="h-3.5 w-3.5" /> New category
             </button>
@@ -613,7 +613,7 @@ export function ExpenseForm({
         <ErrorNote message={error} />
         {/* Sticky so Cancel/Submit stay reachable while the long form scrolls
             (on short screens they used to scroll out of the viewport). */}
-        <div className="sticky -bottom-3 -mx-4 -mb-3 flex justify-end gap-2 rounded-b-2xl border-t border-line bg-card px-4 py-2.5">
+        <div className="sticky -bottom-4 -mx-4 -mb-4 flex justify-end gap-2 rounded-b-2xl border-t border-line bg-card px-4 py-2.5">
           <Button type="button" variant="secondary" onClick={onClose}>
             Cancel
           </Button>
