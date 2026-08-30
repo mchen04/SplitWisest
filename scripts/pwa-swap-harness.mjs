@@ -632,25 +632,55 @@ async function suite() {
 
   // S6: foreground-resume across a swap, no navigation.
   if (wants("resume-swap")) {
+    if (!app) throw new Error("resume-swap requires an earlier launch scenario, such as install-fresh");
     const { page } = app;
     const old = liveSlot;
     const target = old === "A" ? "B" : "A";
     const pageBuildBefore = await domBuild(page, dist);
+    const hiddenAt = Date.now();
+    const hiddenState = await safeEval(page, () => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "hidden",
+      });
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => true,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+      return { visibilityState: document.visibilityState, hidden: document.hidden };
+    });
     if (MUTATE !== "no-swap") await swapTo(target);
     await sleep(THROTTLE_WAIT_MS);
+    const pageBuildWhileHidden = await domBuild(page, dist);
+    const loadsWhileHidden = await loadsSince(page, hiddenAt);
+    const stateBeforeResume = await safeEval(page, () => ({
+      visibilityState: document.visibilityState,
+      hidden: document.hidden,
+    }));
     const t0 = Date.now();
-    await safeEval(page, () => {
+    const visibleState = await safeEval(page, () => {
+      delete document.visibilityState;
+      delete document.hidden;
       document.dispatchEvent(new Event("visibilitychange"));
       window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
       window.dispatchEvent(new Event("online"));
+      return { visibilityState: document.visibilityState, hidden: document.hidden };
     });
     const settled = await settleOn(page, dist, target, t0, 90000);
     await sleep(2500); // let the worker finish its post-landing stale sweep
     const probe = await standaloneProbe(page);
     const dump = await cacheDump(page, dist, infos);
     const stale = staleCount(dump, old, loadInfo(liveSlot));
-    record("resume-swap", pageBuildBefore === old && settled.landed && reloadsIn(settled.loads) === 1 && stale.length === 0, {
-      from: old, to: target, pageBuildBefore, probe, ms: settled.ms,
+    record("resume-swap",
+      pageBuildBefore === old
+        && hiddenState.visibilityState === "hidden" && hiddenState.hidden === true
+        && pageBuildWhileHidden === old && loadsWhileHidden.length === 0
+        && stateBeforeResume.visibilityState === "hidden" && stateBeforeResume.hidden === true
+        && visibleState.visibilityState === "visible" && visibleState.hidden === false
+        && settled.landed && reloadsIn(settled.loads) === 1 && stale.length === 0, {
+      from: old, to: target, pageBuildBefore, hiddenState, pageBuildWhileHidden,
+      loadsWhileHidden: loadsWhileHidden.length, stateBeforeResume, visibleState, probe, ms: settled.ms,
       reloads: reloadsIn(settled.loads), loads: settled.loads, staleEntries: stale.length, stale,
     });
   }
@@ -1024,6 +1054,9 @@ try {
     console.error("usage: pwa-swap-harness.mjs <build|suite|all> [--port N] [--scenario a,b] [--mutate name]");
     process.exitCode = 2;
   }
+} catch (error) {
+  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  process.exitCode = 1;
 } finally {
   await stopServer();
   await stopProxy();
