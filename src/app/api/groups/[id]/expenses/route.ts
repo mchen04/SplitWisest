@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 import { handler, intParam, likeEscape, dateParam } from "@/lib/api";
 import { requireUser } from "@/lib/auth";
-import { createExpenseWithActivity, ExpenseBody } from "@/lib/expenses";
+import { createExpenseWithActivity, ExpenseBody, materializeRecurring } from "@/lib/expenses";
+import { finishGroupExpensePage, groupExpensePage } from "@/lib/group-expense-page";
 import { parseGroupId, requireGroupMember } from "@/lib/groups";
 import { versionToken } from "@/lib/versions";
 
@@ -12,6 +13,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const user = await requireUser();
   const groupId = parseGroupId((await params).id);
   await requireGroupMember(groupId, user.id);
+  await materializeRecurring(groupId);
 
   const q = req.nextUrl.searchParams;
   const text = likeEscape(q.get("q"));
@@ -19,16 +21,33 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
   const payerId = intParam(q.get("payerId"));
   const from = dateParam(q.get("from"));
   const to = dateParam(q.get("to"));
-  // Pagination: bounded page (default 50, max 200) with offset. Fetch one extra
-  // row to tell the client whether more pages remain.
-  const limit = Math.min(Math.max(Number(q.get("limit")) || 50, 1), 200);
-  const offset = Math.max(Number(q.get("offset")) || 0, 0);
+  // Lists use bounded pages. Insights request the complete, unfiltered history.
+  const pageRequest = groupExpensePage(q);
+
+  if (pageRequest.complete) {
+    const rows = await sql`
+      SELECT e.converted_cents, e.expense_date, p.display_name AS payer_name,
+        c.name AS category_name
+      FROM expenses e
+      JOIN users p ON p.id = e.payer_id
+      LEFT JOIN categories c ON c.id = e.category_id
+      WHERE e.group_id = ${groupId}`;
+    return NextResponse.json({
+      hasMore: false,
+      expenses: rows.map((e) => ({
+        convertedCents: Number(e.converted_cents),
+        date: e.expense_date,
+        payerName: e.payer_name,
+        categoryName: e.category_name,
+      })),
+    });
+  }
 
   const rows = await sql`
     SELECT e.id, e.title, e.amount_cents, e.currency, e.converted_cents, e.expense_date,
-      e.payer_id, e.category_id, e.notes, e.split_method, e.created_at, e.updated_at,
+      e.payer_id,
       to_char(e.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at_token,
-      p.display_name AS payer_name, c.name AS category_name, c.icon AS category_icon,
+      p.display_name AS payer_name, c.name AS category_name,
       (SELECT COUNT(*) FROM attachments a WHERE a.expense_id = e.id) AS attachment_count,
       (SELECT json_agg(json_build_object('userId', a.user_id, 'shareCents', a.share_cents,
         'convertedShareCents', a.converted_share_cents))
@@ -53,14 +72,13 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       AND (${from}::date IS NULL OR e.expense_date >= ${from}::date)
       AND (${to}::date IS NULL OR e.expense_date <= ${to}::date)
     ORDER BY e.expense_date DESC, e.id DESC
-    LIMIT ${limit + 1} OFFSET ${offset}`;
+    LIMIT ${pageRequest.sqlLimit ?? pageRequest.limit + 1} OFFSET ${pageRequest.offset}`;
 
-  const hasMore = rows.length > limit;
-  const page = hasMore ? rows.slice(0, limit) : rows;
+  const page = finishGroupExpensePage(rows, pageRequest);
 
   return NextResponse.json({
-    hasMore,
-    expenses: page.map((e) => ({
+    hasMore: page.hasMore,
+    expenses: page.items.map((e) => ({
       id: Number(e.id),
       title: e.title,
       amountCents: Number(e.amount_cents),
@@ -69,11 +87,7 @@ export const GET = handler(async (req: NextRequest, { params }: Ctx) => {
       date: e.expense_date,
       payerId: Number(e.payer_id),
       payerName: e.payer_name,
-      categoryId: e.category_id ? Number(e.category_id) : null,
       categoryName: e.category_name,
-      categoryIcon: e.category_icon,
-      notes: e.notes,
-      splitMethod: e.split_method,
       updatedAt: versionToken(e.updated_at_token),
       attachmentCount: Number(e.attachment_count),
       shares: e.shares ?? [],

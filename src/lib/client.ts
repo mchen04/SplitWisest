@@ -188,9 +188,12 @@ export function fmtTime(d: string | Date): string {
   });
 }
 
-export function todayStr(): string {
-  const d = new Date();
+export function localDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function todayStr(): string {
+  return localDateStr(new Date());
 }
 
 export interface Unread {

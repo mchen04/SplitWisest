@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, useFormState, amountInputToCents } from "@/lib/client";
+import { api, useFormState, amountInputToCents, localDateStr } from "@/lib/client";
 import { Button, Field, Input, Select, Modal, ErrorNote } from "./ui";
 import { Member } from "./expense-form";
 
@@ -49,7 +49,7 @@ export function RecurringModal({
     } else {
       setTitle(""); setAmount(""); setPayerId(meId); setCadence("monthly");
       const d = new Date(); d.setDate(d.getDate() + 1);
-      setStartDate(d.toISOString().slice(0, 10));
+      setStartDate(localDateStr(d));
     }
     // Reset only when the modal opens or the edited rule changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

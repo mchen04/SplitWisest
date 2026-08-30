@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, use } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -41,9 +41,9 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   );
   const categories = categoriesData?.categories ?? [];
   const {
-    detail, expenses, hasMoreExpenses, recurring, settlements, hasMoreSettlements,
-    activity, refreshKey, loadError, loadDetail, refreshAll,
-  } = useGroupPageData({ groupId, filters, expenseLimit, settlementLimit });
+    detail, expenses, insightExpenses, insightError, hasMoreExpenses, recurring, settlements, hasMoreSettlements,
+    activity, refreshKey, loadError, loadDetail, reloadInsights, refreshAll,
+  } = useGroupPageData({ groupId, filters, expenseLimit, settlementLimit, insightsEnabled: tab === "insights" });
 
   // modals
   const [expenseOpen, setExpenseOpen] = useState(false);
@@ -146,6 +146,20 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const PRIMARY_TABS = TABS.filter(({ key }) => ["expenses", "balances", "chat"].includes(key));
   const MORE_TABS = TABS.filter(({ key }) => ["insights", "activity"].includes(key));
   const moreTabActive = MORE_TABS.some(({ key }) => key === tab);
+  function moveTabFocus(event: React.KeyboardEvent<HTMLButtonElement>, key: Tab, tabs: { key: Tab }[]) {
+    const index = tabs.findIndex((item) => item.key === key);
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const next = tabs[nextIndex].key;
+    const tablist = event.currentTarget.closest('[role="tablist"]');
+    setTab(next);
+    requestAnimationFrame(() => tablist?.querySelector<HTMLButtonElement>(`[data-group-tab="${next}"]`)?.focus());
+  }
   const canSettle = (detail?.members.length ?? 0) >= 2;
   const myGroupBalance = me && detail
     ? detail.balances.find((balance) => balance.userId === me.id)?.netCents ?? 0
@@ -266,28 +280,33 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Three common destinations stay visible on mobile. Less-used views live
           under More, while desktop keeps the full set in one scan. */}
-      <div role="tablist" aria-label="Group sections" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
-        {PRIMARY_TABS.map(({ key, label }) => (
-          <button
-            key={key}
-            role="tab"
-            aria-selected={tab === key}
-            onClick={() => setTab(key)}
-            className={`flex min-w-0 items-center justify-center rounded-lg px-0.5 py-2.5 text-xs font-medium transition-colors ${
-              tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
-            }`}
-          >
-            <span className="truncate">{label}</span>
-          </button>
-        ))}
+      <div className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
+        <div role="tablist" aria-label="Group sections" className="col-span-3 grid grid-cols-3 gap-1">
+          {PRIMARY_TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              aria-controls="group-tab-panel"
+              data-group-tab={key}
+              tabIndex={tab === key || (moreTabActive && key === PRIMARY_TABS[0].key) ? 0 : -1}
+              onClick={() => setTab(key)}
+              onKeyDown={(event) => moveTabFocus(event, key, PRIMARY_TABS)}
+              className={`flex min-h-[var(--control-h)] min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
+                tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
+              }`}
+            >
+              <span className="truncate">{label}</span>
+            </button>
+          ))}
+        </div>
         <Menu
           label="More group sections"
           trigger={
             <button
               type="button"
-              role="tab"
-              aria-selected={moreTabActive}
-              className={`flex w-full min-w-0 items-center justify-center rounded-lg px-0.5 py-2.5 text-xs font-medium transition-colors ${
+              aria-label={moreTabActive ? `More group sections, ${TABS.find(({ key }) => key === tab)?.label} selected` : "More group sections"}
+              className={`flex min-h-[var(--control-h)] w-full min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
                 moreTabActive ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
               }`}
             >
@@ -307,8 +326,12 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             key={key}
             role="tab"
             aria-selected={tab === key}
+            aria-controls="group-tab-panel"
+            data-group-tab={key}
+            tabIndex={tab === key ? 0 : -1}
             onClick={() => setTab(key)}
-            className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            onKeyDown={(event) => moveTabFocus(event, key, TABS)}
+            className={`flex min-h-[var(--control-h)] min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
             }`}
           >
@@ -317,7 +340,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
         ))}
       </div>
 
-      <div className="md:min-h-0 md:flex-1 md:overflow-hidden">
+      <div id="group-tab-panel" role="tabpanel" aria-label={`${TABS.find(({ key }) => key === tab)?.label} section`} className="md:min-h-0 md:flex-1 md:overflow-hidden">
       {tab === "expenses" && (
         <div className="flex flex-col md:h-full md:min-h-0">
           <Card className="mb-2.5 p-2 md:shrink-0">
@@ -498,7 +521,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                         notes: r.notes, cadence: r.cadence as "weekly" | "monthly", nextDate: r.nextDate,
                         anchorDay: r.anchorDay, active: r.active, updatedAt: r.updatedAt,
                       })}
-                      className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                      className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
@@ -513,7 +536,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                           window.alert(e instanceof ApiClientError ? e.message : "Could not stop the recurring expense");
                         }
                       }}
-                      className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
+                      className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-faint hover:bg-danger-soft hover:text-danger"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -524,10 +547,24 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           </Card>
 
           {/* Charts */}
-          {expenses && expenses.length > 0 && detail && (
-            <SpendCharts expenses={expenses} currency={detail.group.currency} />
+          {insightExpenses === null && !insightError && (
+            <div role="status" className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <span className="sr-only">Loading insights…</span>
+              {[...Array(3)].map((_, index) => <Card key={index} className="p-4"><div className="skeleton h-40 w-full" /></Card>)}
+            </div>
           )}
-          {(!expenses || expenses.length === 0) && (
+          {insightError && (
+            <Card className="mt-4 p-4">
+              <div role="alert" className="flex flex-wrap items-center justify-between gap-3 text-sm text-danger">
+                <p>{insightError}</p>
+                <Button variant="secondary" onClick={reloadInsights}>Try again</Button>
+              </div>
+            </Card>
+          )}
+          {insightExpenses && insightExpenses.length > 0 && detail && (
+            <SpendCharts expenses={insightExpenses} currency={detail.group.currency} />
+          )}
+          {insightExpenses?.length === 0 && (
             <EmptyState icon={<PieChart className="h-8 w-8" />} title="No insights yet" hint="Add a few expenses to see spending by category, over time, and by person." />
           )}
         </div>
@@ -597,7 +634,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                     <button
                       onClick={() => setEditingSettlement(s)}
                       aria-label="Edit payment"
-                      className="rounded-lg p-2 text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
+                      className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-faint hover:bg-accent-soft hover:text-accent-dark"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
@@ -612,7 +649,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                           window.alert(e instanceof ApiClientError ? e.message : "Could not delete the payment");
                         }
                       }}
-                      className="rounded-lg p-2 text-ink-faint hover:bg-danger-soft hover:text-danger"
+                      className="inline-flex h-[var(--control-h)] w-[var(--control-h)] items-center justify-center rounded-lg text-ink-faint hover:bg-danger-soft hover:text-danger"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -767,6 +804,8 @@ function GroupSwitcher({
   memberCount: number;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const { data } = useApiData<{ groups: {
     id: number;
     name: string;
@@ -779,7 +818,11 @@ function GroupSwitcher({
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
     const onClick = () => setOpen(false);
     window.addEventListener("keydown", onKey);
     window.addEventListener("click", onClick);
@@ -789,12 +832,39 @@ function GroupSwitcher({
     };
   }, [open]);
 
+  useLayoutEffect(() => {
+    if (!open || groups.length === 0) return;
+    const selected = listRef.current?.querySelector<HTMLElement>('[role="option"][aria-selected="true"]');
+    (selected ?? listRef.current?.querySelector<HTMLElement>('[role="option"]'))?.focus();
+  }, [open, groups.length]);
+
+  function moveOptionFocus(event: React.KeyboardEvent<HTMLDivElement>) {
+    const options = [...(listRef.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? [])];
+    const current = options.indexOf(document.activeElement as HTMLElement);
+    let next = current;
+    if (event.key === "ArrowDown") next = current < options.length - 1 ? current + 1 : 0;
+    else if (event.key === "ArrowUp") next = current > 0 ? current - 1 : options.length - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = options.length - 1;
+    else return;
+    event.preventDefault();
+    options[next]?.focus();
+  }
+
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls="group-switcher-listbox"
         aria-label={`Switch group (current: ${currentName})`}
         className="flex w-full items-center gap-2 rounded-lg text-left text-[var(--group-ink)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--group-color)]"
       >
@@ -811,19 +881,24 @@ function GroupSwitcher({
       </button>
       {open && (
         <div
-          role="listbox"
-          aria-label="Your groups"
           className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[60dvh] overflow-y-auto rounded-xl border border-line bg-card p-1.5 text-ink shadow-pop"
         >
-          {groups.length === 0 ? (
-            <p className="px-3 py-2.5 text-sm text-ink-faint">Loading groups…</p>
-          ) : (
-            groups.map((g) => (
+          <div
+            ref={listRef}
+            id="group-switcher-listbox"
+            role="listbox"
+            aria-label="Your groups"
+            onKeyDown={moveOptionFocus}
+          >
+            {groups.length === 0 ? (
+              <p role="status" className="px-3 py-2.5 text-sm text-ink-faint">Loading groups…</p>
+            ) : groups.map((g) => (
               <Link
                 key={g.id}
                 href={`/groups/${g.id}`}
                 role="option"
                 aria-selected={g.id === currentId}
+                tabIndex={g.id === currentId ? 0 : -1}
                 onClick={() => setOpen(false)}
                 className={`group-hue-${g.id % 6} flex items-center gap-3 rounded-lg px-2.5 py-2.5 text-sm hover:bg-subtle ${g.id === currentId ? "bg-subtle" : ""}`}
               >
@@ -839,8 +914,8 @@ function GroupSwitcher({
                 </span>
                 {!!g.unreadMessages && <span className="h-2 w-2 shrink-0 rounded-full bg-accent" aria-label="Unread messages" />}
               </Link>
-            ))
-          )}
+            ))}
+          </div>
           <Link href="/groups" className="mt-1 block border-t border-line px-3 py-2 text-sm font-medium text-accent hover:bg-subtle">
             All groups
           </Link>
