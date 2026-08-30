@@ -301,7 +301,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Three common destinations stay visible on mobile. Less-used views live
           under More, while desktop keeps the full set in one scan. */}
-      <div role="tablist" aria-label="Group sections" aria-owns="group-more-tab" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
+      <div role="tablist" aria-label="Group sections" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
         {PRIMARY_TABS.map(({ key, label }) => (
           <button
             key={key}

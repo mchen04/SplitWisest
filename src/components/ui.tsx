@@ -132,6 +132,13 @@ export function Menu({
     e.preventDefault();
     items[next]?.focus();
   };
+  const restoreTriggerIfFocusWasLost = () => {
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) {
+        triggerRef.current?.querySelector<HTMLElement>("button")?.focus();
+      }
+    });
+  };
   return (
     <div ref={ref} className="relative">
       <div
@@ -155,7 +162,10 @@ export function Menu({
           ref={menuRef}
           role="menu"
           className={`fade-in absolute z-50 mt-1 min-w-48 overflow-hidden rounded-xl border border-line bg-card p-1 shadow-pop ${align === "end" ? "right-0" : "left-0"}`}
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            restoreTriggerIfFocusWasLost();
+          }}
           onKeyDown={onMenuKeyDown}
         >
           {children}

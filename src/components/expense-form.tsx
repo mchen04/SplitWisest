@@ -248,6 +248,7 @@ export function ExpenseForm({
       setCategoryId(c.id);
       setNewCategory("");
       setAddingCat(false);
+      requestAnimationFrame(() => document.getElementById("expense-category")?.focus());
       reloadCategories();
       onCategoryAdded?.();
     } catch (err) {
@@ -406,6 +407,7 @@ export function ExpenseForm({
           <div className="col-span-1 min-[22rem]:col-span-2 sm:col-span-1">
             <Field label="Category">
               <Select
+                id="expense-category"
                 value={categoryId}
                 onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
                 aria-describedby={categoriesError ? "expense-category-error" : undefined}
@@ -419,12 +421,12 @@ export function ExpenseForm({
           </div>
 
           {categoriesError && (
-            <p id="expense-category-error" role="alert" className="col-span-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
-              Categories could not load.{" "}
+            <div className="col-span-1 flex flex-wrap items-center gap-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
+              <p id="expense-category-error" role="alert">Categories could not load.</p>
               <button type="button" onClick={reloadCategories} className="min-h-[var(--control-h)] font-semibold underline">
                 Try again
               </button>
-            </p>
+            </div>
           )}
 
           {addingCat ? (
@@ -443,11 +445,23 @@ export function ExpenseForm({
                 autoFocus
               />
               <Button type="button" variant="secondary" onClick={addCategory} busy={categoryBusy} disabled={!newCategory.trim()}>Add</Button>
-              <Button type="button" variant="ghost" onClick={() => { setAddingCat(false); setNewCategory(""); }} disabled={categoryBusy}>Cancel</Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setAddingCat(false);
+                  setNewCategory("");
+                  requestAnimationFrame(() => document.getElementById("expense-new-category")?.focus());
+                }}
+                disabled={categoryBusy}
+              >
+                Cancel
+              </Button>
             </div>
           ) : (
             <button
               type="button"
+              id="expense-new-category"
               onClick={() => setAddingCat(true)}
               className="col-span-1 inline-flex min-h-[var(--control-h)] items-center gap-1 justify-self-start text-xs font-medium text-accent hover:underline min-[22rem]:col-span-2 sm:col-span-3"
             >
