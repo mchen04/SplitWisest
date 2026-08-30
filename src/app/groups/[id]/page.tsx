@@ -389,7 +389,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
               </Button>
             </div>
             {(showFilters || filtersActive) && (
-              <div className="mt-2 grid grid-cols-1 gap-2 min-[25rem]:grid-cols-2 sm:grid-cols-4">
+              <div className="mt-2 grid grid-cols-2 gap-2">
                 <Select value={filters.cat} onChange={setFilter("cat")} aria-label="Filter by category">
                   <option value="">All categories</option>
                   {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}

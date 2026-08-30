@@ -89,7 +89,7 @@ export function RecurringModal({
         <Field label="Title">
           <Input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} placeholder="Rent" autoFocus />
         </Field>
-        <div className="grid grid-cols-1 gap-3 min-[25rem]:grid-cols-2">
+        <div className="grid grid-cols-2 gap-3">
           <Field label={`Amount (${defaultCurrency})`}>
             <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
           </Field>

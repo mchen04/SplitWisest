@@ -208,14 +208,18 @@ export function Field({ label, children, hint }: { label: string; children: Reac
 }
 
 const inputCls =
-  "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card px-3 py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[var(--focus-ring)] focus:ring-accent-soft sm:text-sm";
+  "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[var(--focus-ring)] focus:ring-accent-soft sm:text-sm";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={`${inputCls} ${props.className ?? ""}`} />;
+  // WebKit lays a date field out from fixed internal segments that never shrink,
+  // so at the standard px-3 it no longer fits a half-width track on a small
+  // phone. Trim its side padding instead of letting the control overflow.
+  const pad = props.type === "date" ? "px-2" : "px-3";
+  return <input {...props} className={`${inputCls} ${pad} ${props.className ?? ""}`} />;
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...props} className={`${inputCls} ${props.className ?? ""}`} />;
+  return <textarea {...props} className={`${inputCls} px-3 ${props.className ?? ""}`} />;
 }
 
 /** Native select, but with the raw OS arrow replaced by a consistent chevron. */
@@ -224,7 +228,7 @@ export function Select({ className = "", ...props }: SelectHTMLAttributes<HTMLSe
     <span className="relative block w-full">
       <select
         {...props}
-        className={`${inputCls} cursor-pointer appearance-none pr-9 ${className}`}
+        className={`${inputCls} cursor-pointer appearance-none pl-3 pr-9 ${className}`}
       />
       <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" aria-hidden />
     </span>
@@ -334,7 +338,7 @@ export function Modal({
     >
       <div
         ref={panelRef}
-        className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card pb-[var(--safe-area-bottom)] shadow-pop sm:rounded-2xl sm:pb-0 ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
+        className={`rise-in flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-card pb-[var(--safe-area-bottom)] shadow-pop sm:rounded-2xl sm:pb-0 ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <h2 className="text-xl font-semibold tracking-tight">{title}</h2>

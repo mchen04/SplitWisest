@@ -53,8 +53,8 @@ export default function ExpensesPage() {
   return (
     <AppShell title="All expenses">
       <Card className="mb-4 p-2 md:shrink-0">
-        <div className="grid grid-cols-1 gap-2 min-[25rem]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
-          <div className="relative min-[25rem]:col-span-2 sm:col-span-3 lg:col-span-2">
+        <div className="grid grid-cols-1 gap-2 min-[22rem]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-7">
+          <div className="relative min-[22rem]:col-span-2 sm:col-span-3 lg:col-span-2">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
             <Input value={filters.q} onChange={setFilter("q")} placeholder="Search by title or notes" className="pl-8" aria-label="Search expenses" />
           </div>
@@ -66,7 +66,7 @@ export default function ExpensesPage() {
             <option value="">All categories</option>
             {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </Select>
-          <div className="min-[25rem]:col-span-2 sm:col-span-1">
+          <div className="min-[22rem]:col-span-2 sm:col-span-1">
             <Select value={filters.friendId} onChange={setFilter("friendId")} aria-label="Filter by friend">
               <option value="">Any friend</option>
               {friends.map((f) => <option key={f.id} value={f.id}>{f.displayName}</option>)}
