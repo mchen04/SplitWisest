@@ -55,7 +55,7 @@ export function ParticipantSplit({
                 role="radio"
                 aria-checked={checked}
                 onClick={() => onToggle(member.id)}
-                className={`min-w-0 rounded-lg border px-2.5 py-2 text-left ${checked ? "border-accent bg-accent-soft" : "border-line bg-card"}`}
+                className={`min-h-11 min-w-0 rounded-lg border px-2.5 py-2 text-left ${checked ? "border-accent bg-accent-soft" : "border-line bg-card"}`}
               >
                 <span className="block truncate text-sm font-medium">{member.displayName}</span>
                 {checked && amountCents > 0 && (
@@ -79,7 +79,7 @@ export function ParticipantSplit({
             return (
               <label
                 key={member.id}
-                className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 ${checked ? "border-accent bg-accent-soft" : "border-line bg-card"}`}
+                className={`flex min-h-11 min-w-0 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 ${checked ? "border-accent bg-accent-soft" : "border-line bg-card"}`}
               >
                 <input
                   type="checkbox"

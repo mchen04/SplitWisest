@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createDraftGuard } from "@/lib/draft-guard";
 import { decideUpdateAction } from "@/lib/update-policy";
 
 const BUILD_ID = process.env.NEXT_PUBLIC_BUILD_ID;
@@ -26,34 +27,6 @@ function storageSet(key: string, value: string) {
   } catch {
     memoryStore.set(key, value);
   }
-}
-
-/**
- * A half-written expense or chat message must survive an update. React keeps
- * `defaultValue` in sync on controlled inputs, so comparing value to
- * defaultValue can never detect typing; instead, track the fields the user has
- * actually typed into and treat any of them still holding text as unsaved.
- */
-const touchedFields = new Set<HTMLInputElement | HTMLTextAreaElement>();
-function trackInput(event: Event) {
-  const target = event.target;
-  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-    touchedFields.add(target);
-  }
-}
-function hasUnsavedInput(): boolean {
-  for (const field of touchedFields) {
-    if (!field.isConnected) {
-      touchedFields.delete(field);
-      continue;
-    }
-    if (field instanceof HTMLInputElement) {
-      const skip = ["hidden", "checkbox", "radio", "submit", "button", "range"];
-      if (skip.includes(field.type) || field.readOnly || field.disabled) continue;
-    }
-    if (field.value.trim() !== "") return true;
-  }
-  return false;
 }
 
 /** Ask the controlling worker which build its script was generated from. */
@@ -92,6 +65,7 @@ export function ServiceWorkerRegistration() {
     let reloading = false;
     let updateDeferred = false;
     let lastCheck = 0;
+    const draftGuard = createDraftGuard();
 
     // Every signal ends here. /sw.js embeds the build id, so the browser's own
     // update algorithm is the mechanism: registration.update() fetches the
@@ -123,7 +97,7 @@ export function ServiceWorkerRegistration() {
         controllerBuild,
         serverBuild,
         alreadyReloadedFor: storageGet(RELOAD_KEY),
-        hasUnsavedInput: hasUnsavedInput(),
+        hasUnsavedInput: draftGuard.hasUnsavedInput(),
       });
       if (action === "reload") {
         storageSet(RELOAD_KEY, (controllerBuild ?? serverBuild) as string);
@@ -173,7 +147,9 @@ export function ServiceWorkerRegistration() {
     // iOS pauses timers in the background, so resume and connectivity signals
     // — not the interval alone — drive detection: visibilitychange, pageshow
     // (including restore from the back/forward cache), and online.
-    document.addEventListener("input", trackInput, true);
+    document.addEventListener("input", draftGuard.trackText, true);
+    document.addEventListener("change", draftGuard.trackChoice, true);
+    document.addEventListener("click", draftGuard.trackStatefulButton, true);
     document.addEventListener("visibilitychange", check);
     window.addEventListener("pageshow", check);
     window.addEventListener("online", check);
@@ -194,7 +170,9 @@ export function ServiceWorkerRegistration() {
     return () => {
       window.clearInterval(timer);
       window.clearInterval(deferTimer);
-      document.removeEventListener("input", trackInput, true);
+      document.removeEventListener("input", draftGuard.trackText, true);
+      document.removeEventListener("change", draftGuard.trackChoice, true);
+      document.removeEventListener("click", draftGuard.trackStatefulButton, true);
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("pageshow", check);
       window.removeEventListener("online", check);

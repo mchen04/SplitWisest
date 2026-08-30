@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  ReactNode, useEffect, useRef, useState,
+  cloneElement, isValidElement, ReactNode, useEffect, useRef, useState,
   ButtonHTMLAttributes, InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes,
 } from "react";
 import { X, Loader2, Inbox, ChevronDown, MoreHorizontal } from "lucide-react";
@@ -94,12 +94,18 @@ export function Menu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.querySelector<HTMLElement>("button")?.focus();
+    };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -107,10 +113,45 @@ export function Menu({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    requestAnimationFrame(() => menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
+  }, [open]);
+  const triggerNode = trigger && isValidElement<ButtonHTMLAttributes<HTMLButtonElement>>(trigger)
+    ? cloneElement(trigger, { "aria-haspopup": "menu", "aria-expanded": open })
+    : trigger;
+  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const items = [...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    let next = current;
+    if (e.key === "ArrowDown") next = current < items.length - 1 ? current + 1 : 0;
+    else if (e.key === "ArrowUp") next = current > 0 ? current - 1 : items.length - 1;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = items.length - 1;
+    else return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
+  const restoreTriggerIfFocusWasLost = () => {
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) {
+        triggerRef.current?.querySelector<HTMLElement>("button")?.focus();
+      }
+    });
+  };
   return (
     <div ref={ref} className="relative">
-      <div onClick={() => setOpen((o) => !o)}>
-        {trigger ?? (
+      <div
+        ref={triggerRef}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (!open && e.key === "ArrowDown") {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
+      >
+        {triggerNode ?? (
           <IconButton label={label} aria-haspopup="menu" aria-expanded={open}>
             <MoreHorizontal className="h-4.5 w-4.5" />
           </IconButton>
@@ -118,9 +159,14 @@ export function Menu({
       </div>
       {open && (
         <div
+          ref={menuRef}
           role="menu"
           className={`fade-in absolute z-50 mt-1 min-w-48 overflow-hidden rounded-xl border border-line bg-card p-1 shadow-pop ${align === "end" ? "right-0" : "left-0"}`}
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+            restoreTriggerIfFocusWasLost();
+          }}
+          onKeyDown={onMenuKeyDown}
         >
           {children}
         </div>
@@ -140,7 +186,7 @@ export function MenuItem({
     <button
       type="button"
       role="menuitem"
-      className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm font-medium transition-colors ${danger ? "text-danger hover:bg-danger-soft" : "text-ink hover:bg-subtle"} ${className}`}
+      className={`flex min-h-[var(--control-h)] w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors ${danger ? "text-danger hover:bg-danger-soft" : "text-ink hover:bg-subtle"} ${className}`}
       {...rest}
     >
       {icon && <span className="shrink-0 text-ink-faint">{icon}</span>}
@@ -158,13 +204,6 @@ export function Field({ label, children, hint }: { label: string; children: Reac
       {children}
       {hint && <span className="mt-1 block text-xs text-ink-faint">{hint}</span>}
     </label>
-  );
-}
-
-/** A true section divider label — the only place uppercase is allowed. */
-export function SectionLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <p className={`text-xs font-semibold uppercase tracking-wider text-ink-faint ${className}`}>{children}</p>
   );
 }
 
@@ -256,15 +295,15 @@ export function Modal({
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const focusables = () =>
-      panelRef.current?.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      ) ?? [];
+      [...(panelRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      ) ?? [])].filter((element) => element.getClientRects().length > 0);
     const first = focusables()[0];
     first?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCloseRef.current();
       if (e.key === "Tab") {
-        const els = [...focusables()];
+        const els = focusables();
         if (els.length === 0) return;
         const idx = els.indexOf(document.activeElement as HTMLElement);
         if (e.shiftKey && (idx <= 0 || idx === -1)) {
@@ -295,7 +334,7 @@ export function Modal({
     >
       <div
         ref={panelRef}
-        className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card shadow-pop sm:rounded-2xl ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
+        className={`rise-in flex max-h-[92dvh] w-full flex-col rounded-t-2xl bg-card pb-[var(--safe-area-bottom)] shadow-pop sm:rounded-2xl sm:pb-0 ${wide ? "sm:max-w-2xl" : "sm:max-w-md"}`}
       >
         <div className="flex items-center justify-between border-b border-line px-4 py-3">
           <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
@@ -376,14 +415,5 @@ export function ErrorNote({ message }: { message: string | null }) {
     <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
       {message}
     </p>
-  );
-}
-
-export function Spinner({ label = "Loading…" }: { label?: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10 text-ink-faint">
-      <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-      <span className="text-sm">{label}</span>
-    </div>
   );
 }

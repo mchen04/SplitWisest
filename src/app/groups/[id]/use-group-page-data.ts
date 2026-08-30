@@ -20,10 +20,7 @@ export interface Expense {
   date: string;
   payerId: number;
   payerName: string;
-  categoryId: number | null;
   categoryName: string | null;
-  notes: string;
-  splitMethod: string;
   updatedAt: string;
   attachmentCount: number;
   shares: { userId: number; shareCents: number; convertedShareCents: number }[];
@@ -79,13 +76,38 @@ function expenseQuery(filters: { q: string; cat: string; payer: string; from: st
   return p;
 }
 
-function useExpenses(groupId: number, filters: { q: string; cat: string; payer: string; from: string; to: string }, limit: number) {
-  const { data, reload } = useApiData<{ expenses: Expense[]; hasMore: boolean }>(
+interface ExpenseResponse { expenses: Expense[]; hasMore: boolean }
+interface InsightExpense {
+  categoryName: string | null;
+  date: string;
+  payerName: string;
+  convertedCents: number;
+}
+
+function useExpenses(
+  groupId: number,
+  filters: { q: string; cat: string; payer: string; from: string; to: string },
+  limit: number,
+) {
+  const { data, reload } = useApiData<ExpenseResponse>(
     `/api/groups/${groupId}/expenses?${expenseQuery(filters, limit)}`,
     filters.q ? 250 : 0,
-    { sync: false }
+    { sync: false },
   );
-  return { expenses: data?.expenses ?? null, hasMoreExpenses: data?.hasMore ?? false, reloadExpenses: reload };
+  return {
+    expenses: data?.expenses ?? null,
+    hasMoreExpenses: data?.hasMore ?? false,
+    reloadExpenses: reload,
+  };
+}
+
+function useInsightExpenses(groupId: number, enabled: boolean) {
+  const path = `/api/groups/${groupId}/expenses?all=1`;
+  const { data, error, reload } = useApiData<{ expenses: InsightExpense[]; hasMore: false }>(path, 0, { sync: false, enabled });
+  const reloadInsightExpenses = useCallback(() => {
+    if (enabled) reload();
+  }, [enabled, reload]);
+  return { insightExpenses: data?.expenses ?? null, insightError: error, reloadInsightExpenses };
 }
 
 function useSettlements(groupId: number, limit: number) {
@@ -102,16 +124,19 @@ export function useGroupPageData({
   filters,
   expenseLimit,
   settlementLimit,
+  insightsEnabled,
 }: {
   groupId: number;
   filters: { q: string; cat: string; payer: string; from: string; to: string };
   expenseLimit: number;
   settlementLimit: number;
+  insightsEnabled: boolean;
 }) {
   const detailState = useApiData<GroupDetail>(`/api/groups/${groupId}`, 0, { sync: false });
   const recurringState = useApiData<{ recurring: Recurring[] }>(`/api/groups/${groupId}/recurring`, 0, { sync: false });
   const activityState = useApiData<{ activity: GroupActivity[] }>(`/api/groups/${groupId}/activity`, 0, { sync: false });
   const { expenses, hasMoreExpenses, reloadExpenses } = useExpenses(groupId, filters, expenseLimit);
+  const { insightExpenses, insightError, reloadInsightExpenses } = useInsightExpenses(groupId, insightsEnabled);
   const { settlements, hasMoreSettlements, reloadSettlements } = useSettlements(groupId, settlementLimit);
   const [refreshKey, setRefreshKey] = useState(0);
   const loadError = detailState.error
@@ -128,7 +153,8 @@ export function useGroupPageData({
   const refreshAll = useCallback(() => {
     reloadOverview();
     reloadExpenses();
-  }, [reloadOverview, reloadExpenses]);
+    reloadInsightExpenses();
+  }, [reloadOverview, reloadExpenses, reloadInsightExpenses]);
 
   useSync((c, prev) => {
     if (c.activityCursor !== prev.activityCursor) refreshAll();
@@ -138,6 +164,8 @@ export function useGroupPageData({
   return {
     detail: detailState.data,
     expenses,
+    insightExpenses,
+    insightError,
     hasMoreExpenses,
     recurring: recurringState.data?.recurring.filter((x) => x.active) ?? [],
     settlements,
@@ -146,6 +174,7 @@ export function useGroupPageData({
     refreshKey,
     loadError,
     loadDetail: reloadOverview,
+    reloadInsights: reloadInsightExpenses,
     refreshAll,
   };
 }

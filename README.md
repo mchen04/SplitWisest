@@ -8,7 +8,8 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 
 - Username/password auth (scrypt-hashed, session cookies), optional invite-code onboarding
 - Groups (trips, apartments, dinners, bills) with per-group currency
-- Expenses with equal / exact / percentage / shares / itemized splits, categories (incl. custom), notes, receipt attachments
+- Expenses show payer, date, and category before advanced split choices
+- Equal, exact, percentage, shares, and itemized splits; custom categories, notes, and receipt attachments
 - Multi-currency with automatic conversion (rates snapshotted per expense)
 - Group + friend balances with exact minimum-payment plans for up to 18 active balances
 - Offline settlement recording (group or direct between friends)
@@ -17,8 +18,10 @@ A private, friend-group expense tracker inspired by Splitwise. Track shared expe
 - Activity log (grouped by day), CSV export, SVG charts
 - Group chat + direct friend chat with link rendering and search
 - Realtime via lightweight polling sync cursor (serverless-friendly)
-- Modern, clean, minimal UI from a single design-token system — flat surfaces, one sans typeface, tabular money; light + dark theme toggle in the sidebar and Settings — persists and respects OS preference
-- Installable PWA with iPhone safe-area support, a locked app frame whose navigation never shifts between tabs, and responsive layouts from small phones to ultrawide
+- Modern, clean UI with one token system, tabular money, and synchronized light and dark controls
+- The saved theme wins. Without a saved choice, the app follows the OS preference.
+- Installable PWA with safe-area support, a stable app frame, responsive layouts, and a matching offline screen
+- Deploy updates wait while an open form contains unsaved text or choices
 - Picks up a new deploy on its own — the client compares its build id against the server's and reloads once
 
 ## Stack
@@ -55,7 +58,7 @@ pnpm lint                # lint
 pnpm build               # production build
 ```
 
-Browser verification uses `agent-browser` across common viewports. The iPhone PWA gate uses WebKit and a physical-device release checklist in `docs/PWA.md`.
+Browser checks cover desktop WebKit and realistic phone sizes. The iPhone gate adds the physical-device steps in `docs/PWA.md`.
 
 ## Deployment (Vercel)
 

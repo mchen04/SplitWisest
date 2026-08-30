@@ -281,9 +281,3 @@ export function amountInputToCents(input: string): number | null {
   if (!Number.isFinite(cents) || cents <= 0 || cents > 100_000_000_000) return null;
   return cents;
 }
-
-export function parseAmountToCents(input: string): number {
-  const cents = amountInputToCents(input);
-  if (cents === null) invalidInput("Enter a valid positive amount");
-  return cents;
-}

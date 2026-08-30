@@ -494,10 +494,6 @@ export async function shareGroup(groupId: number, userId: number, otherId: numbe
   return !!rows[0]?.me && !!rows[0]?.them;
 }
 
-export async function canNudgeUser(userId: number, toId: number, groupId: number | null): Promise<boolean> {
-  return groupId ? shareGroup(groupId, userId, toId) : friendshipExists(userId, toId);
-}
-
 export async function canRequestFriendById(userId: number, friendId: number): Promise<boolean> {
   return userId !== friendId && await shareAnyGroup(userId, friendId) && !(await friendshipExists(userId, friendId));
 }

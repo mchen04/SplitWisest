@@ -13,12 +13,14 @@ scroll than on routes that fit in one screen.
 - The viewport uses `viewport-fit=cover`.
 - The document never scrolls. `document.scrollHeight` equals `window.innerHeight`.
 - Bottom navigation includes the iPhone bottom inset and a small lift.
+- Mobile modal sheets include the bottom inset.
 - Bottom navigation sits at the same y on every route.
 - No route carries a page title row.
 - Chat fills the visible viewport without page scrolling.
 - The message list keeps its own vertical scroll.
 - Search, the composer, Send, and navigation stay visible.
 - Sending clears the draft without moving the page.
+- Shared mobile controls use a 44 px minimum height.
 
 ## Local checks
 
@@ -26,12 +28,15 @@ Run the permanent source checks first:
 
 ```bash
 pnpm vitest run src/lib/__tests__/mobile-shell.test.ts
+pnpm vitest run src/lib/__tests__/draft-guard.test.ts src/lib/__tests__/theme.test.ts
 pnpm exec tsc --noEmit
 pnpm lint
 pnpm build
 ```
 
-Use an iPhone WebKit profile for browser verification. Set `navigator.standalone` to `true` before navigation. Use a long conversation, then verify these values in the page:
+Check desktop WebKit and phone widths of 320, 390, and 393 pixels. Use an iPhone WebKit profile for installed-app checks.
+
+Set `navigator.standalone` to `true` before navigation. Use a long conversation, then verify these values:
 
 - The user agent contains `iPhone`.
 - The viewport meta tag contains `viewport-fit=cover`.
@@ -42,6 +47,16 @@ Use an iPhone WebKit profile for browser verification. Set `navigator.standalone
 - The message list uses `overflow-y: auto` and has overflow content.
 - The composer and Send bottom edges stay above the navigation top edge.
 - A 34 px test inset produces 38 px bottom navigation padding.
+- A modal panel includes the simulated bottom inset.
+
+Verify the expense flow at each size:
+
+- Payer, date, and category appear without opening Split.
+- Payer defaults to the current user. Date uses local today. Category defaults to none.
+- Tab stays inside the modal and skips hidden or disabled controls.
+- A failed save keeps the modal open and preserves every value.
+- A second click cannot submit while the first save runs.
+- Group tabs and menus support arrow keys, Home, End, and Escape.
 
 Take a viewport screenshot before the browser closes. Keep screenshots outside the repository.
 
@@ -51,14 +66,16 @@ Use the deployed HTTPS URL.
 
 1. Open the site in Safari.
 2. Use **Share → Add to Home Screen**.
-3. Close Safari.
-4. Launch SplitWisest from the Home Screen icon.
-5. Open a long direct or group conversation.
-6. Scroll message history to both ends.
-7. Focus the message field and show the keyboard.
-8. Confirm the message field and Send stay visible, and the bottom navigation hides.
-9. Send a message without scrolling the page.
-10. Confirm bottom navigation stays above the Home indicator.
+3. Turn on **Open as Web App** when Safari shows that option.
+4. Close Safari.
+5. Launch SplitWisest from the Home Screen icon.
+6. Open a long direct or group conversation.
+7. Scroll message history to both ends.
+8. Focus the message field and show the keyboard.
+9. Confirm the message field and Send stay visible, and the bottom navigation hides.
+10. Send a message without scrolling the page.
+11. Confirm bottom navigation stays above the Home indicator.
+12. Open Add expense and confirm its actions stay above the Home indicator.
 
 Test portrait and landscape. Repeat once with increased text size if the release changes mobile spacing.
 
@@ -80,14 +97,15 @@ the client reconciles. Detection runs on resume and connectivity signals —
 One function decides what happens: `decideUpdateAction` in
 `src/lib/update-policy.ts`. It reloads at most once per detected version,
 never reloads a first install, never reloads a page already on the server's
-build, stops instead of looping when a reload fails to land, and defers (never
-discards) while a form field holds unsubmitted text.
+build, stops instead of looping when a reload fails to land, and defers while
+a form holds changed text, selects, checkboxes, radios, or stateful buttons.
 
 Caching (`src/sw/sw.template.js`):
 
 - Navigations are network-first with a 3.5 s timeout, falling back to the page
   cache, then the cached start_url shell, then `offline.html`. The first
   navigation after a deploy therefore carries the new build.
+- The offline page follows the saved or system theme and includes safe-area padding.
 - `/_next/static/` files are cache-first (content-hashed, immutable). They are
   never purged by a version bump; stale-build files are swept only once every
   open window reports it runs the current build.
@@ -110,5 +128,7 @@ foreground-resume across a swap, in-session navigation across a swap,
 three-cycle reload stability, offline cold start, and poisoned-cache repair.
 Negative controls — `--mutate no-swap | break-manifest | no-sw | flap-sw |
 flap-version-no-sw | break-precache | swallow-precache | bloat-storage` — each
-force a named check red; runs are retained as `.pwa-harness/neg-*.log`. See
-docs/pwa-cache-ledger.md for measured results.
+force a named check red. The harness writes temporary data under `.pwa-harness`.
+
+Remove `.pwa-harness`, generated `public/sw.js`, and test screenshots after verification.
+See `docs/pwa-cache-ledger.md` for measured results.

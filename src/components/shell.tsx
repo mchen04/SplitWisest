@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { api, useApiData, useMe, useUnread, type Unread } from "@/lib/client";
 import { useTheme } from "@/lib/theme";
-import { Avatar, IconButton, Modal } from "./ui";
+import { Avatar, Button, IconButton, Modal } from "./ui";
 
 interface GroupRef {
   id: number;
@@ -53,7 +53,11 @@ export function AppShell({ title, children }: { title?: string; children: ReactN
   const me = useMe();
   const unread = useUnread();
   const { theme, toggle } = useTheme();
-  const { data: groupsData } = useApiData<{ groups: GroupRef[] }>("/api/groups");
+  const {
+    data: groupsData,
+    error: groupsError,
+    reload: reloadGroups,
+  } = useApiData<{ groups: GroupRef[] }>("/api/groups");
   const groups = groupsData?.groups ?? [];
   const currentGroupId = pathname.match(/^\/groups\/(\d+)/)?.[1];
   const isChatPage = pathname === "/chat";
@@ -81,6 +85,10 @@ export function AppShell({ title, children }: { title?: string; children: ReactN
       router.push(`/groups/${currentGroupId}?add=1`);
       return;
     }
+    if (groupsData === null) {
+      setExpensePickerOpen(true);
+      return;
+    }
     if (groups.length === 1) {
       router.push(`/groups/${groups[0].id}?add=1`);
       return;
@@ -91,6 +99,16 @@ export function AppShell({ title, children }: { title?: string; children: ReactN
     }
     setExpensePickerOpen(true);
   }
+
+  useEffect(() => {
+    const resolvedGroups = groupsData?.groups;
+    if (!expensePickerOpen || !resolvedGroups || resolvedGroups.length > 1) return;
+    // A quick tap can open the picker before groups load. Apply the same
+    // zero/one-group shortcut as soon as that request resolves.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExpensePickerOpen(false);
+    router.push(resolvedGroups.length === 1 ? `/groups/${resolvedGroups[0].id}?add=1` : "/groups");
+  }, [expensePickerOpen, groupsData, router]);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -253,28 +271,41 @@ export function AppShell({ title, children }: { title?: string; children: ReactN
       </nav>
 
       <Modal open={expensePickerOpen} onClose={() => setExpensePickerOpen(false)} title="Add expense to">
-        <p className="mb-3 text-sm text-ink-soft">Choose the group for this expense.</p>
-        <div className="space-y-1.5">
-          {groups.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              onClick={() => {
-                setExpensePickerOpen(false);
-                router.push(`/groups/${group.id}?add=1`);
-              }}
-              className={`group-choice group-hue-${group.id % 6} flex w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left hover:bg-subtle`}
-            >
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--group-soft)] text-[var(--group-ink)]">
-                <Users className="h-4.5 w-4.5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{group.name}</span>
-                <span className="block text-xs text-ink-faint">{group.memberCount} {group.memberCount === 1 ? "member" : "members"} · {group.currency}</span>
-              </span>
-            </button>
-          ))}
-        </div>
+        {groupsData === null ? (
+          groupsError ? (
+            <div role="alert" className="space-y-3 rounded-xl bg-danger-soft p-3 text-sm text-danger">
+              <p>{groupsError}</p>
+              <Button type="button" variant="secondary" onClick={reloadGroups}>Try again</Button>
+            </div>
+          ) : (
+            <p role="status" className="py-5 text-center text-sm text-ink-faint">Loading your groups…</p>
+          )
+        ) : (
+          <>
+            <p className="mb-3 text-sm text-ink-soft">Choose the group for this expense.</p>
+            <div className="space-y-1.5">
+              {groups.map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  onClick={() => {
+                    setExpensePickerOpen(false);
+                    router.push(`/groups/${group.id}?add=1`);
+                  }}
+                  className={`group-choice group-hue-${group.id % 6} flex w-full items-center gap-3 rounded-xl border border-line px-3 py-2.5 text-left hover:bg-subtle`}
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--group-soft)] text-[var(--group-ink)]">
+                    <Users className="h-4.5 w-4.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{group.name}</span>
+                    <span className="block text-xs text-ink-faint">{group.memberCount} {group.memberCount === 1 ? "member" : "members"} · {group.currency}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </Modal>
     </div>
   );

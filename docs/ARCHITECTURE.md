@@ -40,6 +40,14 @@ Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byt
 
 `GET /api/sync` returns visible cursors for activity, messages, nudges, and friend requests, plus unread counts for messages, activity, nudges, requests, and the aggregate Balances badge — all in a single query (cursors computed in a CTE and reused by the unread expressions). The client polls every 4s (16s when the tab is hidden) via `useSync`; when any cursor advances, affected views refetch and chat panes fetch messages `since` their last id. Activity and message scopes clear through `read_state`; nudges clear via `seen_at`; friend requests clear when accepted/declined/canceled. No websockets — reliable on serverless, no connection state to break.
 
+## Group expense reads
+
+The visible expense list uses bounded pages. Its route materializes due recurring expenses before it reads the list.
+
+Insights uses a separate `all=1` request. That request returns the complete, unfiltered group history with chart fields only.
+
+This separation keeps list responses small. It also prevents filters or pagination from changing chart totals.
+
 ## Chat
 
 `messages` rows are either `group` (group_id) or `dm` (ordered user pair). Both endpoints support `since` incremental fetch and `q` substring search. Links render as anchors; everything else is plain text (React escapes by default). On mobile the Chat route takes the frame's whole region and never scrolls it, so the message list scrolls alone while search, composer, Send, and bottom navigation stay visible.
@@ -47,6 +55,8 @@ Receipt uploads are limited to images/PDFs under 4 MB and validated by magic-byt
 ## Mobile PWA shell
 
 The root viewport uses `viewport-fit=cover`. Mobile safe-area values become CSS variables in `src/app/globals.css`. The bottom navigation adds the iPhone inset plus a small lift.
+
+Mobile modal sheets add the bottom inset to their panels. Hidden and disabled controls stay outside each modal focus loop.
 
 On mobile the app is a locked frame rather than a scrolling document. `.app-frame` covers the visible viewport, `.app-scroll` is the only region that scrolls (`.app-fixed` on Chat, which scrolls its own message list), and navigation is the frame's last row. The bar was `position: fixed; bottom: 0` before. iOS resolves that bottom edge differently depending on whether the document can scroll at all, so the bar sat in one place on routes that overflowed and another on routes that fit in one screen; in normal flow it has no viewport to drift against. The lock is scoped to `html:has(.app-frame)`, because login, signup, and recovery render outside the shell and need the document to scroll. The mobile navigation hides while the composer has focus.
 
@@ -66,7 +76,7 @@ refused so the router hard-navigates instead of mixing builds. One function
 (`decideUpdateAction` in `src/lib/update-policy.ts`) makes every reload
 decision: at most one reload per detected version, no first-install reload, no
 reload of a page already current, a stop instead of a loop when a reload fails
-to land, and a deferral while any form field holds unsubmitted text. The full
+to land, and a deferral while any form holds changed text or choices. The full
 contract and its two-build WebKit verification harness are described in
 `docs/PWA.md`; measured evidence lives in `docs/pwa-cache-ledger.md`.
 
@@ -78,11 +88,29 @@ the Home Screen.)
 
 ## Recurring expenses
 
-`recurring_expenses` hold a template + `next_date`. When a group page is loaded, `materializeRecurring` creates concrete expenses for every elapsed period (capped at 24 per call so a long-dormant rule defers rather than skips periods) and advances `next_date` — no cron needed. Each period's `next_date` advance and the generated expense insert happen in one SQL statement, so process death can't claim a period without writing it. The Neon driver returns Postgres `DATE` columns as JS `Date` objects, so `materializeRecurring` normalizes them to a calendar `YYYY-MM-DD` string (`toYmd`) before any date math — a naive `String(date).slice(0,10)` yields a locale string and crashes the materializer.
+`recurring_expenses` holds a template and `next_date`. Group detail and expense reads materialize every due period before returning data.
+
+One call creates at most 24 periods. A long-dormant rule defers later periods instead of skipping them.
+
+Each date advance and expense insert share one SQL statement. A stopped process cannot advance a period without its expense.
+
+Postgres `DATE` values become JavaScript `Date` objects. `toYmd` normalizes them before date math.
+
+New rules calculate tomorrow from the local calendar. They do not use a UTC date slice.
 
 ## Theming
 
-The design system is codified in `.interface-design/system.md` and ships from two CSS token scopes. Tailwind design tokens live in `src/app/globals.css` under `@theme`. Runtime environment tokens, including safe-area values, live under `:root` so Tailwind cannot remove them. The direction is modern/clean/minimal — flat, cool-neutral surfaces (no texture), one sans typeface (Instrument Sans) for all UI and money with tabular figures, the serif (Fraunces) reserved only for the wordmark, and a restrained green accent with money semantics (`owed`/`owe`) kept distinct from the brand and from `danger`. Two palettes share the same token names: light is the default; dark is defined under `[data-theme="dark"]`, which overrides the `--color-*` tokens (and `--shadow-*`, skeleton) so every `bg-paper`/`text-ink`/`bg-accent` utility flips automatically — no per-component dark variants. In dark mode cards lift above the canvas (depth comes from a surface-lightness step, not shadows). Accent and danger backgrounds use dedicated `--color-on-accent` / `--color-on-danger` foreground tokens so text stays legible in both themes. `src/lib/theme.tsx` exposes `useTheme()` (toggle wired into the sidebar and Settings → Appearance) and `themeInitScript`, an inline `<head>` script that applies the saved theme (or the OS `prefers-color-scheme`) before first paint to avoid a flash. The choice persists in `localStorage`.
+`.interface-design/system.md` defines the design system. Tailwind tokens live under `@theme` in `src/app/globals.css`.
+
+Runtime tokens, including safe-area values, live under `:root`. Tailwind cannot remove them.
+
+Light and dark palettes use the same token names. Components do not need dark variants.
+
+`themeInitScript` applies the saved choice before paint. Without a saved choice, it reads the OS preference.
+
+`useTheme()` keeps every mounted theme control synchronized. Storage events also synchronize open browser tabs.
+
+OS changes apply when no saved choice exists. The offline page uses the same saved-or-system rule.
 
 ## Performance
 

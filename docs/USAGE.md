@@ -23,8 +23,16 @@
 
 ## Expenses
 
-- **Add expense** from the group page: title, amount (any currency), payer, date, category (or create a custom one), notes, receipts.
-- **Split methods**: one other member owes the full amount by default. Choose Equal, Exact amounts, Percentages, Shares, or Itemized bill when needed. The form shows live per-person amounts and feedback until the split adds up.
+- Use **Add expense** from any page. The current group opens directly.
+- Outside a group, one group opens directly. Multiple groups show a picker.
+- Enter the amount and description. The payer defaults to you, and the date defaults to local today.
+- **Paid by**, **Date**, and **Category** stay visible. **Split** keeps less common choices under **Change**.
+- The default split assigns the full amount to one other member.
+- Choose Equal, Exact, Percentages, Shares, or Itemized when needed.
+- The form shows each share and reports whether the split matches the total.
+- Use **New category** beside Category. Enter adds the category without submitting the expense.
+- Notes and receipts stay under **Add note or receipt**.
+- A save error keeps the form and its values open. Offline errors ask you to reconnect.
 - **Edit or delete** any expense with the pencil/trash icons. Balances update for everyone instantly.
 - **Recurring**: set up weekly/monthly expenses (rent, subscriptions); they post automatically.
 
@@ -38,7 +46,7 @@
 
 - **Expenses page** searches across all groups; filter by group, friend, category, payer, and date range.
 - **CSV export** from the group menu (⋯).
-- **Charts** on the group page: spending by category, over time, and paid-by-person.
+- **Insights** charts use the full group history. Expense filters and loaded pages do not limit them.
 
 ## Chat
 
@@ -48,7 +56,11 @@ On phones, scroll inside the message list to read history. Search, the message f
 
 ## Install on iPhone
 
-Open the deployed site in Safari. Use **Share → Add to Home Screen**, then launch SplitWisest from its Home Screen icon. The bottom navigation stays above the Home indicator.
+Open the deployed site in Safari. Use **Share → Add to Home Screen**.
+
+Turn on **Open as Web App** when Safari shows that option. Then launch SplitWisest from its Home Screen icon.
+
+The bottom navigation and modal actions stay above the Home indicator.
 
 For release verification, follow `docs/PWA.md`.
 
