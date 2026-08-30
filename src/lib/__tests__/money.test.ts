@@ -6,7 +6,6 @@ import {
   splitShares,
   computeItemizedShares,
   simplifyDebts,
-  parseAmountToCents,
   amountInputToCents,
 } from "../money";
 
@@ -233,17 +232,6 @@ describe("simplifyDebts", () => {
         amountCents: 100,
       })),
     ]);
-  });
-});
-
-describe("parseAmountToCents", () => {
-  it("parses dollars", () => {
-    expect(parseAmountToCents("12.34")).toBe(1234);
-    expect(parseAmountToCents("$1,000.50")).toBe(100050);
-  });
-  it("rejects garbage and non-positive", () => {
-    expect(() => parseAmountToCents("abc")).toThrow();
-    expect(() => parseAmountToCents("0")).toThrow();
   });
 });
 

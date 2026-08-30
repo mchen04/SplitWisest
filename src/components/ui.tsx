@@ -161,13 +161,6 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   );
 }
 
-/** A true section divider label — the only place uppercase is allowed. */
-export function SectionLabel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <p className={`text-xs font-semibold uppercase tracking-wider text-ink-faint ${className}`}>{children}</p>
-  );
-}
-
 const inputCls =
   "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card px-3 py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[var(--focus-ring)] focus:ring-accent-soft sm:text-sm";
 
@@ -376,14 +369,5 @@ export function ErrorNote({ message }: { message: string | null }) {
     <p role="alert" className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
       {message}
     </p>
-  );
-}
-
-export function Spinner({ label = "Loading…" }: { label?: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10 text-ink-faint">
-      <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
-      <span className="text-sm">{label}</span>
-    </div>
   );
 }
