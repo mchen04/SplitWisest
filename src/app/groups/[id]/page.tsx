@@ -32,6 +32,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
   const [expenseLimit, setExpenseLimit] = useState(50);
   const [settlementLimit, setSettlementLimit] = useState(50);
   const [tab, setTab] = useState<Tab>("expenses");
+  const [mobileTabStop, setMobileTabStop] = useState<Tab | "more">("expenses");
 
   // filters
   const { filters, setFilter, reset: resetFilters, active: filtersActive } =
@@ -80,11 +81,14 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     }
     const t = searchParams.get("tab");
     if (t && ["expenses", "balances", "insights", "chat", "activity"].includes(t)) {
-      setTab(t as Tab);
+      const next = t as Tab;
+      setTab(next);
+      setMobileTabStop(next === "insights" || next === "activity" ? "more" : next);
     }
     const expenseId = Number(searchParams.get("expense"));
     if (Number.isInteger(expenseId) && expenseId > 0) {
       setTab("expenses");
+      setMobileTabStop("expenses");
       setDetailId(expenseId);
     }
     if (searchParams.get("add") === "1" || t || expenseId > 0) {
@@ -158,6 +162,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     const next = tabs[nextIndex].key;
     const tablist = event.currentTarget.closest('[role="tablist"]');
     setTab(next);
+    setMobileTabStop(next === "insights" || next === "activity" ? "more" : next);
     requestAnimationFrame(() => tablist?.querySelector<HTMLButtonElement>(`[data-group-tab="${next}"]`)?.focus());
   }
   function moveMobileTabFocus(event: React.KeyboardEvent<HTMLButtonElement>, key: Tab | "more") {
@@ -172,6 +177,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
     event.preventDefault();
     const next = tabs[nextIndex];
     const tablist = event.currentTarget.closest('[role="tablist"]');
+    setMobileTabStop(next);
     if (next !== "more") setTab(next);
     requestAnimationFrame(() => tablist?.querySelector<HTMLButtonElement>(`[data-group-tab="${next}"]`)?.focus());
   }
@@ -295,37 +301,36 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
       <div className="flex min-w-0 flex-col md:min-h-0 md:flex-1">
       {/* Three common destinations stay visible on mobile. Less-used views live
           under More, while desktop keeps the full set in one scan. */}
-      <div role="tablist" aria-label="Group sections" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
-        <div className="col-span-3 grid grid-cols-3 gap-1">
-          {PRIMARY_TABS.map(({ key, label }) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={tab === key}
-              aria-controls="group-tab-panel"
-              data-group-tab={key}
-              tabIndex={tab === key ? 0 : -1}
-              onClick={() => setTab(key)}
-              onKeyDown={(event) => moveMobileTabFocus(event, key)}
-              className={`flex min-h-[var(--control-h)] min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
-                tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
-              }`}
-            >
-              <span className="truncate">{label}</span>
-            </button>
-          ))}
-        </div>
+      <div role="tablist" aria-label="Group sections" aria-owns="group-more-tab" className="mb-2 grid grid-cols-4 gap-1 rounded-xl border border-line bg-card p-1 sm:hidden">
+        {PRIMARY_TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            aria-controls="group-tab-panel"
+            data-group-tab={key}
+            tabIndex={mobileTabStop === key ? 0 : -1}
+            onClick={() => { setTab(key); setMobileTabStop(key); }}
+            onKeyDown={(event) => moveMobileTabFocus(event, key)}
+            className={`flex min-h-[var(--control-h)] min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
+              tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
         <Menu
           label="More group sections"
           trigger={
             <button
               type="button"
+              id="group-more-tab"
               role="tab"
               aria-selected={moreTabActive}
               aria-controls="group-tab-panel"
               aria-label={moreTabActive ? `More group sections, ${TABS.find(({ key }) => key === tab)?.label} selected` : "More group sections"}
               data-group-tab="more"
-              tabIndex={moreTabActive ? 0 : -1}
+              tabIndex={mobileTabStop === "more" ? 0 : -1}
               onKeyDown={(event) => moveMobileTabFocus(event, "more")}
               className={`flex min-h-[var(--control-h)] w-full min-w-0 items-center justify-center rounded-lg px-0.5 py-1.5 text-xs font-medium transition-colors ${
                 moreTabActive ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"
@@ -336,7 +341,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
           }
         >
           {MORE_TABS.map(({ key, label, icon: Icon }) => (
-            <MenuItem key={key} icon={<Icon className="h-4 w-4" />} onClick={() => setTab(key)}>{label}</MenuItem>
+            <MenuItem key={key} icon={<Icon className="h-4 w-4" />} onClick={() => { setTab(key); setMobileTabStop("more"); }}>{label}</MenuItem>
           ))}
         </Menu>
       </div>
@@ -350,7 +355,7 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
             aria-controls="group-tab-panel"
             data-group-tab={key}
             tabIndex={tab === key ? 0 : -1}
-            onClick={() => setTab(key)}
+            onClick={() => { setTab(key); setMobileTabStop(key === "insights" || key === "activity" ? "more" : key); }}
             onKeyDown={(event) => moveTabFocus(event, key, TABS)}
             className={`flex min-h-[var(--control-h)] min-w-0 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
               tab === key ? "bg-accent-soft text-accent-dark" : "text-ink-soft hover:text-ink"

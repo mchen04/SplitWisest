@@ -419,7 +419,7 @@ export function ExpenseForm({
           </div>
 
           {categoriesError && (
-            <p id="expense-category-error" role="status" className="col-span-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
+            <p id="expense-category-error" role="alert" className="col-span-1 text-xs text-danger min-[22rem]:col-span-2 sm:col-span-3">
               Categories could not load.{" "}
               <button type="button" onClick={reloadCategories} className="min-h-[var(--control-h)] font-semibold underline">
                 Try again
@@ -432,6 +432,7 @@ export function ExpenseForm({
               <Input
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value)}
+                aria-label="New category name"
                 onKeyDown={(e) => {
                   if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
                   e.preventDefault();
