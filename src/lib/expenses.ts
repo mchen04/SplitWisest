@@ -6,6 +6,7 @@ import { currencyStep } from "./currencies";
 import { ApiError, badRequest, forbidden, notFound } from "./api";
 import { loadGroupMemberIds } from "./balances";
 import { activityData } from "./activity";
+import { Change, diffExpense, ExpenseSnapshot } from "./activity-diff";
 import { VersionToken, versionToken } from "./versions";
 
 export const ExpenseBody = z.object({
@@ -284,6 +285,77 @@ export async function createExpenseWithActivity(
   return id;
 }
 
+/** Reads the expense as it stands, with the display names the activity feed needs. */
+async function loadExpenseSnapshot(expenseId: number): Promise<ExpenseSnapshot | null> {
+  const rows = await sql`
+    SELECT e.title, e.amount_cents, e.currency, e.notes, e.split_method,
+      to_char(e.expense_date, 'YYYY-MM-DD') AS date,
+      pu.display_name AS payer_name, c.name AS category_name,
+      COALESCE(
+        jsonb_agg(
+          jsonb_build_object('userId', es.user_id, 'name', su.display_name,
+            'shareCents', es.share_cents, 'rawInput', es.raw_input)
+        ) FILTER (WHERE es.user_id IS NOT NULL), '[]'::jsonb) AS shares
+    FROM expenses e
+    JOIN users pu ON pu.id = e.payer_id
+    LEFT JOIN categories c ON c.id = e.category_id
+    LEFT JOIN expense_shares es ON es.expense_id = e.id
+    LEFT JOIN users su ON su.id = es.user_id
+    WHERE e.id = ${expenseId}
+    GROUP BY e.id, pu.display_name, c.name`;
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    title: r.title as string,
+    amountCents: Number(r.amount_cents),
+    currency: r.currency as string,
+    date: r.date as string,
+    payerName: r.payer_name as string,
+    categoryName: (r.category_name as string | null) ?? null,
+    notes: (r.notes as string | null) ?? "",
+    splitMethod: r.split_method as string,
+    shares: (r.shares as { userId: number; name: string; shareCents: number; rawInput: string | number | null }[])
+      .map((s) => ({
+        userId: Number(s.userId),
+        name: s.name,
+        shareCents: Number(s.shareCents),
+        rawInput: s.rawInput === null ? null : Number(s.rawInput),
+      })),
+  };
+}
+
+/** Builds the post-edit snapshot from the submitted input, resolving display names. */
+async function nextExpenseSnapshot(
+  input: ExpenseInput,
+  shares: Map<number, number>
+): Promise<ExpenseSnapshot> {
+  const userIds = [...new Set([input.payerId, ...shares.keys()])];
+  const [people, categories] = await Promise.all([
+    sql`SELECT id, display_name FROM users WHERE id = ANY(${userIds})`,
+    input.categoryId
+      ? sql`SELECT name FROM categories WHERE id = ${input.categoryId}`
+      : Promise.resolve([] as Record<string, unknown>[]),
+  ]);
+  const nameById = new Map(people.map((p) => [Number(p.id), p.display_name as string]));
+  const rawByUser = new Map(input.participants.map((p) => [p.userId, p.value ?? null]));
+  return {
+    title: input.title,
+    amountCents: input.amountCents,
+    currency: input.currency,
+    date: input.date,
+    payerName: nameById.get(input.payerId) ?? "",
+    categoryName: (categories[0]?.name as string | undefined) ?? null,
+    notes: input.notes,
+    splitMethod: input.splitMethod,
+    shares: [...shares.entries()].map(([userId, cents]) => ({
+      userId,
+      name: nameById.get(userId) ?? "",
+      shareCents: cents,
+      rawInput: rawByUser.get(userId) ?? null,
+    })),
+  };
+}
+
 export async function updateExpenseWithActivity(
   expenseId: number,
   groupId: number,
@@ -300,6 +372,11 @@ export async function updateExpenseWithActivity(
     convertedCents = c.cents;
     rate = c.rate;
   }
+  const [before, after] = await Promise.all([
+    loadExpenseSnapshot(expenseId),
+    nextExpenseSnapshot(input, shares),
+  ]);
+  const changes: Change[] = before ? diffExpense(before, after) : [];
   const actionText = `edited "${input.title}" (${fmtMoney(input.amountCents, input.currency)})`;
   const summary = `${user.displayName} ${actionText}`;
   const [, rows] = await sql.transaction((tx) => [
@@ -395,7 +472,7 @@ export async function updateExpenseWithActivity(
     a AS (
       INSERT INTO activity (group_id, actor_id, type, summary, data)
       SELECT ${groupId}, ${user.id}, 'expense.edited', ${summary},
-        jsonb_set(${activityData({}, actionText)}::jsonb, '{expenseId}', to_jsonb(upd.id))
+        jsonb_set(${activityData(changes.length ? { changes } : {}, actionText)}::jsonb, '{expenseId}', to_jsonb(upd.id))
       FROM upd
       RETURNING 1
     )

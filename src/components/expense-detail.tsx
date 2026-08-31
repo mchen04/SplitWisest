@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Pencil, Trash2, Paperclip, FileText, SendHorizonal, MessageSquare } from "lucide-react";
+import { Pencil, Trash2, Paperclip, FileText, SendHorizonal, MessageSquare, History } from "lucide-react";
 import { api, fmtDate, fmtMoney, fmtTime, useApiData } from "@/lib/client";
+import { Change, describeChange } from "@/lib/activity-diff";
 import { Modal, Button, Avatar, Input } from "./ui";
 
 interface Detail {
@@ -37,6 +38,14 @@ const METHOD_LABEL: Record<string, string> = {
   itemized: "Itemized",
 };
 
+interface EditRecord {
+  id: number;
+  actorId: number;
+  actorName: string;
+  createdAt: string;
+  changes: Change[];
+}
+
 export function ExpenseDetailModal({
   expenseId,
   meId,
@@ -59,6 +68,10 @@ export function ExpenseDetailModal({
   const { data: commentsData } = useApiData<{ comments: Comment[] }>(
     `/api/expenses/${expenseId ?? 0}/comments`, 0, { sync: false, enabled }
   );
+  const { data: historyData } = useApiData<{ edits: EditRecord[] }>(
+    `/api/expenses/${expenseId ?? 0}/history`, 0, { sync: false, enabled }
+  );
+  const edits = historyData?.edits ?? null;
   const detail = detailData?.expense ?? null;
   const [localComments, setLocalComments] = useState<{ expenseId: number; comments: Comment[] } | null>(null);
   const comments = localComments?.expenseId === expenseId
@@ -183,6 +196,37 @@ export function ExpenseDetailModal({
                   )
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Edit history — the full before and after, unlike the feed's one line. */}
+          {edits !== null && edits.length > 0 && (
+            <div>
+              <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-soft">
+                <History className="h-3.5 w-3.5" /> Edit history
+              </p>
+              <ul className="space-y-2.5">
+                {edits.map((e) => (
+                  <li key={e.id} className="flex items-start gap-2.5">
+                    <Link href={`/people/${e.actorId}`} aria-label={`Open ${e.actorName}'s profile`}>
+                      <Avatar name={e.actorName} size="sm" />
+                    </Link>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm">
+                        <Link href={`/people/${e.actorId}`} className="font-medium hover:text-accent-dark hover:underline">
+                          {e.actorId === meId ? "You" : e.actorName}
+                        </Link>{" "}
+                        <span className="text-xs text-ink-faint">{fmtTime(e.createdAt)}</span>
+                      </p>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {e.changes.map((c, i) => (
+                          <li key={i} className="break-words text-sm text-ink-soft">{describeChange(c)}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 

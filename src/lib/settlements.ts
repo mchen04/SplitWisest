@@ -6,6 +6,7 @@ import { badRequest, forbidden, notFound } from "./api";
 import { isGroupMember } from "./balances";
 import { convert } from "./fx";
 import { activityData } from "./activity";
+import { Change, feedLine } from "./activity-diff";
 import { VersionToken, versionToken } from "./versions";
 
 // Validation fields shared by group and direct (friend) settlement bodies.
@@ -167,14 +168,39 @@ export async function recordDirectSettlement(
   return { id: Number(rows[0].id), updatedAt: versionToken(rows[0].updated_at) };
 }
 
+/** A recorded payment can move in four ways a person would notice. */
+function diffSettlement(
+  prev: { amountCents: number; currency: string; date: string; note: string },
+  next: { amountCents: number; currency: string; date: string; note: string }
+): Change[] {
+  const changes: Change[] = [];
+  if (prev.amountCents !== next.amountCents) {
+    changes.push({
+      field: "amount",
+      fromCents: prev.amountCents,
+      toCents: next.amountCents,
+      fromCurrency: prev.currency,
+      toCurrency: next.currency,
+    });
+  }
+  if (prev.currency !== next.currency) changes.push({ field: "currency", from: prev.currency, to: next.currency });
+  if (prev.date !== next.date) changes.push({ field: "date", from: prev.date, to: next.date });
+  if (prev.note !== next.note) {
+    changes.push({ field: "notes", kind: !prev.note ? "added" : !next.note ? "removed" : "changed" });
+  }
+  return changes;
+}
+
 export async function updateSettlementWithActivity(
   settlement: AuthorizedSettlement,
   user: { id: number; displayName: string },
   body: { amountCents: number; currency: string; date: string; note: string; expectedUpdatedAt: string },
   convertedCents: number
 ) {
-  const actionText = await settlementSummary(settlement.payerId, settlement.recipientId, body.amountCents, body.currency);
-  const summary = `${user.displayName} edited a recorded payment - now ${actionText}`;
+  const fallbackText = await settlementSummary(settlement.payerId, settlement.recipientId, body.amountCents, body.currency);
+  const changes = diffSettlement(settlement, body);
+  const actionText = feedLine(changes) ?? `edited a recorded payment - now ${fallbackText}`;
+  const summary = `${user.displayName} ${actionText}`;
   const visibleUserIds = [settlement.payerId, settlement.recipientId].map(String);
   const userA = Math.min(settlement.payerId, settlement.recipientId);
   const userB = Math.max(settlement.payerId, settlement.recipientId);
@@ -218,7 +244,10 @@ export async function updateSettlementWithActivity(
     a AS (
       INSERT INTO activity (group_id, actor_id, type, summary, data)
       SELECT ${settlement.groupId}, ${user.id}, 'settlement.updated', ${summary},
-        ${activityData(settlement.groupId === null ? { visibleUserIds } : {})}::jsonb
+        ${activityData({
+          ...(settlement.groupId === null ? { visibleUserIds } : {}),
+          ...(changes.length ? { changes } : {}),
+        }, actionText)}::jsonb
       FROM upd
       RETURNING 1
     ),
@@ -311,6 +340,8 @@ export interface AuthorizedSettlement {
   amountCents: number;
   currency: string;
   convertedCents: number;
+  date: string;
+  note: string;
   updatedAt: string;
 }
 
@@ -408,6 +439,7 @@ export async function loadAuthorizedSettlementForMutation(id: number, userId: nu
   if (!Number.isInteger(id)) notFound();
   const rows = await sql`
     SELECT id, group_id, payer_id, recipient_id, created_by, amount_cents, currency, converted_cents,
+      to_char(settled_date, 'YYYY-MM-DD') AS settled_date, note,
       to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_at
     FROM settlements
     WHERE id = ${id}`;
@@ -423,6 +455,8 @@ export async function loadAuthorizedSettlementForMutation(id: number, userId: nu
     amountCents: Number(raw.amount_cents),
     currency: raw.currency as string,
     convertedCents: Number(raw.converted_cents),
+    date: raw.settled_date as string,
+    note: (raw.note as string | null) ?? "",
     updatedAt: versionToken(raw.updated_at),
   };
   const isParticipant = settlement.payerId === userId || settlement.recipientId === userId;
