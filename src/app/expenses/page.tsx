@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Receipt, Search, X } from "lucide-react";
 import { fmtMoney, fmtDate, useApiData, useFilters } from "@/lib/client";
 import { AppShell } from "@/components/shell";
-import { Card, EmptyState, Input, Select, Button, Chip } from "@/components/ui";
+import { Card, EmptyState, Input, Select, Button, Chip, DateField } from "@/components/ui";
 
 interface Expense {
   id: number;
@@ -72,8 +72,8 @@ export default function ExpensesPage() {
               {friends.map((f) => <option key={f.id} value={f.id}>{f.displayName}</option>)}
             </Select>
           </div>
-          <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
-          <Input type="date" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
+          <DateField label="From" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
+          <DateField label="To" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
         </div>
         {filtersActive && (
           <button
