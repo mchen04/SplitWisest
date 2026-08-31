@@ -1,7 +1,6 @@
 import { sql } from "./db";
 import { forbidden, notFound } from "./api";
 import { newInviteCode, SessionUser } from "./auth";
-import { activityData } from "./activity";
 
 export interface AuthorizedGroup {
   id: number;
@@ -63,12 +62,13 @@ export async function createGroup(user: SessionUser, name: string, currency: str
 }
 
 export async function renameGroupWithActivity(groupId: number, user: SessionUser, name: string) {
-  const actionText = `renamed the group to "${name}"`;
-  const summary = `${user.displayName} ${actionText}`;
   const [, rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
     tx`
-    WITH upd AS (
+    WITH prev AS (
+      SELECT name FROM groups WHERE id = ${groupId}
+    ),
+    upd AS (
       UPDATE groups SET name = ${name}
       WHERE id = ${groupId}
         AND EXISTS (
@@ -77,11 +77,16 @@ export async function renameGroupWithActivity(groupId: number, user: SessionUser
         )
       RETURNING id
     ),
+    t AS (
+      SELECT 'renamed the group from "' || prev.name || '" to "' || ${name} || '"' AS action
+      FROM prev
+    ),
     a AS (
       INSERT INTO activity (group_id, actor_id, type, summary, data)
-      SELECT ${groupId}, ${user.id}, 'group.renamed', ${summary},
-        ${activityData({}, actionText)}::jsonb
-      FROM upd
+      SELECT ${groupId}, ${user.id}, 'group.renamed',
+        ${user.displayName} || ' ' || t.action,
+        jsonb_build_object('actionText', t.action)
+      FROM upd, t
       RETURNING 1
     )
     SELECT id FROM upd`,
@@ -137,9 +142,7 @@ export async function removeGroupMemberWithActivity({
   actor: SessionUser;
   removingSelf: boolean;
 }) {
-  const summary = removingSelf
-    ? `${actor.displayName} left the group`
-    : `${actor.displayName} removed a member from the group`;
+  const selfText = removingSelf ? "left the group" : null;
   const [, rows] = await sql.transaction((tx) => [
     tx`SELECT pg_advisory_xact_lock(${groupId}::int)`,
     tx`
@@ -164,10 +167,17 @@ export async function removeGroupMemberWithActivity({
         AND active_recurring_refs.ref_count = 0
       RETURNING user_id
     ),
+    t AS (
+      SELECT COALESCE(${selfText}::text, 'removed ' || u.display_name || ' from the group') AS action
+      FROM users u
+      WHERE u.id = ${targetId}
+    ),
     a AS (
       INSERT INTO activity (group_id, actor_id, type, summary, data)
-      SELECT ${groupId}, ${actor.id}, 'group.member_removed', ${summary}, '{}'::jsonb
-      FROM del
+      SELECT ${groupId}, ${actor.id}, 'group.member_removed',
+        ${actor.displayName} || ' ' || t.action,
+        jsonb_build_object('actionText', t.action)
+      FROM del, t
       RETURNING 1
     )
     SELECT

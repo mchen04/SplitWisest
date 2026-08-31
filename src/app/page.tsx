@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { ArrowRight, Users, ScrollText, Bell, HandCoins } from "lucide-react";
 import { fmtMoney, fmtTime, useApiData, useMe, useSync } from "@/lib/client";
+import { ActivitySummary } from "@/components/activity-summary";
 import { AppShell } from "@/components/shell";
 import { Card, CardHeader, Money, EmptyState, Button, Avatar } from "@/components/ui";
 import type { FriendObligation } from "@/lib/balances";
@@ -28,6 +29,9 @@ interface Activity {
   id: number;
   groupId: number | null;
   groupName: string | null;
+  actorId: number;
+  actorName: string;
+  actionText: string;
   summary: string;
   createdAt: string;
 }
@@ -304,7 +308,7 @@ export default function Dashboard() {
               <ul className="divide-y divide-line">
                 {activityPeek.slice(0, 7).map((a) => (
                   <li key={a.id} className="px-4 py-2.5">
-                    <p className="text-sm leading-snug">{a.summary}</p>
+                    <ActivitySummary activity={a} />
                     <p className="mt-0.5 text-xs text-ink-faint">
                       {a.groupName ? `${a.groupName} · ` : ""}
                       {fmtTime(a.createdAt)}
