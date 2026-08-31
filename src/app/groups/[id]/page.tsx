@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { api, ApiClientError, fmtMoney, fmtDate, fmtTime, useMe, useFilters, useApiData } from "@/lib/client";
 import { AppShell } from "@/components/shell";
-import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal, Menu, MenuItem } from "@/components/ui";
+import { Card, CardHeader, Money, EmptyState, Button, Avatar, Input, Select, Modal, Menu, MenuItem, DateField } from "@/components/ui";
 import { ExpenseForm } from "@/components/expense-form";
 import { SettleModal } from "@/components/settle-modal";
 import { RecurringModal, ExistingRecurring } from "@/components/recurring-modal";
@@ -398,8 +398,8 @@ export default function GroupPage({ params }: { params: Promise<{ id: string }> 
                   <option value="">All payers</option>
                   {detail?.members.map((m) => <option key={m.id} value={m.id}>{m.displayName}</option>)}
                 </Select>
-                <Input type="date" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
-                <Input type="date" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
+                <DateField label="From" value={filters.from} onChange={setFilter("from")} aria-label="From date" />
+                <DateField label="To" value={filters.to} onChange={setFilter("to")} aria-label="To date" />
               </div>
             )}
             {filtersActive && (

@@ -211,11 +211,43 @@ const inputCls =
   "w-full min-h-[var(--control-h)] rounded-lg border border-line-strong bg-card py-1.5 text-base text-ink placeholder:text-ink-faint transition-colors focus:border-accent focus:outline-none focus:ring-[var(--focus-ring)] focus:ring-accent-soft sm:text-sm";
 
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  // WebKit lays a date field out from fixed internal segments that never shrink,
-  // so at the standard px-3 it no longer fits a half-width track on a small
-  // phone. Trim its side padding instead of letting the control overflow.
-  const pad = props.type === "date" ? "px-2" : "px-3";
-  return <input {...props} className={`${inputCls} ${pad} ${props.className ?? ""}`} />;
+  // A date field is laid out from fixed internal segments that never shrink, so
+  // it needs tighter padding than a text field — and min-w-0, because a grid
+  // item defaults to min-width:auto and would otherwise refuse to shrink below
+  // that intrinsic width and spill out of its column.
+  const dateCls = props.type === "date" ? "px-2 min-w-0" : "px-3";
+  return <input {...props} className={`${inputCls} ${dateCls} ${props.className ?? ""}`} />;
+}
+
+/**
+ * A date filter that always reads as a labelled control.
+ *
+ * iOS Safari paints nothing at all for an empty `input[type=date]`, so a bare
+ * one renders as a blank rectangle with no hint of what it is. This owns its
+ * empty-state text instead of trusting the platform: when there is no date we
+ * draw "From"/"To" ourselves and hide whatever the engine would have drawn.
+ */
+export function DateField({
+  label,
+  className = "",
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const empty = props.value === "" || props.value == null;
+  return (
+    <span className="relative block w-full min-w-0">
+      <Input
+        {...props}
+        type="date"
+        aria-label={props["aria-label"] ?? label}
+        className={`${empty ? "text-transparent" : ""} ${className}`}
+      />
+      {empty && (
+        <span className="pointer-events-none absolute inset-y-0 left-2 flex items-center text-base text-ink-faint sm:text-sm">
+          {label}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
